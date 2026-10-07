@@ -768,9 +768,10 @@
     App.guardSeriesChange('cambiar de par');
 
     U.toast('🔎 ' + DS.label(symbol) + ' seleccionado: cargando velas…', 'info', 2400);
+    const seguia = BR.isPlaying();                            // si estaba reproduciendo, que siga
     App.loadDataFromForm({ silent: true, keepFocus: true })   // recarga automática, como en un terminal
       .catch(() => {})
-      .then(() => { UI.refreshStats(true); UI.renderSymbols(); });
+      .then(() => { UI.refreshStats(true); UI.renderSymbols(); if (seguia) App.togglePlay(); });
   };
 
   /** Refresca el botón grande de símbolo que hay en la barra superior. */
@@ -811,9 +812,10 @@
 
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
     // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.
+    const seguia = BR.isPlaying();          // si estaba reproduciendo, que siga
     return App.loadDataFromForm({ silent: true, keepFocus: true })
       .catch(() => {})
-      .then(() => { UI.refreshStats(true); });
+      .then(() => { UI.refreshStats(true); if (seguia) App.togglePlay(); });
   };
 
   /** Marca como activa la temporalidad pulsada en los botones rápidos. */
@@ -858,8 +860,10 @@
         // B / S → según el tipo elegido (mercado o límite)
         case 'b': case 's': App.placeOrder(e.key === 'b' ? 'long' : 'short'); break;
         // Mayús+B / Mayús+S → SIEMPRE orden límite, aunque estés en modo mercado
-        case 'B': App.placeOrderLimit('long'); break;
-        case 'S': App.placeOrderLimit('short'); break;
+        // (la función real es placeLimitOrder: antes se llamaba a una que no
+        // existía y el atajo lanzaba un TypeError sin hacer nada)
+        case 'B': App.placeLimitOrder('long'); break;
+        case 'S': App.placeLimitOrder('short'); break;
         case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
         case '/': e.preventDefault(); UI.openSymbols(); break;
         case 'a': case 'A': DT.setTool('arrow'); break;

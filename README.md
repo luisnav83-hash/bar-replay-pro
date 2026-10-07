@@ -283,12 +283,13 @@ node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálog
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
-node tests/temporalidad.test.js # 27 comprobaciones del cambio de temporalidad y de la posición abierta
+node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
+node tests/entradas.test.js     #  24 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **520 comprobaciones, 0 fallos** ✅ · **19 suites**
+Resultado actual: **546 comprobaciones, 0 fallos** ✅ · **20 suites**
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -320,6 +321,7 @@ omitido en lugar de fallar.
 | `Mayús+B` / `Mayús+S` | Colocar **orden límite** de compra / venta |
 | `T` | Alternar entre orden a **mercado** y **límite** |
 | `Esc` | Cerrar posición (y cancelar dibujo/cerrar modales) |
+| lado contrario | Con posición abierta: **invertir** (cierra y abre la nueva) |
 | `R` | Reset del replay |
 | `Supr` | Borrar el dibujo seleccionado |
 | `+` / `-` | Subir / bajar velocidad |
@@ -370,7 +372,8 @@ bar-replay-app/
     ├── network.test.js       # Carga de velas reales / paginación (10)
     ├── browser.capture.js    # Navegador real (Chromium) + capturas (43)
     ├── boot.test.js          # Arranque robusto sin red / sin localStorage (13)
-    ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (27)
+    ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
+    ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (24)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -388,6 +391,18 @@ bar-replay-app/
   refrescan una sola vez. La caché limita a 6.000 velas por par/temporalidad.
 - **Zona horaria**: todas las marcas de tiempo son **segundos UNIX en UTC**; los
   `datetime-local` se interpretan como UTC explícitamente.
+- **Cambiar de temporalidad o de par**: el replay **conserva el instante exacto** (ancla
+  temporal `App.focusTs`) y la vela elegida es siempre la que *contiene* ese instante
+  (`time <= fecha`), nunca la siguiente: así pasar de 1h a 1d/1w no adelanta velas futuras.
+  Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
+  después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
+  y los límites pendientes se cancelan, avisando en pantalla.
+- **Invertir**: con una posición abierta, pedir el **lado contrario** (botón o tecla)
+  cierra la actual y abre la nueva; el historial anota el motivo «inversión». Pedir el
+  mismo lado avisa y no toca la posición.
+- **La entrada, siempre visible**: mientras la posición vive, el historial muestra una
+  fila «ABIERTA» con PnL flotante, %, R y barras actualizadas **en cada vela**
+  (`UI.updateOpenTradeRow`); el contador de la pestaña cuenta solo las cerradas.
 - **Modelo de ejecución intrabar**: con OHLC no se conoce el orden de los precios dentro
   de la vela, así que la ambigüedad SL/TP se resuelve de forma **pesimista** por defecto
   (configurable en Ajustes) y los huecos se rellenan al precio de apertura.

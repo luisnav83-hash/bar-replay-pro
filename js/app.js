@@ -26,6 +26,11 @@
 
   App.pair = 'BTCUSDT';
   App.interval = '1h';
+  // Ancla temporal exacta entre cambios de serie: la fecha en la que está el
+  // replay. Se conserva mientras no se mueva el cursor, de modo que encadenar
+  // temporalidades no pierde precisión (15m a las 06:45 → 1h → 15m vuelve a
+  // 06:45 en vez de quedarse en las 06:00 de la vela horaria).
+  App.focusTs = null;
   App.warmup = 150;              // velas de contexto antes del inicio del replay
   App.autoReveal = true;         // mantener visible la última vela al avanzar
   App.sizeMode = 'pct';          // pct | notional | qty
@@ -210,8 +215,11 @@
     // manda la fecha de la vela actual sobre la del formulario, y el campo se
     // actualiza para que lo que se ve y lo que se carga coincidan.
     if (opts.keepFocus && BR.total() && BR.currentCandle()) {
-      startTs = BR.currentCandle().time;
+      if (App.focusTs === null) App.focusTs = BR.currentCandle().time;
+      startTs = App.focusTs;
       document.getElementById('startDate').value = U.tsToInput(startTs);
+    } else {
+      App.focusTs = null;      // carga pedida a mano: manda la fecha del formulario
     }
 
     startTs = Math.min(startTs, now - 3 * tfSec);   // debe quedar histórico por delante
@@ -377,11 +385,21 @@
     let startIndex;
     if (opts.startIndex !== undefined) {
       startIndex = opts.startIndex;
-    } else {
-      const startTs = opts.startTs;
-      let idx = candles.findIndex((c) => c.time >= startTs);
-      if (idx < 0) idx = candles.length - 2;
+    } else if (opts.startTs !== undefined && opts.startTs !== null) {
+      // La fecha pedida se resuelve a la vela que CONTIENE ese instante (la
+      // última con hora <= fecha). Con el criterio anterior (la primera vela con
+      // hora >= fecha) el replay saltaba hacia adelante siempre que el instante
+      // no cayera en un borde de la temporalidad: al pasar de 1h a 1d o 1w, el
+      // cursor se iba al día o a la semana SIGUIENTE y adelantaba velas futuras
+      // (fuga de futuro, justo lo que un replay no debe hacer).
+      let idx = -1;
+      for (let i = candles.length - 1; i >= 0; i--) {
+        if (candles[i].time <= opts.startTs) { idx = i; break; }
+      }
+      if (idx < 0) idx = 0;                 // la fecha es anterior a la serie
       startIndex = idx;
+    } else {
+      startIndex = 0;
     }
     startIndex = U.clamp(startIndex, Math.min(App.warmup, candles.length - 2), candles.length - 2);
 
@@ -506,6 +524,7 @@
    * equity) y deja un checkpoint por vela para poder retroceder.
    */
   App.onAdvance = function (from, to, isSeek) {
+    App.focusTs = null;        // el usuario movió el replay: el ancla es la vela actual
     const candles = App.candles;
     TE.beginBatch();
     for (let i = from + 1; i <= to; i++) {
@@ -630,6 +649,15 @@
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return; }
     if (App.sizeMode === 'pct' && sizeVal > 100) { U.toast('El tamaño en % no puede superar el 100% del equity (usa apalancamiento)', 'warn'); }
 
+    // INVERTIR: pedir el lado contrario con una posición abierta la cierra a
+    // mercado y abre la nueva. Antes el motor la rechazaba con un aviso y quien
+    // pulsaba LONG/SHORT «para girar» veía que no pasaba nada más.
+    const abierta = TE.state.position;
+    if (abierta && abierta.side !== side) {
+      U.log(`🔄 Inversión: se cierra la ${abierta.side.toUpperCase()} para abrir ${side.toUpperCase()}`, 'sys');
+      App.flatten('inversion');
+    }
+
     // SL / TP: de nivel introducido → distancia → nivel según la dirección
     const dir = side === 'long' ? 1 : -1;
     const slIn = parseFloat(document.getElementById('slInput').value);
@@ -732,16 +760,21 @@
   };
 
   /** Cierra la posición abierta al precio actual. */
-  App.flatten = function () {
+  /**
+   * Cierra la posición abierta a mercado.
+   * @param {string} [reason] 'manual' (por defecto) o 'inversion' cuando se
+   *        cierra para abrir la contraria; queda anotado en el historial.
+   */
+  App.flatten = function (reason = 'manual') {
     if (!TE.state.position) { U.toast('No hay ninguna posición abierta', 'warn', 1500); return; }
     const price = App.currentPrice();
-    TE.closePosition(price, 'manual', App.currentTime());
+    TE.closePosition(price, reason, App.currentTime());
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
     App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
     UI.refreshStats(true);
-    U.toast('Posición cerrada manualmente', 'info', 2000);
+    U.toast(reason === 'inversion' ? '🔄 Posición cerrada para invertir' : 'Posición cerrada manualmente', 'info', 2200);
   };
 
   /** Reinicia estadísticas, historial y cuenta (mantiene replay y dibujos). */

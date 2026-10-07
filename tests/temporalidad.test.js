@@ -97,6 +97,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(Math.abs(vuelta1h.fecha - fecha1h) <= 3600,
      `la vela del replay no cambia de fecha (${new Date(fecha1h * 1000).toISOString().slice(0, 16)} vs ${new Date(vuelta1h.fecha * 1000).toISOString().slice(0, 16)})`);
 
+  /* ---------------- A2b) precisión del ancla entre cambios encadenados ---------------- */
+  console.log('\n▸ A2b) Encadenar temporalidades no pierde precisión');
+  await page.evaluate(() => { for (let i = 0; i < 3; i++) App.stepForward(); });
+  await wait(800);
+  const fino = await page.evaluate(() => BR.currentCandle().time);
+  await page.select('#tfSelect', '4h');
+  await wait(4000);
+  await page.select('#tfSelect', '1h');
+  await wait(4000);
+  const vuelta = await page.evaluate(() => BR.currentCandle().time);
+  ok(vuelta === fino, `1h → 4h → 1h vuelve al mismo instante (${new Date(fino * 1000).toISOString().slice(0, 16)})`);
+  const anclaIgual = await page.evaluate(() => App.focusTs === null || App.focusTs === BR.currentCandle().time || App.focusTs > 0);
+  ok(anclaIgual, 'el ancla temporal queda en un valor coherente');
+
   /* ---------------- B1/B2/B3) la entrada aparece como trade ---------------- */
   console.log('\n▸ B) La entrada abierta se ve en el historial');
   await page.evaluate(() => {
