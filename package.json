@@ -1,0 +1,45 @@
+{
+  "name": "bar-replay-pro",
+  "version": "1.0.0",
+  "description": "Bar Replay profesional para backtesting de Bitcoin y criptomonedas: replay vela a vela, indicadores técnicos, herramientas de dibujo y trading simulado con estadísticas.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tests/logic.test.js && node tests/dom.smoke.js && node tests/boot.test.js",
+    "test:net": "node tests/network.test.js",
+    "test:browser": "node tests/browser.capture.js",
+    "build:single": "node tools/build-single.js",
+    "test:single": "node tools/build-single.js && node tests/single.test.js",
+    "test:logic": "node tests/logic.test.js",
+    "test:dom": "node tests/dom.smoke.js",
+    "test:iframe": "node tests/iframe.test.js",
+    "test:all": "npm run test && npm run test:single && npm run test:sanitizado && npm run test:iframe && npm run test:layout && npm run test:incidencias && npm run test:preview && npm run test:net",
+    "test:preview": "node tests/preview-live.test.js",
+    "test:layout": "node tests/responsive.test.js",
+    "test:incidencias": "node tests/incidencias.test.js",
+    "snapshot": "node tools/snapshot.js",
+    "test:sanitizado": "node tests/visor-sanitizado.test.js",
+    "demo:video": "node tools/demo-video.js"
+  },
+  "keywords": [
+    "backtesting",
+    "bar-replay",
+    "trading",
+    "bitcoin",
+    "criptomonedas",
+    "lightweight-charts",
+    "tradingview",
+    "replay"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

@@ -1,0 +1,765 @@
+/* =========================================================================
+ * uiController.js — Todo el cableado de la interfaz:
+ *   · Eventos de la barra superior, paneles, modales y atajos de teclado
+ *   · Refresco de la barra lateral (cuenta, posición, estadísticas)
+ *   · Tabla de trades, log, lista de dibujos, sesiones y exportaciones
+ *   · Captura de pantalla compuesta y modales
+ * Las acciones que implican lógica de negocio se delegan en `App`.
+ * =======================================================================*/
+(function (global) {
+  'use strict';
+
+  const UI = {};
+
+  /* ------------------------- Utilidades de formulario ------------------------- */
+
+  const val = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
+  const numv = (id, d = 0) => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : d; };
+  const setText = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  const setPnl = (id, value) => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.textContent = typeof value === 'string' ? value : U.fmtMoney(value, true);
+    e.classList.toggle('up', typeof value === 'number' ? value > 0 : false);
+    e.classList.toggle('down', typeof value === 'number' ? value < 0 : false);
+  };
+
+  /* ================================= INICIO ================================= */
+
+  UI.init = function () {
+    UI._wireTopbar();
+    UI._wireToolbar();
+    UI._wireReplay();
+    UI._wireSidebar();
+    UI._wireBottom();
+    UI._wireModals();
+    UI._wireKeyboard();
+    UI._wireEvents();
+
+    // Estado inicial de los paneles y modales
+    UI.syncIndicatorModalFromConfig(App.indicators);
+    UI.setPlaying(false);
+    UI._closedCount = 0;
+    UI.refreshAll();
+    UI.refreshStats(true);
+    UI.renderSessions();
+    DT.renderList(document.getElementById('drawList'));
+  };
+
+  /* -------------------------------- Barra superior -------------------------------- */
+
+  UI._wireTopbar = function () {
+    document.getElementById('btnLoad').addEventListener('click', () => App.loadDataFromForm());
+    document.getElementById('btnQuick').addEventListener('click', () => App.quickPractice());
+    document.getElementById('btnDemo').addEventListener('click', () => { UI.hideLoader(); App.loadDemo(); });
+    document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileCsv').click());
+    document.getElementById('fileCsv').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => App.importCSV(r.result, f.name);
+      r.readAsText(f);
+      e.target.value = '';
+    });
+    document.getElementById('btnIndicators').addEventListener('click', () => UI.openModal('modalIndicators'));
+    document.getElementById('btnSessions').addEventListener('click', () => { UI.renderSessions(); UI.openModal('modalSessions'); });
+    document.getElementById('btnExport').addEventListener('click', () => UI.openModal('modalExport'));
+    document.getElementById('btnShot').addEventListener('click', () => App.screenshot());
+    document.getElementById('btnSettings').addEventListener('click', () => UI.openSettings());
+    document.getElementById('btnHelp').addEventListener('click', () => UI.openModal('modalHelp'));
+
+    // Cambiar de par o temporalidad no recarga solo: avisa al usuario
+    document.getElementById('pairSelect').addEventListener('change', () => {
+      U.log('🔄 Par seleccionado: ' + document.getElementById('pairSelect').value + ' — pulsa «Cargar datos»', 'sys');
+    });
+    document.getElementById('tfSelect').addEventListener('change', () => {
+      U.log('🔄 Temporalidad seleccionada: ' + document.getElementById('tfSelect').value + ' — pulsa «Cargar datos»', 'sys');
+    });
+  };
+
+  /* ------------------------------- Dibujo ------------------------------- */
+
+  UI._wireToolbar = function () {
+    U.$$('#drawToolbar .tool[data-tool]').forEach((btn) => {
+      btn.addEventListener('click', () => { DT.setTool(btn.dataset.tool); U.playSound('click'); });
+    });
+    document.getElementById('drawColor').addEventListener('input', (e) => DT.setStyle({ color: e.target.value }));
+    document.getElementById('drawWidth').addEventListener('change', (e) => DT.setStyle({ width: +e.target.value }));
+    document.getElementById('drawStyle').addEventListener('change', (e) => DT.setStyle({ style: e.target.value }));
+    document.getElementById('btnDeleteDrawing').addEventListener('click', () => DT.deleteSelected());
+    document.getElementById('btnClearDrawings').addEventListener('click', () => DT.clearAll());
+    document.getElementById('btnSnap').addEventListener('click', () => DT.toggleSnap());
+
+    document.getElementById('btnAutoScale').addEventListener('click', (e) => {
+      const on = !UI._autoScale;
+      UI._autoScale = CM.setAutoScale(on);
+      e.currentTarget.classList.toggle('active', !UI._autoScale);
+      U.toast(UI._autoScale ? '📐 Escala de precios automática' : '📐 Escala de precios MANUAL: arrastra el eje derecho para ajustar', 'info', 2200);
+    });
+    UI._autoScale = true;
+
+    document.getElementById('btnLogScale').addEventListener('click', (e) => {
+      UI._logScale = !UI._logScale;
+      CM.setLogScale(UI._logScale);
+      e.currentTarget.classList.toggle('active', UI._logScale);
+      U.toast(UI._logScale ? 'Escala logarítmica activada' : 'Escala lineal activada', 'info', 1600);
+    });
+    UI._logScale = false;
+
+    document.getElementById('chkLockScroll').addEventListener('change', (e) => {
+      const lock = e.target.checked;
+      CM.main.applyOptions({
+        handleScroll: { mouseWheel: !lock, pressedMouseMove: !lock, horzTouchDrag: !lock, vertTouchDrag: false },
+        handleScale: !lock,
+      });
+      U.toast(lock ? '🔒 Scroll/zoom del gráfico bloqueado' : 'Scroll/zoom desbloqueado', 'info', 1600);
+    });
+
+    // Cerrar paneles de indicadores desde su botón ✕
+    U.$$('[data-close-pane]').forEach((b) => b.addEventListener('click', () => {
+      const p = b.dataset.closePane;
+      App.indicators[p].on = false;
+      document.getElementById('ind' + p.charAt(0).toUpperCase() + p.slice(1)).checked = false;
+      App.applyIndicators(App.indicators);
+      U.log(`👁 Panel ${p.toUpperCase()} ocultado`, 'sys');
+    }));
+  };
+
+  /* -------------------------------- Replay -------------------------------- */
+
+  UI._wireReplay = function () {
+    document.getElementById('btnPlay').addEventListener('click', () => App.togglePlay());
+    document.getElementById('btnStepFwd').addEventListener('click', () => App.stepForward());
+    document.getElementById('btnStepBack').addEventListener('click', () => App.stepBack());
+    document.getElementById('btnReset').addEventListener('click', () => App.resetReplay());
+    document.getElementById('btnJumpEnd').addEventListener('click', () => App.goToEnd());
+
+    U.$$('.speed-btn').forEach((b) => b.addEventListener('click', () => {
+      const s = b.dataset.speed === 'max' ? 'max' : +b.dataset.speed;
+      App.setSpeed(s);
+    }));
+
+    const slider = document.getElementById('progressRange');
+    slider.addEventListener('input', () => App.seekFromSlider(+slider.value / 1000));
+    slider.addEventListener('pointerdown', () => { UI._wasPlaying = BR.isPlaying(); BR.pause(); });
+    slider.addEventListener('pointerup', () => { if (UI._wasPlaying) BR.play(); });
+  };
+
+  /* ------------------------------- Barra lateral ------------------------------- */
+
+  UI._wireSidebar = function () {
+    // Modo de tamaño
+    U.$$('#segSize .seg-btn').forEach((b) => b.addEventListener('click', () => {
+      U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+      App.sizeMode = b.dataset.mode;
+      const labels = { pct: ['Tamaño (% del equity)', '%'], notional: ['Tamaño en USD (exposición)', 'USD'], qty: ['Cantidad de monedas', ''] };
+      setText('sizeLabel', labels[App.sizeMode][0]);
+      setText('sizeSuffix', labels[App.sizeMode][1]);
+      if (App.sizeMode === 'qty') document.getElementById('sizeInput').value = 1;
+      UI.updateOrderHint();
+    }));
+
+    document.getElementById('sizeInput').addEventListener('input', UI.updateOrderHint);
+    U.$$('#quickSize .chip').forEach((c) => c.addEventListener('click', () => {
+      U.$$('#quickSize .chip').forEach((x) => x.classList.toggle('active', x === c));
+      document.getElementById('sizeInput').value = c.dataset.pct;
+      UI.updateOrderHint();
+    }));
+
+    document.getElementById('leverageSelect').addEventListener('change', (e) => {
+      TE.configure({ leverage: +e.target.value });
+      setText('tagLeverage', e.target.value + 'x');
+      UI.updateOrderHint();
+      UI.refreshAccount();
+    });
+    document.getElementById('feeInput').addEventListener('change', (e) => {
+      TE.configure({ feePct: +e.target.value });
+      U.log(`💱 Comisión configurada: ${e.target.value}% por lado`, 'sys');
+    });
+
+    document.getElementById('slInput').addEventListener('input', UI.updateOrderHint);
+    document.getElementById('tpInput').addEventListener('input', UI.updateOrderHint);
+    U.$$('#quickSlTp .chip').forEach((c) => c.addEventListener('click', () => {
+      const price = App.currentPrice();
+      if (!price) { U.toast('No hay datos cargados', 'warn'); return; }
+      if (c.dataset.slpct) document.getElementById('slInput').value = U.round(price * (1 - +c.dataset.slpct / 100), 6);
+      if (c.dataset.tppct) document.getElementById('tpInput').value = U.round(price * (1 + +c.dataset.tppct / 100), 6);
+      UI.updateOrderHint();
+    }));
+
+    document.getElementById('btnLong').addEventListener('click', () => App.placeOrder('long'));
+    document.getElementById('btnShort').addEventListener('click', () => App.placeOrder('short'));
+    document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
+    document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
+  };
+
+  /* ------------------------------ Panel inferior ------------------------------ */
+
+  UI._wireBottom = function () {
+    U.$$('.tab').forEach((t) => t.addEventListener('click', () => {
+      U.$$('.tab').forEach((x) => x.classList.toggle('active', x === t));
+      U.$$('.tab-body').forEach((b) => b.classList.toggle('active', b.id === 'tab-' + t.dataset.tab));
+      if (t.dataset.tab === 'drawings') DT.renderList(document.getElementById('drawList'));
+    }));
+
+    document.getElementById('btnClearLog').addEventListener('click', () => {
+      document.getElementById('logList').innerHTML = '';
+      U.log('🖥️ Log vaciado', 'sys');
+    });
+
+    document.getElementById('btnBottomToggle').addEventListener('click', (e) => {
+      document.body.classList.toggle('compact-bottom');
+      e.currentTarget.textContent = document.body.classList.contains('compact-bottom') ? '⌃' : '⌄';
+      setTimeout(() => { DT.resize(); DT.render(); CM.refresh(); }, 300);
+    });
+
+    // Lista de dibujos: seleccionar / eliminar
+    document.getElementById('drawList').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) {
+        const d = DT.drawings.find((x) => x.id === del.dataset.del);
+        if (d) DT.deleteDrawing(d);
+        return;
+      }
+      const item = e.target.closest('.draw-item');
+      if (item) {
+        DT.selected = DT.drawings.find((x) => x.id === item.dataset.id) || null;
+        DT.render(); DT.renderList(document.getElementById('drawList'));
+      }
+    });
+  };
+
+  /* --------------------------------- Modales --------------------------------- */
+
+  UI._wireModals = function () {
+    // Cierre genérico
+    U.$$('.modal').forEach((m) => {
+      m.addEventListener('mousedown', (e) => { if (e.target === m) UI.closeModal(m.id); });
+      U.$$('[data-close]', m).forEach((b) => b.addEventListener('click', () => UI.closeModal(m.id)));
+    });
+
+    /* --- Indicadores --- */
+    U.$$('#modalIndicators .ind-row input[type=checkbox]').forEach((c) => {
+      c.addEventListener('change', () => c.closest('.ind-row').classList.toggle('on', c.checked));
+    });
+    document.getElementById('btnApplyInd').addEventListener('click', () => {
+      App.applyIndicators(UI.readIndicatorConfig());
+      UI.closeModal('modalIndicators');
+    });
+
+    /* --- Ajustes --- */
+    document.getElementById('btnApplySettings').addEventListener('click', () => App.applySettings());
+    document.getElementById('btnHardReset').addEventListener('click', () => UI.confirmHardReset());
+
+    /* --- Sesiones --- */
+    document.getElementById('btnSaveSession').addEventListener('click', () => {
+      const name = (val('sessionName') || '').trim() || ('Sesión ' + U.fmtDate(Math.floor(Date.now() / 1000)));
+      App.saveSession(name);
+      UI.renderSessions();
+    });
+    document.getElementById('sessionList').addEventListener('click', (e) => {
+      const load = e.target.closest('[data-load]');
+      const del = e.target.closest('[data-delete]');
+      if (load) App.loadSession(load.dataset.load);
+      if (del) { ST.deleteSession(del.dataset.delete); UI.renderSessions(); }
+    });
+
+    /* --- Exportación --- */
+    document.getElementById('expTradesCsv').addEventListener('click', () => App.exportTrades());
+    document.getElementById('expEquityCsv').addEventListener('click', () => App.exportEquity());
+    document.getElementById('expJson').addEventListener('click', () => App.exportJSON());
+    document.getElementById('expReport').addEventListener('click', () => App.exportReport());
+    document.getElementById('expCandlesCsv').addEventListener('click', () => App.exportCandles());
+    document.getElementById('expPng').addEventListener('click', () => App.screenshot());
+  };
+
+  UI.openModal = function (id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.add('open');
+    if (id === 'modalSettings') UI.openSettings();
+  };
+
+  UI.closeModal = function (id) {
+    const m = document.getElementById(id);
+    if (m) m.classList.remove('open');
+  };
+
+  UI.closeAllModals = function () { U.$$('.modal').forEach((m) => m.classList.remove('open')); };
+
+  /* ------------------------------ Configuración ------------------------------ */
+
+  /** Lee la configuración de indicadores del modal. */
+  UI.readIndicatorConfig = function () {
+    const on = (id) => document.getElementById(id).checked;
+    return {
+      vol:   { on: on('indVol'),   color: val('volColor') },
+      sma:   { on: on('indSma'),   p: numv('smaP', 50),      color: val('smaColor') },
+      ema:   { on: on('indEma'),   p: numv('emaP', 21),      color: val('emaColor') },
+      ema2:  { on: on('indEma2'),  p: numv('ema2P', 200),    color: val('ema2Color') },
+      bb:    { on: on('indBb'),    p: numv('bbP', 20), k: numv('bbK', 2), color: val('bbColor') },
+      rsi:   { on: on('indRsi'),   p: numv('rsiP', 14),      color: val('rsiColor') },
+      macd:  { on: on('indMacd'),  f: numv('macdF', 12), s: numv('macdS', 26), sig: numv('macdSig', 9), color: val('macdColor'), signalColor: '#ffab40' },
+      atr:   { on: on('indAtr'),   p: numv('atrP', 14),      color: val('atrColor') },
+    };
+  };
+
+  /** Vuelca la configuración guardada en los campos del modal. */
+  UI.syncIndicatorModalFromConfig = function (cfg) {
+    const set = (id, v) => { const e = document.getElementById(id); if (e && v !== undefined) e.value = v; };
+    const chk = (id, v) => { const e = document.getElementById(id); if (e) { e.checked = !!v; e.closest('.ind-row').classList.toggle('on', !!v); } };
+    chk('indVol', cfg.vol && cfg.vol.on);      set('volColor', cfg.vol && cfg.vol.color);
+    chk('indSma', cfg.sma && cfg.sma.on);      set('smaP', cfg.sma && cfg.sma.p);   set('smaColor', cfg.sma && cfg.sma.color);
+    chk('indEma', cfg.ema && cfg.ema.on);      set('emaP', cfg.ema && cfg.ema.p);   set('emaColor', cfg.ema && cfg.ema.color);
+    chk('indEma2', cfg.ema2 && cfg.ema2.on);   set('ema2P', cfg.ema2 && cfg.ema2.p); set('ema2Color', cfg.ema2 && cfg.ema2.color);
+    chk('indBb', cfg.bb && cfg.bb.on);         set('bbP', cfg.bb && cfg.bb.p);      set('bbK', cfg.bb && cfg.bb.k); set('bbColor', cfg.bb && cfg.bb.color);
+    chk('indRsi', cfg.rsi && cfg.rsi.on);      set('rsiP', cfg.rsi && cfg.rsi.p);   set('rsiColor', cfg.rsi && cfg.rsi.color);
+    chk('indMacd', cfg.macd && cfg.macd.on);   set('macdF', cfg.macd && cfg.macd.f); set('macdS', cfg.macd && cfg.macd.s); set('macdSig', cfg.macd && cfg.macd.sig);
+    chk('indAtr', cfg.atr && cfg.atr.on);      set('atrP', cfg.atr && cfg.atr.p);   set('atrColor', cfg.atr && cfg.atr.color);
+    // Etiquetas de parámetros en los paneles
+    setText('rsiParams', cfg.rsi ? cfg.rsi.p : 14);
+    setText('macdParams', cfg.macd ? `${cfg.macd.f} ${cfg.macd.s} ${cfg.macd.sig}` : '');
+    setText('atrParams', cfg.atr ? cfg.atr.p : 14);
+  };
+
+  UI.openSettings = function () {
+    document.getElementById('setCapital').value = TE.state.initialCapital;
+    document.getElementById('setFee').value = TE.state.feePct;
+    document.getElementById('setLeverage').value = TE.state.leverage;
+    document.getElementById('setWarmup').value = App.warmup;
+    document.getElementById('setFunding').value = TE.state.fundingPct;
+    document.getElementById('setSlFirst').value = TE.state.slFirst;
+    document.getElementById('setSound').checked = !!U.sound.enabled;
+    document.getElementById('setAutoReveal').checked = !!App.autoReveal;
+  };
+
+  /* --------------------------------- Sesiones --------------------------------- */
+
+  UI.renderSessions = function () {
+    const list = document.getElementById('sessionList');
+    if (!list) return;
+    const sessions = ST.listSessions();
+    if (!sessions.length) {
+      list.innerHTML = '<div class="empty">No hay sesiones guardadas todavía.</div>';
+      return;
+    }
+    list.innerHTML = sessions.map((s) => {
+      const m = s.meta || {};
+      return `<div class="session-item">
+        <span class="draw-swatch" style="background:#2979ff"></span>
+        <span class="s-name">${U.esc(s.name)}</span>
+        <span class="s-meta">${m.pair || ''} ${m.interval || ''} · ${m.trades || 0} trades · ${U.fmtDateEs(Math.floor(s.savedAt / 1000))}</span>
+        <button class="btn" data-load="${s.key}" title="Cargar esta sesión">Cargar</button>
+        <button class="mini-btn" data-delete="${s.key}" title="Eliminar">✕</button>
+      </div>`;
+    }).join('');
+  };
+
+  /* --------------------------------- Atajos --------------------------------- */
+
+  UI._wireKeyboard = function () {
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'select' || tag === 'textarea';
+
+      // Ctrl+S: guardar sesión (funciona incluso escribiendo)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        document.getElementById('btnSessions').click();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (U.$$('.modal.open').length) { UI.closeAllModals(); e.preventDefault(); return; }
+        if (DT.tool !== 'cursor') { DT.setTool('cursor'); return; }
+        if (DT.draft) { DT.cancelDraft(); return; }
+        if (!typing) App.flatten();
+        return;
+      }
+      if (typing) return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault(); App.togglePlay(); break;
+        case 'ArrowRight':
+          e.preventDefault(); App.stepForward(); break;
+        case 'ArrowLeft':
+          e.preventDefault(); App.stepBack(); break;
+        case 'b': case 'B': App.placeOrder('long'); break;
+        case 's': case 'S': App.placeOrder('short'); break;
+        case 'r': case 'R': App.resetReplay(); break;
+        case 'Delete': case 'Backspace': DT.deleteSelected(); break;
+        case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
+        case '-': case '_': case 'PageDown': App.bumpSpeed(-1); break;
+        case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+          const tools = ['cursor', 'trend', 'ray', 'hline', 'vline', 'rect', 'channel', 'fib', 'measure'];
+          DT.setTool(tools[+e.key - 1] || 'cursor');
+          break;
+        }
+      }
+    });
+  };
+
+  /* =============================== REFRESCO UI =============================== */
+
+  UI._wireEvents = function () {
+    // El motor de trading avisa de cambios → refrescar barra lateral
+    global.addEventListener('te:update', () => UI.refreshAccount());
+    // Cambios en los dibujos → refrescar lista y contador
+    DT.onChange = () => {
+      DT.renderList(document.getElementById('drawList'));
+      const el = document.getElementById('tabDrawCount');
+      if (el) el.textContent = DT.drawings.length;
+    };
+    // Arrastre de los handles de SL/TP en el gráfico
+    DT.onTradeHandle = (id, price, phase) => {
+      if (phase === 'move' && price !== null) {
+        if (id === 'sl') TE.setSL(price); else TE.setTP(price);
+        UI.refreshPosition();
+      }
+      if (phase === 'end') {
+        U.log(`🖱️ ${id.toUpperCase()} ajustado en el gráfico a ${U.fmtPrice(price)}`, 'warn');
+        U.playSound('click');
+      }
+    };
+    // Al cambiar el tamaño de la ventana, redibujar dibujos
+    global.addEventListener('resize', () => { DT.resize(); DT.render(); });
+  };
+
+  /** Refresco completo. */
+  UI.refreshAll = function () {
+    UI.refreshAccount();
+    UI.refreshStats();
+    UI.refreshReplayBar();
+    UI.updateOrderHint();
+    UI.updateHiddenNotice();
+    UI.refreshPriceTag();
+  };
+
+  UI.refreshPriceTag = function () {
+    const p = App.currentPrice();
+    setText('tagPrice', p ? U.fmtPrice(p) : '—');
+  };
+
+  UI.refreshAccount = function () {
+    const m = TE.getMetrics();
+    setText('acBalance', U.fmtMoney(m.balance));
+    setText('acEquity', U.fmtMoney(m.equity));
+    setPnl('acTotalPnl', m.pnlTotal);
+    setPnl('acOpenPnl', m.openPnl);
+    setText('acMargin', U.fmtMoney(m.margin));
+    setText('acFree', U.fmtMoney(m.free));
+    setText('acExposure', 'Exposición ' + U.fmtPct(m.exposure, 1) + (TE.state.leverage > 1 ? ` · ${TE.state.leverage}x` : ''));
+    setText('acFees', 'Comisiones ' + U.fmtMoney(m.fees));
+    const meter = document.getElementById('marginMeter');
+    if (meter) meter.style.width = U.clamp(m.exposure, 0, 100) + '%';
+    setText('tagLeverage', TE.state.leverage + 'x');
+    setText('eqValue', U.fmtMoney(m.equity));
+    UI.refreshPosition();
+  };
+
+  /** Redibuja las líneas de posición solo cuando cambian los niveles. */
+  UI.syncPositionGraphics = function (p) {
+    const sig = p ? `${p.id}|${p.side}|${p.entryPrice}|${p.sl}|${p.tp}|${p.leverage}` : null;
+    if (sig === UI._posSig) return;
+    UI._posSig = sig;
+    CM.setPositionLines(p);
+    DT.setTradeHandles(p);
+  };
+
+  UI.refreshPosition = function () {
+    const p = TE.state.position;
+    const price = App.currentPrice();
+    const tag = document.getElementById('posSide');
+    UI.syncPositionGraphics(p);
+    if (!p) {
+      tag.textContent = 'FLAT';
+      tag.className = 'tag flat';
+      setText('posPnl', '$0.00'); setPnl('posPnl', 0);
+      ['posEntry', 'posSize', 'posNotional', 'posMark', 'posSlDist', 'posTpDist', 'posLiq', 'posRR', 'posDuration', 'posBars']
+        .forEach((id) => setText(id, '—'));
+      return;
+    }
+    const pnl = TE.unrealized(price);
+    tag.textContent = p.side === 'long' ? 'LONG' : 'SHORT';
+    tag.className = 'tag ' + p.side;
+    const el = document.getElementById('posPnl');
+    el.textContent = U.fmtMoney(pnl, true) + (p.entryPrice ? `  (${U.fmtPct((pnl / p.entryBalance) * 100, 2, true)})` : '');
+    el.className = 'pnl ' + (pnl >= 0 ? 'up' : 'down');
+
+    setText('posEntry', U.fmtPrice(p.entryPrice));
+    setText('posSize', U.num(p.qty, 6) + ' ' + App.baseAsset());
+    setText('posNotional', U.fmtMoney(p.notional) + ' · ' + p.leverage + 'x');
+    setText('posMark', U.fmtPrice(price));
+    setText('posSlDist', p.sl ? `${U.fmtPrice(p.sl)} (${U.fmtPct(((p.sl - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin SL');
+    setText('posTpDist', p.tp ? `${U.fmtPrice(p.tp)} (${U.fmtPct(((p.tp - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin TP');
+    const liq = TE.liquidationPrice(p);
+    setText('posLiq', p.leverage > 1 && liq ? U.fmtPrice(liq) : '—');
+    setText('posRR', (p.sl && p.tp)
+      ? U.num(Math.abs(p.tp - p.entryPrice) / Math.abs(p.entryPrice - p.sl), 2) + ' : 1'
+      : '—');
+    setText('posDuration', 'Abierta ' + U.fmtDuration(p.entryTime, App.currentTime()));
+    setText('posBars', p.bars + ' velas');
+  };
+
+  /** Estadísticas y curva de capital. */
+  UI.refreshStats = function (force) {
+    const metrics = TE.getMetrics();
+    const trades = TE.state.trades;
+    const closedCount = trades.filter((t) => t.status === 'closed').length;
+
+    // La curva de capital y el cómputo de métricas se hace como mucho cada 250 ms,
+    // salvo que se fuerce o que haya cambiado el número de trades cerrados.
+    const now = performance.now();
+    const tradeClosed = closedCount !== UI._closedCount;
+    const shouldHeavy = force || tradeClosed || !UI._statsAt || (now - UI._statsAt > 250);
+    if (!shouldHeavy) return;
+    UI._statsAt = now;
+
+    const s = STATS.compute(trades, TE.state.equitySeries, TE.state.initialCapital);
+    UI.lastStats = s;
+
+    setText('stTrades', s.total);
+    setText('stWinRate', s.total ? U.fmtPct(s.winRate, 1) : '—');
+    setText('stPf', s.total ? (s.profitFactor === Infinity ? '∞' : U.num(s.profitFactor, 2)) : '—');
+    setText('stDd', s.total ? U.fmtMoney(-s.maxDD) + ' (' + U.fmtPct(s.maxDDPct * 100, 1) + ')' : '—');
+    setText('stRr', s.avgR === null ? '—' : U.num(s.avgR, 2) + 'R');
+    setText('stWl', `${s.wins} / ${s.losses}`);
+    setText('stBest', s.total ? U.fmtMoney(s.best, true) : '—');
+    setText('stWorst', s.total ? U.fmtMoney(s.worst, true) : '—');
+    setText('stExp', s.total ? U.fmtMoney(s.expectancy, true) : '—');
+    setText('stStreak', s.total ? `${s.currentStreak} ${s.streakType === 'W' ? 'ganadores' : 'perdedores'}` : '—');
+    const best = document.getElementById('stBest'), worst = document.getElementById('stWorst'), exp = document.getElementById('stExp');
+    if (best) best.className = 'pnl ' + (s.best > 0 ? 'up' : 'down');
+    if (worst) worst.className = 'pnl ' + (s.worst < 0 ? 'down' : 'up');
+    if (exp) exp.className = 'pnl ' + (s.expectancy >= 0 ? 'up' : 'down');
+    setText('eqValue', U.fmtMoney(metrics.equity));
+
+    CM.drawEquity(TE.state.equitySeries, TE.state.initialCapital);
+    if (force) {
+      UI.renderTrades();
+      UI.refreshPosition();
+    } else if (closedCount !== UI._closedCount) {
+      UI.renderTrades();
+      UI.refreshPosition();
+    }
+    UI._closedCount = closedCount;
+  };
+
+  /** Tabla de historial de trades. */
+  UI.renderTrades = function () {
+    const body = document.getElementById('tradesBody');
+    const empty = document.getElementById('tradesEmpty');
+    const trades = TE.state.trades.filter((t) => t.status === 'closed').slice().reverse();
+    setText('tabTradeCount', TE.state.trades.filter((t) => t.status === 'closed').length);
+    if (!trades.length) {
+      body.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    body.innerHTML = trades.map((t, i) => {
+      const n = TE.state.trades.indexOf(t) + 1;
+      const dur = U.fmtDuration(t.entryTime, t.exitTime);
+      return `<tr class="${t.pnl > 0 ? 'win' : 'loss'}">
+        <td>${n}</td>
+        <td class="dir-${t.side}">${t.side === 'long' ? 'LONG' : 'SHORT'}</td>
+        <td>${U.fmtDate(t.entryTime)}</td>
+        <td>${U.fmtDate(t.exitTime)}</td>
+        <td class="num">${U.fmtPrice(t.entryPrice)}</td>
+        <td class="num">${U.fmtPrice(t.exitPrice)}</td>
+        <td class="num">${U.num(t.qty, 5)}</td>
+        <td class="num">${U.fmtMoney(t.pnl, true)}</td>
+        <td class="num">${U.fmtPct(t.pnlPct, 2, true)}</td>
+        <td class="num">${t.rMultiple !== null ? U.num(t.rMultiple, 2) : '—'}</td>
+        <td>${TE.reasonLabel(t.reason)}</td>
+        <td>${t.bars || 0} (${dur})</td>
+      </tr>`;
+    }).join('');
+  };
+
+  /* ------------------------------- Barra replay ------------------------------- */
+
+  UI.setPlaying = function (playing) {
+    const btn = document.getElementById('btnPlay');
+    if (btn) {
+      btn.textContent = playing ? '❚❚' : '▶';
+      btn.title = playing ? 'Pausa (Espacio)' : 'Play (Espacio)';
+      btn.classList.toggle('playing', playing);
+    }
+    const st = document.getElementById('pbStatus');
+    if (st) {
+      st.textContent = playing ? 'EN REPLAY' : 'PAUSA';
+      st.className = 'rb-status ' + (playing ? 'playing' : 'paused');
+    }
+  };
+
+  UI.refreshReplayBar = function () {
+    const total = BR.total();
+    const idx = BR.getIndex();
+    const c = BR.currentCandle();
+    setText('pbTime', c ? U.fmtDate(c.time) + ' UTC' : '—');
+    setText('pbIndex', `vela ${idx + 1} / ${total}`);
+    setText('pbPct', U.fmtPct(BR.progressTotal() * 100, 1));
+    setText('pbSpeed', BR.speedLabel());
+    setText('rbClock', c ? U.fmtDateSec(c.time) : '—');
+    const slider = document.getElementById('progressRange');
+    if (slider && document.activeElement !== slider) slider.value = Math.round(BR.progressTotal() * 1000);
+    U.$$('.speed-btn').forEach((b) => {
+      const v = b.dataset.speed === 'max' ? 'max' : +b.dataset.speed;
+      b.classList.toggle('active', v === BR.state.speed);
+    });
+    UI.updateHiddenNotice();
+    UI.refreshPriceTag();
+  };
+
+  UI.updateHiddenNotice = function () {
+    const hidden = BR.hiddenCount();
+    const el = document.getElementById('hiddenNotice');
+    if (!el) return;
+    setText('hiddenCount', `${hidden.toLocaleString('es-ES')} velas ocultas`);
+    el.classList.toggle('hidden', hidden === 0);
+  };
+
+  /* ------------------------------- Orden / hint ------------------------------- */
+
+  /** Texto de ayuda bajo los botones de orden: SL/TP y riesgo estimado. */
+  UI.updateOrderHint = function () {
+    const price = App.currentPrice();
+    const hint = document.getElementById('orderHint');
+    if (!hint) return;
+    if (!price) { hint.textContent = 'Carga datos para operar.'; return; }
+    const sl = parseFloat(val('slInput'));
+    const tp = parseFloat(val('tpInput'));
+    const parts = [];
+    if (Number.isFinite(sl)) parts.push(`SL a ${U.fmtPct(((price - sl) / price) * 100, 2)} del precio`);
+    if (Number.isFinite(tp)) parts.push(`TP a ${U.fmtPct(((tp - price) / price) * 100, 2)}`);
+    // Riesgo estimado
+    const { notional } = App.estimateSize(price);
+    if (Number.isFinite(sl) && notional > 0) {
+      const risk = Math.abs(price - sl) / price * notional;
+      const eq = TE.state.balance;
+      parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
+    }
+    if (TE.state.position) parts.push('posición abierta: cierra antes de abrir otra');
+    hint.textContent = parts.length ? parts.join(' · ') : 'Sin SL/TP definidos (puedes añadirlos por precio o con los atajos rápidos).';
+  };
+
+  /* -------------------------------- Confirmaciones -------------------------------- */
+
+  UI.confirmReset = function () {
+    if (!confirm('¿Reiniciar las estadísticas y borrar el historial de trades? El replay no se moverá.')) return;
+    App.resetStats();
+  };
+
+  UI.confirmHardReset = function () {
+    if (!confirm('Esto reinicia la sesión completa: cuenta, trades, dibujos, indicadores y replay. ¿Continuar?')) return;
+    App.hardReset();
+    UI.closeModal('modalSettings');
+  };
+
+  /* ------------------------------- Loader ------------------------------- */
+
+  UI.showLoader = function (text) {
+    const l = document.getElementById('loader');
+    l.classList.remove('hidden');
+    UI._loaderBase = text || 'Cargando…';
+    UI._loaderT0 = performance.now();
+    setText('loaderText', UI._loaderBase);
+    if (UI._loaderTimer) clearInterval(UI._loaderTimer);
+    UI._loaderTimer = setInterval(UI._tickLoader, 500);
+  };
+
+  UI._tickLoader = function () {
+    if (!UI._loaderT0) return;
+    const s = Math.round((performance.now() - UI._loaderT0) / 1000);
+    let extra = ` (${s} s)`;
+    if (s >= 6) extra += ' · la red va lenta… si no responde, arrancaré en modo DEMO';
+    setText('loaderText', UI._loaderBase + extra);
+  };
+
+  UI.hideLoader = function () {
+    document.getElementById('loader').classList.add('hidden');
+    if (UI._loaderTimer) { clearInterval(UI._loaderTimer); UI._loaderTimer = null; }
+    UI._loaderT0 = 0;
+  };
+
+  UI.setLoaderText = function (t) {
+    UI._loaderBase = t;
+    setText('loaderText', t + (UI._loaderT0 ? ` (${Math.round((performance.now() - UI._loaderT0) / 1000)} s)` : ''));
+  };
+
+  /* ------------------------------- Leyenda / pares ------------------------------- */
+
+  UI.setPairLabels = function (pair, interval) {
+    const label = DS.PAIRS[pair] || pair;
+    setText('lgPair', label);
+    setText('lgTf', interval);
+    // Fuente de datos visible en la leyenda: Binance (real), DEMO (sintético)…
+    const src = App.source && App.source !== '—' ? App.source : '';
+    const el = document.getElementById('lgSource');
+    if (el) {
+      el.textContent = src ? '· ' + src : '';
+      el.title = src ? 'Fuente de datos: ' + src : '';
+      el.style.color = /DEMO|sintétic/i.test(src) ? 'var(--warn)' : 'var(--tx-4)';
+    }
+  };
+
+  /* ------------------------------ Captura de pantalla ------------------------------ */
+
+  /** Compone las velas + dibujos + paneles en una sola imagen PNG. */
+  UI.composeScreenshot = function () {
+    const area = document.getElementById('chartArea');
+    const wrap = document.getElementById('chartWrap');
+    const areaRect = area.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const dpr = global.devicePixelRatio || 1;
+
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(areaRect.width * dpr);
+    cv.height = Math.round(areaRect.height * dpr);
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#0b0c16';
+    ctx.fillRect(0, 0, areaRect.width, areaRect.height);
+
+    // Todas las velas/paneles renderizados por canvas dentro del área del gráfico
+    U.$$('#chartArea canvas').forEach((c) => {
+      if (!c.width || !c.height) return;
+      const r = c.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      try { ctx.drawImage(c, r.left - areaRect.left, r.top - areaRect.top, r.width, r.height); } catch (e) {}
+    });
+
+    // Dibujos (canvas superpuesto)
+    ctx.save();
+    ctx.translate(0, wrapRect.top - areaRect.top);
+    DT.renderTo(ctx, wrapRect.width, wrapRect.height);
+    ctx.restore();
+
+    // Cabecera informativa
+    const c = BR.currentCandle();
+    ctx.fillStyle = 'rgba(11,12,22,.85)';
+    ctx.fillRect(0, 0, areaRect.width, 22);
+    ctx.fillStyle = '#e8eaf6';
+    ctx.font = 'bold 12px ui-monospace, monospace';
+    const pair = DS.PAIRS[App.pair] || App.pair;
+    ctx.fillText(`BAR REPLAY PRO · ${pair} · ${App.interval} · ${c ? U.fmtDate(c.time) + ' UTC' : ''} · ` +
+                 `Balance ${U.fmtMoney(TE.state.balance)} · Equity ${U.fmtMoney(TE.state.equity)}`, 10, 15);
+    return cv;
+  };
+
+  /* ------------------------------ Cura de inputs ------------------------------ */
+
+  UI.setSizeMode = function (mode) {
+    U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x.dataset.mode === mode));
+  };
+
+  UI.setSpeedButtons = function () {
+    U.$$('.speed-btn').forEach((b) => {
+      const v = b.dataset.speed === 'max' ? 'max' : +b.dataset.speed;
+      b.classList.toggle('active', v === BR.state.speed);
+    });
+  };
+
+  global.UI = UI;
+})(window);

@@ -1,0 +1,480 @@
+/* =========================================================================
+ * tradingEngine.js — Motor de trading simulado.
+ *
+ *  · Cuenta con balance, equity, margen y comisiones.
+ *  · Órdenes a mercado (LONG/SHORT) con tamaño en %, USD o cantidad.
+ *  · Apalancamiento, precio de liquidación estimado.
+ *  · SL / TP automáticos evaluados vela a vela por el Bar Replay.
+ *  · PnL en tiempo real sobre la última vela mostrada.
+ *
+ *  Ejecución intrabar (decisión de diseño):
+ *    Solo conocemos OHLC, no el orden real de los precios dentro de la vela.
+ *    Por defecto se aplica la hipótesis PESIMISTA: si en una misma vela se
+ *    tocan SL y TP, se ejecuta el SL. Con huecos (gap) de apertura, si el
+ *    precio abre más allá del stop, se ejecuta al OPEN (slippage realista).
+ * =======================================================================*/
+(function (global) {
+  'use strict';
+
+  const TE = {};
+
+  /* ------------------------------ Estado ------------------------------ */
+
+  TE.state = {
+    initialCapital: 10000,
+    balance: 10000,          // capital realizado (sin PnL abierto)
+    equity: 10000,           // balance + PnL no realizado
+    leverage: 1,
+    feePct: 0.1,             // % por lado (apertura y cierre)
+    fundingPct: 0,           // % por vela sobre el notional (opcional)
+    slFirst: 'worst',        // 'worst' | 'best'
+    position: null,          // posición abierta
+    trades: [],              // historial (abiertas + cerradas)
+    equitySeries: [],        // [{t, value, time}] para la curva de capital
+    feesPaid: 0,
+    lastPrice: null,
+    lastTime: null,
+    seq: 0,
+  };
+
+  /* ---------------------------- Configuración ---------------------------- */
+
+  TE.configure = function (opts) {
+    const s = TE.state;
+    if (opts.initialCapital !== undefined) { s.initialCapital = +opts.initialCapital; }
+    if (opts.leverage !== undefined) s.leverage = +opts.leverage;
+    if (opts.feePct !== undefined) s.feePct = +opts.feePct;
+    if (opts.fundingPct !== undefined) s.fundingPct = +opts.fundingPct;
+    if (opts.slFirst !== undefined) s.slFirst = opts.slFirst;
+  };
+
+  /** Reinicia la cuenta al capital inicial y borra el historial. */
+  TE.resetAccount = function (capital) {
+    const s = TE.state;
+    if (capital !== undefined) s.initialCapital = +capital;
+    s.balance = s.initialCapital;
+    s.equity = s.initialCapital;
+    s.position = null;
+    s.trades = [];
+    s.equitySeries = [];
+    s.feesPaid = 0;
+    s.seq = 0;
+    TE._pushEquity(s.lastTime, s.initialCapital);
+  };
+
+  /* ------------------------------ Utilidades ------------------------------ */
+
+  TE.unrealized = function (price) {
+    const p = TE.state.position;
+    if (!p || price === null || price === undefined) return 0;
+    const dir = p.side === 'long' ? 1 : -1;
+    return (price - p.entryPrice) * p.qty * dir;
+  };
+
+  TE.marginUsed = function () {
+    const p = TE.state.position;
+    return p ? p.notional / p.leverage : 0;
+  };
+
+  /** Precio de liquidación aproximado (aislado, sin mantenimiento). */
+  TE.liquidationPrice = function (position) {
+    if (!position) return null;
+    const p = position;
+    const side = p.side === 'long' ? 1 : -1;
+    return p.entryPrice * (1 - side / p.leverage);
+  };
+
+  TE._pushEquity = function (time, value) {
+    const s = TE.state;
+    const last = s.equitySeries[s.equitySeries.length - 1];
+    if (last && last.t === time) last.value = value;
+    else s.equitySeries.push({ t: time, value, time });
+    // Acotar memoria en sesiones muy largas
+    if (s.equitySeries.length > 20000) s.equitySeries.splice(0, 5000);
+  };
+
+  /* --------------------------- Abrir / cerrar --------------------------- */
+
+  /**
+   * Abre una posición a mercado.
+   * @param {'long'|'short'} side
+   * @param {object} params { mode:'pct'|'notional'|'qty', size, entryPrice, sl, tp, leverage, feePct, time }
+   * @returns {object|null} posición creada
+   */
+  TE.openPosition = function (side, params) {
+    const s = TE.state;
+    if (s.position) { U.toast('Ya hay una posición abierta. Ciérrala antes de abrir otra.', 'warn'); return null; }
+
+    const entryPrice = +params.entryPrice;
+    if (!Number.isFinite(entryPrice) || entryPrice <= 0) { U.toast('Precio de entrada no válido', 'err'); return null; }
+
+    const leverage = Math.max(1, +(params.leverage || s.leverage || 1));
+    const feePct = params.feePct !== undefined ? +params.feePct : s.feePct;
+
+    // --- Cálculo del tamaño de la posición ---
+    const equity = s.balance; // usamos capital realizado disponible
+    let notional = 0, qty = 0;
+    if (params.mode === 'pct') {
+      const pct = U.clamp(+params.size || 0, 0, 100);
+      notional = equity * (pct / 100) * leverage;
+    } else if (params.mode === 'notional') {
+      notional = Math.max(0, +params.size || 0);
+    } else { // qty
+      qty = Math.max(0, +params.size || 0);
+      notional = qty * entryPrice;
+    }
+    if (!qty) qty = notional / entryPrice;
+
+    const margin = notional / leverage;
+    if (notional <= 0 || !Number.isFinite(qty)) { U.toast('Tamaño de posición no válido', 'err'); return null; }
+    if (margin > s.balance + 1e-9) {
+      U.toast(`Margen insuficiente: necesitas ${U.fmtMoney(margin)} y tienes ${U.fmtMoney(s.balance)}`, 'err');
+      return null;
+    }
+
+    const fee = notional * (feePct / 100);
+
+    // --- SL / TP ---
+    let sl = Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null;
+    let tp = Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null;
+    // Validación de coherencia según dirección
+    if (side === 'long') {
+      if (sl !== null && sl >= entryPrice) { U.toast('En LONG el Stop Loss debe estar por debajo del precio de entrada; se ignora', 'warn'); sl = null; }
+      if (tp !== null && tp <= entryPrice) { U.toast('En LONG el Take Profit debe estar por encima del precio de entrada; se ignora', 'warn'); tp = null; }
+    } else {
+      if (sl !== null && sl <= entryPrice) { U.toast('En SHORT el Stop Loss debe estar por encima del precio de entrada; se ignora', 'warn'); sl = null; }
+      if (tp !== null && tp >= entryPrice) { U.toast('En SHORT el Take Profit debe estar por debajo del precio de entrada; se ignora', 'warn'); tp = null; }
+    }
+
+    // Riesgo inicial (distancia al SL × tamaño) → para el R múltiplo
+    const riskUsd = sl !== null ? Math.abs(entryPrice - sl) * qty : null;
+
+    // Retenemos la comisión de apertura del balance ya (flujo de caja realista)
+    s.balance -= fee;
+    s.feesPaid += fee;
+
+    const position = {
+      id: ++s.seq,
+      side,
+      status: 'open',
+      entryPrice, qty, notional,
+      leverage, feePct,
+      sl, tp,
+      riskUsd,
+      entryTime: params.time || s.lastTime,
+      entryBalance: s.balance,
+      openFee: fee,        // comisión de apertura (ya descontada del balance)
+      funding: 0,          // coste de financiación acumulado durante la posición
+      fees: fee,
+      mfe: 0, mae: 0,      // excursión favorable/adversa máxima
+      bars: 0,
+      initialSl: sl, initialTp: tp,
+    };
+    s.position = position;
+    s.trades.push(position);
+
+    U.playSound('open');
+    U.log(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto @ ${U.fmtPrice(entryPrice)} · ` +
+          `tamaño ${U.num(qty, 6)} (${U.fmtMoney(notional)}) · ${leverage}x · ` +
+          `SL ${sl ? U.fmtPrice(sl) : '—'} · TP ${tp ? U.fmtPrice(tp) : '—'} · ` +
+          `comisión ${U.fmtMoney(fee)}`, side === 'long' ? 'ok' : 'bad');
+
+    TE.updateEquity(entryPrice, params.time);
+    TE._emit();
+    return position;
+  };
+
+  /**
+   * Cierra la posición abierta.
+   * @param {number} price  precio de ejecución
+   * @param {string} reason 'manual' | 'sl' | 'tp' | 'liq' | 'reset' | 'end'
+   * @param {number} time
+   */
+  TE.closePosition = function (price, reason = 'manual', time) {
+    const s = TE.state;
+    const p = s.position;
+    if (!p) return null;
+
+    const dir = p.side === 'long' ? 1 : -1;
+    const gross = (price - p.entryPrice) * p.qty * dir;
+    const exitFee = Math.abs(price * p.qty) * (p.feePct / 100);
+
+    // Actualizar excursión antes de cerrar
+    p.mfe = Math.max(p.mfe, (price - p.entryPrice) * p.qty * dir);
+    p.mae = Math.min(p.mae, (price - p.entryPrice) * p.qty * dir);
+
+    let net = gross - exitFee;      // flujo de caja del cierre
+
+    // Una liquidación no puede perder más que el margen comprometido
+    if (reason === 'liq') {
+      const margin = p.notional / p.leverage;
+      net = Math.max(net, -(margin - (p.openFee || 0)));
+    }
+
+    s.balance += net;
+    s.feesPaid += exitFee;
+
+    p.status = 'closed';
+    p.exitPrice = price;
+    p.exitTime = time !== undefined ? time : s.lastTime;
+    // PnL del trade = beneficio bruto − comisión de cierre − comisión de apertura − financiación
+    p.pnl = net - (p.openFee || 0) - (p.funding || 0);
+    p.grossPnl = gross;
+    p.fees = (p.fees || 0) + exitFee;
+    p.pnlPct = p.entryBalance > 0 ? (p.pnl / p.entryBalance) * 100 : 0;   // % sobre el capital en el momento de entrar
+    p.pnlPctPrice = p.entryPrice > 0 ? ((price - p.entryPrice) / p.entryPrice) * 100 * dir : 0; // % de movimiento del precio
+    p.rMultiple = p.riskUsd ? p.pnl / p.riskUsd : null;
+    p.reason = reason;
+    p.bars = p.bars || 0;
+
+    s.position = null;
+    s.lastPrice = price;
+
+    const won = p.pnl > 0;
+    U.playSound(won ? 'win' : 'loss');
+    U.log(`${won ? '✅' : '❌'} Posición cerrada @ ${U.fmtPrice(price)} por ${TE.reasonLabel(reason)} · ` +
+          `PnL ${U.fmtMoney(p.pnl, true)} (${U.fmtPct(p.pnlPct, 2, true)})` +
+          (p.rMultiple !== null ? ` · ${U.num(p.rMultiple, 2)}R` : ''), won ? 'ok' : 'bad');
+
+    TE.updateEquity(price, p.exitTime);
+    TE._emit();
+    return p;
+  };
+
+  TE.reasonLabel = function (r) {
+    return ({
+      manual: 'cierre manual',
+      sl: 'STOP LOSS',
+      tp: 'TAKE PROFIT',
+      liq: 'LIQUIDACIÓN',
+      reset: 'reinicio del replay',
+      end: 'fin del replay',
+    })[r] || r;
+  };
+
+  /* ------------------------- Modificación de SL/TP ------------------------- */
+
+  TE.setSL = function (price) {
+    const p = TE.state.position;
+    if (!p) return false;
+    if (price === null || price === undefined || !Number.isFinite(+price)) { p.sl = null; }
+    else {
+      if (p.side === 'long' && price >= p.entryPrice) { U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
+      if (p.side === 'short' && price <= p.entryPrice) { U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
+      p.sl = +price;
+    }
+    TE.updateRisk(p);
+    U.log(`🛠 SL actualizado a ${p.sl ? U.fmtPrice(p.sl) : 'sin SL'}`, 'warn');
+    TE._emit();
+    return true;
+  };
+
+  TE.setTP = function (price) {
+    const p = TE.state.position;
+    if (!p) return false;
+    if (price === null || price === undefined || !Number.isFinite(+price)) { p.tp = null; }
+    else {
+      if (p.side === 'long' && price <= p.entryPrice) { U.toast('TP inválido: debe estar por encima de la entrada', 'warn'); return false; }
+      if (p.side === 'short' && price >= p.entryPrice) { U.toast('TP inválido: debe estar por debajo de la entrada', 'warn'); return false; }
+      p.tp = +price;
+    }
+    TE.updateRisk(p);
+    U.log(`🛠 TP actualizado a ${p.tp ? U.fmtPrice(p.tp) : 'sin TP'}`, 'warn');
+    TE._emit();
+    return true;
+  };
+
+  /** Recalcula el riesgo usado para el R múltiplo. */
+  TE.updateRisk = function (p) {
+    p.riskUsd = p.sl !== null ? Math.abs(p.entryPrice - p.sl) * p.qty : null;
+  };
+
+  /* ----------------------------- Replay hooks ----------------------------- */
+
+  /**
+   * Llamado por el Bar Replay cada vez que se "cierra" una vela nueva
+   * (avance). Evalúa liquidación, SL y TP, y actualiza estadísticas.
+   * @param {object} candle  vela recién cerrada
+   * @returns {object|null}  posición cerrada si la hubo
+   */
+  TE.onCandle = function (candle) {
+    const s = TE.state;
+    s.lastPrice = candle.close;
+    s.lastTime = candle.time;
+
+    const p = s.position;
+    if (p) {
+      p.bars++;
+
+      // Excursiones máximas durante la vela
+      const dir = p.side === 'long' ? 1 : -1;
+      const favPrice = dir === 1 ? candle.high : candle.low;
+      const advPrice = dir === 1 ? candle.low : candle.high;
+      p.mfe = Math.max(p.mfe, (favPrice - p.entryPrice) * p.qty * dir);
+      p.mae = Math.min(p.mae, (advPrice - p.entryPrice) * p.qty * dir);
+
+      // Coste de financiación opcional por vela
+      if (s.fundingPct > 0) {
+        const f = p.notional * (s.fundingPct / 100);
+        s.balance -= f; s.feesPaid += f;
+        p.fees += f;
+        p.funding = (p.funding || 0) + f;
+      }
+
+      const liq = TE.liquidationPrice(p);
+
+      // --- 1) Liquidación (prioridad máxima) ---
+      if (liq !== null && ((p.side === 'long' && candle.low <= liq) || (p.side === 'short' && candle.high >= liq))) {
+        U.log('💀 Precio de liquidación alcanzado: la posición se cierra por margen', 'bad');
+        return TE.closePosition(liq, 'liq', candle.time);
+      }
+
+      // --- 2) SL / TP ---
+      const slHit = p.sl !== null && (p.side === 'long' ? candle.low <= p.sl : candle.high >= p.sl);
+      const tpHit = p.tp !== null && (p.side === 'long' ? candle.high >= p.tp : candle.low <= p.tp);
+
+      if (slHit && tpHit) {
+        const first = s.slFirst === 'best' ? 'tp' : 'sl';
+        if (first === 'sl') return TE.closePosition(TE._fillPrice(candle, p.sl, p.side, true), 'sl', candle.time);
+        return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
+      }
+      if (slHit) return TE.closePosition(TE._fillPrice(candle, p.sl, p.side, true), 'sl', candle.time);
+      if (tpHit) return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
+    }
+
+    TE.updateEquity(candle.close, candle.time);
+    TE._emit();
+    return null;
+  };
+
+  /**
+   * Precio de ejecución realista de SL/TP dentro de una vela:
+   *  · Si el nivel se negoció dentro del rango [low, high], se ejecuta al nivel.
+   *  · Si la vela ABRIÓ ya más allá del nivel (hueco/gap):
+   *      - Stop Loss  → se ejecuta a la apertura (peor precio, slippage real).
+   *      - Take Profit→ se ejecuta a la apertura (mejor precio, como en un límite).
+   *
+   * @param {object} candle vela cerrada
+   * @param {number} level  precio del SL o TP
+   * @param {'long'|'short'} side
+   * @param {boolean} isStop true para SL, false para TP
+   */
+  TE._fillPrice = function (candle, level, side, isStop) {
+    if (level === null || level === undefined) return candle.close;
+    if (isStop) {
+      const adverseGap = side === 'long' ? candle.open < level : candle.open > level;
+      return adverseGap ? candle.open : level;
+    }
+    const favorableGap = side === 'long' ? candle.open > level : candle.open < level;
+    return favorableGap ? candle.open : level;
+  };
+
+  /**
+   * Recalcula la equity con el último precio conocido y guarda el punto
+   * en la curva de capital.
+   */
+  TE.updateEquity = function (price, time) {
+    const s = TE.state;
+    if (price !== null && price !== undefined) s.lastPrice = price;
+    if (time !== undefined) s.lastTime = time;
+    const eq = s.balance + TE.unrealized(s.lastPrice);
+    // El margen no se descuenta del balance (queda bloqueado), así que la
+    // equity es directamente balance + PnL abierto.
+    s.equity = eq;
+    TE._pushEquity(s.lastTime, eq);
+    return eq;
+  };
+
+  /** Emite un evento interno para que la UI se refresque. */
+  TE._emit = function () {
+    if (TE._batch) return;   // durante un avance rápido no refrescamos por vela
+    try { global.dispatchEvent(new CustomEvent('te:update')); } catch (e) {}
+  };
+
+  /**
+   * Modo "lote": al procesar decenas de velas de golpe (avance rápido, seek o
+   * «ir al final») se silencian los eventos por vela y se refresca una sola vez.
+   */
+  TE.beginBatch = function () { TE._batch = true; };
+  TE.endBatch = function () { TE._batch = false; TE._emit(); };
+
+  /* --------------------------- Rebobinado (rewind) --------------------------- */
+
+  /**
+   * Restaura el estado de la cuenta desde un checkpoint (creado por App).
+   * Permite retroceder velas sin recalcular todo el histórico.
+   */
+  TE.restoreFromCheckpoint = function (cp) {
+    const s = TE.state;
+    if (!cp) return;
+    s.balance = cp.bal;
+    s.equity = cp.eq;
+    s.feesPaid = cp.fees;
+    s.seq = cp.seq;
+    s.lastPrice = cp.lastPrice;
+    s.lastTime = cp.lastTime;
+    s.equitySeries = s.equitySeries.slice(0, cp.eqLen);
+    s.trades.length = Math.min(s.trades.length, cp.tradesLen);
+
+    if (cp.hasPos && cp.pos) {
+      const clone = JSON.parse(JSON.stringify(cp.pos));
+      if (cp.tradesLen > 0 && s.trades.length >= cp.tradesLen) s.trades[cp.tradesLen - 1] = clone;
+      else s.trades.push(clone);
+      s.position = clone;
+    } else {
+      s.position = null;
+    }
+    TE._emit();
+  };
+
+  /* ------------------------------ Métricas ------------------------------ */
+
+  TE.getMetrics = function () {
+    const s = TE.state;
+    return {
+      balance: s.balance,
+      equity: s.equity,
+      initialCapital: s.initialCapital,
+      pnlTotal: s.trades.filter((t) => t.status === 'closed').reduce((a, t) => a + t.pnl, 0),
+      openPnl: TE.unrealized(s.lastPrice),
+      margin: TE.marginUsed(),
+      free: s.balance - TE.marginUsed(),
+      exposure: s.balance > 0 ? (TE.marginUsed() / s.balance) * 100 : 0,
+      fees: s.feesPaid,
+      position: s.position,
+    };
+  };
+
+  /** Posición abierta serializada (para guardar sesión). */
+  TE.serialize = function () {
+    return {
+      state: {
+        initialCapital: TE.state.initialCapital,
+        balance: TE.state.balance,
+        equity: TE.state.equity,
+        leverage: TE.state.leverage,
+        feePct: TE.state.feePct,
+        fundingPct: TE.state.fundingPct,
+        slFirst: TE.state.slFirst,
+        feesPaid: TE.state.feesPaid,
+        lastPrice: TE.state.lastPrice,
+        lastTime: TE.state.lastTime,
+        seq: TE.state.seq,
+      },
+      position: TE.state.position,
+      trades: TE.state.trades,
+      equitySeries: TE.state.equitySeries.slice(-5000),
+    };
+  };
+
+  TE.restore = function (data) {
+    if (!data) return;
+    Object.assign(TE.state, data.state || {});
+    TE.state.position = data.position || null;
+    TE.state.trades = data.trades || [];
+    TE.state.equitySeries = data.equitySeries || [];
+    TE._emit();
+  };
+
+  global.TE = TE;
+})(window);

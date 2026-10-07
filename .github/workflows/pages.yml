@@ -1,0 +1,57 @@
+# =========================================================================
+# .github/workflows/pages.yml — Publica la aplicación en GitHub Pages
+#
+# Al subir el repositorio a GitHub, esta acción publica la app como web
+# estática. Queda disponible en:
+#
+#     https://TU-USUARIO.github.io/TU-REPOSITORIO/
+#
+# (que carga index.html del proyecto) y también el archivo único:
+#
+#     https://TU-USUARIO.github.io/TU-REPOSITORIO/bar-replay-pro-unico.html
+#
+# Ese enlace se puede abrir desde el MÓVIL con Chrome o Safari: así se usa la
+# app completa sin necesidad de servidor y sin el problema de los visores que
+# no ejecutan JavaScript.
+#
+# No hay que configurar nada: GitHub detecta el flujo automáticamente.
+# (Si Pages pide una fuente, elige «GitHub Actions» en Ajustes → Pages).
+# =========================================================================
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  desplegar:
+    nombre: Publicar la aplicación
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacion.outputs.page_url }}
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empaquetar el sitio
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Publicar
+        id: publicacion
+        uses: actions/deploy-pages@v4

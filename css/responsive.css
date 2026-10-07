@@ -1,0 +1,118 @@
+/* =========================================================================
+ * responsive.css — TODAS las reglas de tamaño adaptable viven aquí, y esta
+ * hoja se carga LA ÚLTIMA a propósito: así sus reglas ganan la cascada frente
+ * a los valores por defecto de main.css / chart.css / panels.css sin
+ * necesidad de !important. Regla de oro: si algo se recorta o desborda en un
+ * panel pequeño, se arregla en este archivo.
+ *
+ * Escenarios cubiertos:
+ *   · Panel de vista previa embebido (poco alto y/o poco ancho)
+ *   · Tablet apaisada y ventana partida (900–1180 px)
+ *   · Móvil vertical (≤620 px)
+ *   · Ventanas bajas (≤620 px de alto)
+ * =======================================================================*/
+
+/* ══════════════════ 1) ANCHO: 1000 px o menos ══════════════════
+   La barra lateral deja de ser columna y pasa a fila desplazable: el gráfico
+   se queda con TODO el ancho disponible. */
+@media (max-width:1000px){
+  #workspace{grid-template-columns:1fr !important;}
+  #sidebar{
+    flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    border-left:none;border-top:1px solid var(--line);
+    max-height:230px;padding:8px;
+  }
+  #sidebar .card{min-width:280px;max-width:430px;flex:1 0 auto;margin-bottom:0;}
+  #sidebar .card-body{max-height:158px;overflow-y:auto;}
+}
+
+/* ══════════════════ 2) ANCHO: 900 px o menos ══════════════════
+   Los grupos de la barra superior pueden envolver y la barra de replay pasa a
+   dos filas (controles + progreso) para no apretar sus etiquetas. */
+@media (max-width:900px){
+  .topbar-group{flex-wrap:wrap;min-width:0;flex:1 1 auto;row-gap:6px;}
+  .topbar-right{flex:0 1 auto;}
+  #replayBar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 8px;}
+  .rb-buttons{flex:0 0 auto;}
+  .rb-speed{flex:1 1 auto;}
+  .rb-progress{flex:1 1 100%;order:5;}
+  #ohlcLegend{max-width:calc(100% - 108px);}
+}
+
+/* ══════════════════ 3) ANCHO: 820 px o menos ══════════════════ */
+@media (max-width:820px){
+  .brand-sub{display:none;}
+  .brand{padding-right:8px;}
+  .rb-progress .rb-info{font-size:9.5px;gap:5px;}
+  .rb-clock{display:none;}
+}
+
+/* ══════════════════ 4) ANCHO: 620 px o menos (móvil) ══════════════════
+   Las barras horizontales pasan a fila desplazable en vez de apilarse: el
+   gráfico conserva la mayor parte del alto y nada se sale del ancho. */
+@media (max-width:620px){
+  #topbar{flex-wrap:nowrap;overflow-x:auto;padding:6px 8px;}
+  #topbar::-webkit-scrollbar{height:4px;}
+  .topbar-group{flex-wrap:nowrap;flex:0 0 auto;}
+  .topbar-right{margin-left:0;}
+  .brand{padding-right:6px;}
+  .field-label{font-size:9px;}
+  .tool{width:27px;height:24px;}
+  #chartWrap{min-height:200px;}
+  .indPane{height:92px;}
+  #replayBar{flex-wrap:nowrap;overflow-x:auto;padding:6px 8px;}
+  #replayBar::-webkit-scrollbar{height:4px;}
+  .rb-progress{flex:1 0 210px;}
+  .rb-progress .rb-info{white-space:nowrap;}
+  #bottomPanel{height:176px;}
+  .tabs{overflow-x:auto;}
+  .tab{font-size:10.5px;padding:0 8px;white-space:nowrap;}
+}
+/* ══════════════════ 5) ALTO: 900 px o menos ══════════════════
+   Paneles de vista previa embebidos. En lugar de comprimir el gráfico hasta
+   dejarlo inservible (o de obligar a desplazar la página, que dejaría los
+   botones de replay y el historial fuera de la vista), se recorta el "cromo":
+   panel inferior, paneles de indicadores y espaciados. El conjunto SIEMPRE
+   cabe en el alto disponible y el gráfico se queda con todo lo demás. */
+@media (max-height:900px){
+  #bottomPanel{height:148px;}
+  .indPane{height:100px;}
+  .card-body{padding:8px 9px;gap:5px;}
+}
+
+/* ══════════════════ 6) ALTO: 820 px o menos, ancho contenido ══════════════════
+   Si además el panel es estrecho, la barra superior pasa a UNA fila
+   desplazable en horizontal: cada fila ahorrada son ~40 px de gráfico. */
+@media (max-height:820px) and (max-width:1300px){
+  #topbar{flex-wrap:nowrap;overflow-x:auto;padding:5px 8px;gap:8px;}
+  #topbar::-webkit-scrollbar{height:4px;}
+  .topbar-group{flex-wrap:nowrap;flex:0 0 auto;row-gap:0;gap:7px;}
+  /* Controles compactos: así caben TODOS en un panel estrecho sin tener que
+     desplazar la barra (el texto de marca es lo primero que se sacrifica). */
+  .brand-sub{display:none;}
+  #topbar .btn{padding:5px 9px;font-size:11px;}
+  #topbar .btn-icon{width:29px;height:26px;}
+  #topbar select,#topbar input{font-size:11px;padding:5px 7px;}
+  #topbar .field-label{font-size:8.5px;letter-spacing:.2px;}
+}
+
+/* ══════════════════ 7) ALTO: 700 px o menos ══════════════════
+   Paneles muy bajos: compresión máxima para que siga entrando todo. */
+@media (max-height:700px){
+  .brand-text{display:none;}       /* en un panel mínimo, el logo basta */
+  #bottomPanel{height:100px;}      /* el registro de operaciones es lo prescindible */
+  .indPane{height:72px;}           /* paneles RSI/MACD/ATR compactos */
+  #chartWrap{min-height:140px;}
+  #sidebar{max-height:120px;}      /* si va en fila (ancho ≤1000), ocupa lo justo */
+  .brand-sub{display:none;}
+  #topbar{flex-wrap:nowrap;overflow-x:auto;padding:5px 8px;}
+  #topbar::-webkit-scrollbar{height:4px;}
+  .topbar-group{flex-wrap:nowrap;flex:0 0 auto;row-gap:0;}
+}
+
+/* ══════════════════ 8) ALTO: 520 px o menos ══════════════════
+   Extremo (panel casi inutilizable): último recurso, desplazamiento vertical. */
+@media (max-height:520px){
+  body{overflow-y:auto;}
+  #workspace{flex:0 0 auto;height:420px;min-height:420px;}
+}

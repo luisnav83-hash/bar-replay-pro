@@ -1,0 +1,157 @@
+/* =========================================================================
+   chart.css — Estructura del área de gráfico, barra de dibujo, overlay de
+   dibujos, leyenda OHLC, paneles de indicadores y controles de Bar Replay.
+   ========================================================================= */
+
+#workspace{
+  flex:1 1 auto;                 /* ocupa el alto libre entre la barra superior y el panel inferior */
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 322px;
+  overflow:hidden;
+}
+
+#chartArea{
+  display:grid;
+  /* toolbar · gráfico (flexible) · paneles de indicadores · barra de replay
+     (auto: cabe aunque los controles pasen a dos filas) */
+  grid-template-rows:var(--toolbar-h) minmax(0,1fr) auto auto;
+  min-width:0;min-height:0;
+  border-right:1px solid var(--line);
+}
+
+/* --------------------------- Barra de herramientas --------------------------- */
+#drawToolbar{
+  display:flex;align-items:center;gap:6px;padding:0 8px;
+  background:var(--bg-2);border-bottom:1px solid var(--line);overflow-x:auto;
+}
+.tool-cluster{display:flex;align-items:center;gap:3px;padding-right:7px;border-right:1px solid var(--line-soft);}
+.tool-cluster:last-child{border-right:none;}
+.tool-cluster-right{margin-left:auto;padding-right:0;}
+.tool{
+  width:29px;height:26px;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
+  color:var(--tx-2);font-size:13px;line-height:1;transition:all .13s;
+}
+.tool:hover{background:var(--bg-4);color:#fff;}
+.tool.active{background:rgba(0,229,255,.15);border-color:var(--accent-2);color:var(--accent-2);box-shadow:0 0 8px rgba(0,229,255,.2) inset;}
+.mini-select{
+  height:26px;padding:0 4px;background:var(--bg-3);border:1px solid var(--line);
+  border-radius:var(--r-sm);color:var(--tx-2);font-size:10.5px;
+}
+.color-pick input{width:29px;height:26px;}
+
+/* ------------------------------- Contenedor chart ------------------------------- */
+#chartWrap{position:relative;min-height:0;background:var(--bg-0);overflow:hidden;}
+#mainChart{position:absolute;inset:0;}
+#overlayCanvas{position:absolute;inset:0;z-index:5;cursor:crosshair;}
+#overlayCanvas.mode-cursor{cursor:default;}
+#overlayCanvas.dragging{cursor:grabbing;}
+#overlayCanvas.hit{cursor:move;}
+
+/* Leyenda OHLC */
+#ohlcLegend{
+  position:absolute;top:8px;left:10px;z-index:6;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11px;color:var(--tx-2);
+  background:rgba(11,12,22,.72);border:1px solid var(--line-soft);border-radius:var(--r-sm);
+  padding:4px 8px;backdrop-filter:blur(3px);pointer-events:none;max-width:min(62%, 720px);
+}
+#ohlcLegend .lg-pair{font-weight:800;color:#fff;letter-spacing:.4px;}
+#ohlcLegend .lg-tf{color:var(--accent-2);font-weight:700;}
+#ohlcLegend b{font-weight:600;color:var(--tx-1);}
+#ohlcLegend .up{color:var(--up);}
+#ohlcLegend .down{color:var(--down);}
+#ohlcLegend .lg-ind{color:var(--tx-3);font-size:10.5px;}
+
+/* Aviso de velas ocultas */
+#hiddenNotice{
+  position:absolute;top:8px;right:86px;z-index:6;display:flex;align-items:center;gap:6px;
+  background:rgba(255,171,0,.10);border:1px solid rgba(255,171,0,.35);color:var(--warn);
+  border-radius:20px;padding:3px 10px;font-size:10.5px;font-family:var(--mono);
+}
+#hiddenNotice .lock{font-size:10px;}
+
+/* Loader */
+#loader{
+  position:absolute;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  background:rgba(11,12,22,.72);backdrop-filter:blur(2px);font-family:var(--mono);color:var(--tx-2);font-size:12px;
+}
+.spinner{width:34px;height:34px;border:3px solid var(--bg-4);border-top-color:var(--accent-2);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* HUD de medición */
+#measureHud{
+  position:absolute;z-index:7;background:rgba(11,12,22,.9);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:5px 9px;font-family:var(--mono);font-size:11px;pointer-events:none;
+  box-shadow:var(--shadow);white-space:nowrap;
+}
+
+/* --------------------------- Paneles de indicadores --------------------------- */
+#paneArea{display:flex;flex-direction:column;background:var(--bg-0);border-top:1px solid var(--line);}
+.indPane{position:relative;display:flex;flex-direction:column;border-bottom:1px solid var(--line-soft);height:118px;overflow:hidden;}
+.pane-head{
+  display:flex;align-items:center;gap:8px;height:20px;padding:0 8px;
+  background:var(--bg-2);border-bottom:1px solid var(--line-soft);font-size:10px;
+}
+.pane-title{color:var(--tx-3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
+.pane-title b{color:var(--tx-2);font-family:var(--mono);}
+.pane-val{font-family:var(--mono);color:var(--accent-2);font-size:10.5px;}
+.pane-close{margin-left:auto;background:none;border:none;color:var(--tx-4);font-size:10px;}
+.pane-close:hover{color:var(--down);}
+.pane-chart{flex:1;min-height:0;position:relative;}
+
+/* ------------------------------ Barra de replay ------------------------------ */
+#replayBar{
+  display:grid;grid-template-columns:auto minmax(120px,auto) minmax(0,1fr) auto;
+  align-items:center;gap:12px;padding:0 12px;
+  background:linear-gradient(180deg,#191a30,#12121f);border-top:1px solid var(--line);
+}
+.rb-buttons{display:flex;gap:5px;}
+.rb-btn{
+  width:36px;height:31px;background:var(--bg-3);border:1px solid var(--line);border-radius:var(--r-sm);
+  color:var(--tx-1);font-size:11px;display:flex;align-items:center;justify-content:center;transition:all .14s;
+}
+.rb-btn:hover{background:var(--bg-4);border-color:#454a7d;}
+.rb-play{width:52px;font-size:14px;background:linear-gradient(180deg,#00c853,#009540);border-color:#12e469;color:#04150a;box-shadow:0 2px 10px rgba(0,200,83,.3);}
+.rb-play:hover{background:linear-gradient(180deg,#12e469,#00a94b);}
+.rb-btn.playing .ico-play{transform:scale(.9);}
+
+.rb-speed{display:flex;gap:3px;}
+.speed-btn{
+  background:var(--bg-3);border:1px solid var(--line);border-radius:var(--r-sm);
+  color:var(--tx-3);font-family:var(--mono);font-size:10.5px;padding:5px 7px;transition:all .13s;
+}
+.speed-btn:hover{color:#fff;background:var(--bg-4);}
+.speed-btn.active{background:rgba(0,229,255,.16);border-color:var(--accent-2);color:var(--accent-2);box-shadow:0 0 9px rgba(0,229,255,.18);}
+.speed-max{font-weight:800;}
+
+.rb-progress{min-width:0;display:flex;flex-direction:column;gap:4px;}
+#progressRange{width:100%;}
+.rb-info{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;color:var(--tx-3);}
+.rb-sep{color:var(--tx-4);}
+.rb-status{margin-left:auto;padding:1px 8px;border-radius:20px;font-weight:800;letter-spacing:.7px;font-size:9.5px;}
+.rb-status.playing{background:rgba(0,200,83,.16);color:#5df59a;}
+.rb-status.paused{background:rgba(255,171,0,.14);color:var(--warn);}
+.rb-clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;}
+.rb-clock-label{font-size:9px;letter-spacing:.8px;color:var(--tx-4);}
+.rb-clock-val{font-family:var(--mono);font-size:11.5px;color:var(--tx-2);}
+
+/* Barra de progreso "kill zone" del replay: marca el inicio del replay */
+.no-data-msg{padding:20px;text-align:center;color:var(--tx-4);font-family:var(--mono);}
+
+/* Indicador de la fuente de datos en la leyenda (Binance real / DEMO…) */
+#ohlcLegend .lg-src{color:var(--tx-4);font-size:10px;font-style:italic;}
+
+/* Crédito de la librería de gráficos (la licencia Apache-2.0 la permite; el
+   logotipo del canvas se oculta por claridad visual y se acredita aquí). */
+#tvCredit{
+  position:absolute;right:8px;bottom:4px;z-index:6;pointer-events:none;
+  font-size:9px;color:var(--tx-4);opacity:.55;letter-spacing:.3px;
+}
+#tvCredit:hover{opacity:.9;}
+
+/* El gráfico nunca debe quedarse en una franja: tamaño mínimo garantizado */
+#chartWrap{min-height:240px;}
+#chartArea{min-height:340px;}
+
+/* ------------- Paneles estrechos (vista previa lateral o móvil) ------------- */

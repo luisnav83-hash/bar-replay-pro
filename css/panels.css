@@ -1,0 +1,79 @@
+/* =========================================================================
+   panels.css — Barra lateral (posición, órdenes, estadísticas) y panel
+   inferior (historial de trades, log de eventos, lista de dibujos).
+   ========================================================================= */
+
+#sidebar{
+  background:var(--bg-1);
+  overflow-y:auto;overflow-x:hidden;
+  padding:10px;
+  min-width:0;
+}
+
+/* ------------------------------ Estadísticas ------------------------------ */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.stat{
+  background:var(--bg-3);border:1px solid var(--line-soft);border-radius:var(--r-sm);
+  padding:5px 7px;display:flex;flex-direction:column;gap:1px;
+}
+.stat-label{font-size:9px;text-transform:uppercase;letter-spacing:.55px;color:var(--tx-4);font-weight:700;}
+.stat b{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--tx-1);}
+
+.equity-head{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--tx-3);
+  margin-top:5px;padding-top:6px;border-top:1px solid var(--line-soft);}
+.equity-head b{font-family:var(--mono);font-size:13px;color:var(--up);text-transform:none;letter-spacing:0;}
+#equityChart{height:104px;background:var(--bg-0);border:1px solid var(--line-soft);border-radius:var(--r-sm);overflow:hidden;}
+
+/* ------------------------------ Panel inferior ------------------------------ */
+#bottomPanel{
+  flex:0 0 auto;
+  height:208px;display:flex;flex-direction:column;
+  background:var(--bg-1);border-top:1px solid var(--line);
+  transition:margin-bottom .25s ease;
+}
+.tabs{
+  display:flex;align-items:center;gap:2px;padding:0 8px;height:32px;flex:0 0 auto;
+  background:linear-gradient(180deg,#16172b,#121322);border-bottom:1px solid var(--line);
+}
+.tab{
+  background:transparent;border:none;border-bottom:2px solid transparent;color:var(--tx-3);
+  padding:0 11px;height:100%;font-size:11.5px;font-weight:600;transition:all .15s;
+}
+.tab:hover{color:var(--tx-1);}
+.tab.active{color:var(--accent-2);border-bottom-color:var(--accent-2);background:rgba(0,229,255,.05);}
+.tabs-right{margin-left:auto;display:flex;gap:5px;align-items:center;}
+.tab-body{flex:1;min-height:0;overflow:auto;display:none;}
+.tab-body.active{display:block;}
+#tab-trades{position:relative;}
+
+/* ------------------------------ Log de eventos ------------------------------ */
+.log-list{padding:6px 10px;font-family:var(--mono);font-size:11px;display:flex;flex-direction:column;gap:1px;}
+.log-line{display:flex;gap:8px;padding:1.5px 4px;border-radius:3px;line-height:1.5;}
+.log-line:hover{background:rgba(255,255,255,.03);}
+.log-time{color:var(--tx-4);flex:0 0 128px;}
+.log-msg{color:var(--tx-2);white-space:pre-wrap;}
+.log-line.info .log-msg{color:var(--tx-2);}
+.log-line.ok .log-msg{color:#5df59a;}
+.log-line.bad .log-msg{color:#ff7a95;}
+.log-line.warn .log-msg{color:var(--warn);}
+.log-line.sys .log-msg{color:var(--accent-2);}
+
+/* ------------------------------ Lista de dibujos ------------------------------ */
+.draw-list{padding:7px 10px;display:flex;flex-direction:column;gap:4px;}
+.draw-item{
+  display:flex;align-items:center;gap:8px;background:var(--bg-3);border:1px solid var(--line-soft);
+  border-radius:var(--r-sm);padding:4px 8px;font-family:var(--mono);font-size:11px;
+}
+.draw-item.sel{border-color:var(--accent-2);box-shadow:0 0 0 1px rgba(0,229,255,.25);}
+.draw-swatch{width:11px;height:11px;border-radius:2px;flex:0 0 auto;}
+.draw-name{color:var(--tx-2);}
+.draw-meta{color:var(--tx-4);font-size:10px;margin-left:auto;}
+.draw-del{background:none;border:none;color:var(--tx-4);font-size:11px;}
+.draw-del:hover{color:var(--down);}
+
+/* ------------------------------ Modo compacto ------------------------------ */
+@media (max-width:1440px){
+  #sidebar{width:auto;}
+  .stat-grid{gap:5px;}
+}
