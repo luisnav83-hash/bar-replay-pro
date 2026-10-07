@@ -90,6 +90,17 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 
 ---
 
+## 🌐 Publicada en GitHub Pages
+
+El repositorio incluye `.github/workflows/pages.yml`: al subirlo a GitHub, la app
+se publica sola y queda accesible desde cualquier navegador (también móvil) en
+`https://TU-USUARIO.github.io/TU-REPOSITORIO/`.
+
+- Aplicación completa: `https://TU-USUARIO.github.io/TU-REPOSITORIO/`
+- Archivo único (ideal para el móvil): `.../bar-replay-pro-unico.html`
+
+Instrucciones paso a paso en **[SUBIR-A-GITHUB.md](SUBIR-A-GITHUB.md)**.
+
 ## 🎬 Vídeo de demostración
 
 Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
