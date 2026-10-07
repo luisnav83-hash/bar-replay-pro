@@ -8,6 +8,11 @@ drawdown, curva de capital y más).
 
 ![tema](https://img.shields.io/badge/tema-terminal%20de%20trading-1a1a2e) ![sin dependencias](https://img.shields.io/badge/backend-sin%20dependencias-00c853) ![licencia](https://img.shields.io/badge/licencia-MIT-2979ff)
 
+> 🔗 **Proyecto hermano:** [**OpenMarket Chart — clon en React + Vite**](https://luisnav83-hash.github.io/openmarket-chart/) ·
+> reconstrucción propia del terminal de gráficos de `openmarket.xyz/chart/r8e6KKi7`
+> (mismo layout medido, gráfico real con indicadores, paneles y dibujos).
+> Código: [github.com/luisnav83-hash/openmarket-chart](https://github.com/luisnav83-hash/openmarket-chart)
+
 ---
 
 ## ✨ Funcionalidades
@@ -137,6 +142,30 @@ se publica sola y queda accesible desde cualquier navegador (también móvil) en
 - Archivo único (ideal para el móvil): **https://luisnav83-hash.github.io/bar-replay-pro/bar-replay-pro-unico.html**
 
 Instrucciones paso a paso en **[SUBIR-A-GITHUB.md](SUBIR-A-GITHUB.md)**.
+
+---
+
+## 🔗 Proyectos relacionados
+
+### OpenMarket Chart — clon del terminal de `openmarket.xyz` (React + Vite)
+
+- Aplicación: **https://luisnav83-hash.github.io/openmarket-chart/**
+- Repositorio: **https://github.com/luisnav83-hash/openmarket-chart**
+- Referencia analizada: `https://openmarket.xyz/chart/r8e6KKi7`
+
+Reconstrucción **desde cero**, con código propio, del terminal de gráficos de
+OpenMarket: layout, medidas y colores tomados del original (cabecera 40 px, barra
+del gráfico 44 px, rail de 52 px, pie de 36 px, paleta `#c8ccd1`/`#d27a61`), gráfico
+real con Lightweight Charts, indicadores **calculados a mano** (EMA 20/50,
+Bollinger 20-2 con relleno, VWAP, RSI y MACD en panel sincronizado), píldoras
+High/Low, precio con cuenta atrás, paneles laterales (watchlist, libro de órdenes,
+cintas, chat, objetos), herramientas de dibujo y responsive verificado en 7 tamaños
+(1920×1080 → 375×812), sin API keys: los datos son ficticios y se generan en local.
+
+**Relación con este proyecto:** comparten enfoque —terminal de trading propio, sin
+dependencias pesadas— y la **comparación visual medida** contra la referencia;
+Bar Replay Pro aporta el replay vela a vela y la operativa simulada, el clon aporta
+la fidelidad de interfaz y los paneles de flujo de mercado.
 
 ## 🎬 Vídeo de demostración
 
