@@ -78,7 +78,11 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 - **Caché local** (localStorage) de lo descargado, con aviso de velas en caché.
 - Importación de **CSV** (con o sin cabecera, separador `,`/`;`/tabulador, fechas ISO o epoch).
 - Modo **Demo**: 3.000 velas sintéticas deterministas para practicar sin conexión.
-- Selector de **rango de fechas** y de **par**: BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, MATIC.
+- Selector de **rango de fechas** y de **par** con **BUSCADOR DE SÍMBOLOS** (botón
+  del par o `Ctrl+K` / `/`): catálogo de Binance por **categorías** (⭐ Favoritos,
+  🕘 Recientes, 🔥 Principales, 💵 USDT, USDC, BTC, ETH y todos), **búsqueda en vivo**
+  por texto y ⭐ para marcar favoritos (se recuerdan en el navegador). 40 pares de
+  referencia siempre disponibles aunque no haya red.
 
 ### 8. Extras
 - **DIBUJAR MANTENIENDO PULSADO** (gesto, estilo tableta gráfica): mantén pulsado
@@ -97,6 +101,12 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
   en el gráfico y abre la configuración al hacer clic.
 - **ÓRDENES LÍMITE**: se colocan y esperan; el replay las ejecuta solas al llegar
   el precio (línea ámbar punteada + tarjeta «⏳ Órdenes pendientes» con botón ✖).
+- **BUSCADOR DE SÍMBOLOS Y TEMPORALIDADES RÁPIDAS**: el botón del par abre el catálogo
+  de Binance con categorías, buscador en vivo y favoritos ⭐; al lado, los botones
+  `1m · 5m · 15m · 1h · 4h · 1d · 1w` cambian la temporalidad al instante. El par
+  elegido se recuerda en «Recientes» y la leyenda del gráfico se sincroniza siempre.
+  Si no hay datos para esa combinación, avisa y cae a las velas guardadas o a DEMO
+  (nunca deja el gráfico desincronizado del par o la temporalidad elegidos).
 - **Guardar/cargar sesiones** completas (replay, dibujos, indicadores, trades, cuenta).
 - **Exportar**: trades a CSV · curva de capital a CSV · velas visibles a CSV ·
   sesión a JSON · **informe imprimible → PDF** (incluye captura del gráfico).
@@ -203,11 +213,12 @@ node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin r
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
 node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
+node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **410 comprobaciones, 0 fallos** ✅
+Resultado actual: **437 comprobaciones, 0 fallos** ✅
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).

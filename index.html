@@ -76,7 +76,9 @@
   <div class="topbar-group">
     <label class="field" title="Par de trading (se descargan velas OHLCV de Binance)">
       <span class="field-label">Par</span>
-      <select id="pairSelect">
+      <!-- El <select> sigue siendo la fuente de verdad (lo lee el resto de la app),
+           pero se oculta: el usuario elige con el buscador de símbolos. -->
+      <select id="pairSelect" class="visually-hidden" aria-hidden="true" tabindex="-1">
         <option value="BTCUSDT" selected>BTC/USDT</option>
         <option value="ETHUSDT">ETH/USDT</option>
         <option value="SOLUSDT">SOL/USDT</option>
@@ -88,11 +90,28 @@
         <option value="LINKUSDT">LINK/USDT</option>
         <option value="MATICUSDT">MATIC/USDT</option>
       </select>
+      <button class="symbol-btn" id="btnSymbols" title="Buscar símbolo (Ctrl+K o /)">
+        <span class="sb-ico" id="sbIco">₿</span>
+        <span class="sb-text">
+          <span class="sb-pair" id="sbPair">BTC/USDT</span>
+          <span class="sb-quote" id="sbQuote">USDT · Binance</span>
+        </span>
+        <span class="sb-caret">▾</span>
+      </button>
     </label>
 
     <label class="field" title="Temporalidad de cada vela">
       <span class="field-label">Temporalidad</span>
-      <select id="tfSelect">
+      <div class="tf-quick" id="tfQuick" role="group" aria-label="Temporalidad rápida">
+        <button class="tf-btn" data-tf="1m" title="1 minuto">1m</button>
+        <button class="tf-btn" data-tf="5m" title="5 minutos">5m</button>
+        <button class="tf-btn" data-tf="15m" title="15 minutos">15m</button>
+        <button class="tf-btn active" data-tf="1h" title="1 hora">1h</button>
+        <button class="tf-btn" data-tf="4h" title="4 horas">4h</button>
+        <button class="tf-btn" data-tf="1d" title="1 día">1d</button>
+        <button class="tf-btn" data-tf="1w" title="1 semana">1w</button>
+      </div>
+      <select id="tfSelect" class="visually-hidden" aria-hidden="true" tabindex="-1">
         <option value="1m">1 min</option>
         <option value="5m">5 min</option>
         <option value="15m">15 min</option>
@@ -639,6 +658,32 @@
       <button class="btn btn-danger" id="btnHardReset">Reiniciar sesión completa</button>
       <button class="btn btn-primary" id="btnApplySettings">Guardar cambios</button>
     </div>
+  </div>
+</div>
+
+<!-- Buscador de símbolos (estilo terminal: buscador + categorías + favoritos) -->
+<div class="modal" id="modalSymbols">
+  <div class="modal-box wide">
+    <div class="modal-head"><h3>🔎 Buscar símbolo</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="sym-search">
+        <input type="text" id="symQuery" placeholder="Escribe para buscar… (BTC, ETH, SOL, PEPE…)" autocomplete="off">
+        <span class="sym-count" id="symCount">—</span>
+      </div>
+      <div class="sym-cats" id="symCats" role="group" aria-label="Categorías">
+        <button class="sym-cat active" data-cat="favoritos">⭐ Favoritos</button>
+        <button class="sym-cat" data-cat="recientes">🕘 Recientes</button>
+        <button class="sym-cat" data-cat="principales">🔥 Principales</button>
+        <button class="sym-cat" data-cat="USDT">💵 USDT</button>
+        <button class="sym-cat" data-cat="USDC">🔷 USDC</button>
+        <button class="sym-cat" data-cat="BTC">₿ BTC</button>
+        <button class="sym-cat" data-cat="ETH">Ξ ETH</button>
+        <button class="sym-cat" data-cat="todos">🌐 Todos</button>
+      </div>
+      <div class="sym-list" id="symList"></div>
+      <div class="modal-note" id="symNote">Los pares vienen de Binance (spot). Marca con ⭐ los que más uses para tenerlos a mano.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>
   </div>
 </div>
 

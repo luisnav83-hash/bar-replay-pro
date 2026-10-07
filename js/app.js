@@ -80,6 +80,8 @@
     // 5) UI
     UI.init();
     UI.setPairLabels(App.pair, App.interval);
+    UI.updateSymbolButton && UI.updateSymbolButton();   // botón-buscador de la barra
+    UI.syncTfButtons && UI.syncTfButtons();             // temporalidades rápidas
     UI.setSizeMode(App.sizeMode);
     App.applyIndicators(App.indicators, true);
 
@@ -201,8 +203,17 @@
           U.log('⚠️ Falló la descarga, se usa la caché disponible: ' + err.message, 'warn');
           candles = cached; source = 'caché local';
         } else {
+          // Sin caché y sin conexión: NUNCA dejamos el gráfico desincronizado
+          // del par/temporalidad elegidos. Se cae a la instantánea de velas
+          // reales guardadas o, si no hay, a datos DEMO sintéticos, avisando.
           UI.hideLoader();
-          throw err;
+          U.log('⚠️ Sin datos para ' + pair + ' ' + interval + ': ' + err.message, 'warn');
+          const modo = App.loadDemo(!!opts.silent);
+          U.toast(modo === 'snapshot'
+            ? '📦 Sin conexión para ' + DS.label(pair) + ' ' + interval + ': uso las velas reales guardadas'
+            : '⚠️ Sin datos de ' + DS.label(pair) + ' ' + interval + ': se muestran datos DEMO (sintéticos)',
+            modo === 'snapshot' ? 'ok' : 'warn', 5200);
+          return true;
         }
       }
     }
@@ -933,7 +944,7 @@
   @media print{body{margin:10mm;} .noprint{display:none;}}
 </style></head><body>
 <h1>Informe de backtest — Bar Replay Pro</h1>
-<div class="sub">${DS.PAIRS[App.pair] || App.pair} · ${App.interval} · datos: ${App.source} ·
+<div class="sub">${(DS.label ? DS.label(App.pair) : (DS.PAIRS[App.pair] || App.pair))} · ${App.interval} · datos: ${App.source} ·
 ${U.fmtDate(App.candles[0] && App.candles[0].time)} → ${U.fmtDate(BR.currentCandle() && BR.currentCandle().time)} (UTC) ·
 generado el ${new Date().toLocaleString('es-ES')}</div>
 <button class="noprint" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>

@@ -53,10 +53,40 @@
     }
   } catch (e) { /* entorno sin location (tests) */ }
 
+  // Pares de referencia (los «principales»): se usan cuando no hay conexión o
+  // mientras llega la lista completa del exchange.
   DS.PAIRS = {
     BTCUSDT: 'BTC/USDT', ETHUSDT: 'ETH/USDT', SOLUSDT: 'SOL/USDT', BNBUSDT: 'BNB/USDT',
     XRPUSDT: 'XRP/USDT', ADAUSDT: 'ADA/USDT', DOGEUSDT: 'DOGE/USDT', AVAXUSDT: 'AVAX/USDT',
-    LINKUSDT: 'LINK/USDT', MATICUSDT: 'MATIC/USDT',
+    LINKUSDT: 'LINK/USDT', MATICUSDT: 'MATIC/USDT', DOTUSDT: 'DOT/USDT', LTCUSDT: 'LTC/USDT',
+    TRXUSDT: 'TRX/USDT', TONUSDT: 'TON/USDT', SHIBUSDT: 'SHIB/USDT', ARBUSDT: 'ARB/USDT',
+    OPUSDT: 'OP/USDT', SUIUSDT: 'SUI/USDT', APTUSDT: 'APT/USDT', NEARUSDT: 'NEAR/USDT',
+    ATOMUSDT: 'ATOM/USDT', FILUSDT: 'FIL/USDT', INJUSDT: 'INJ/USDT', TIAUSDT: 'TIAUSDT',
+    SEIUSDT: 'SEI/USDT', BCHUSDT: 'BCH/USDT', ETCUSDT: 'ETC/USDT', XLMUSDT: 'XLM/USDT',
+    ALGOUSDT: 'ALGO/USDT', VETUSDT: 'VET/USDT', RNDRUSDT: 'RNDR/USDT', GRTUSDT: 'GRT/USDT',
+    AAVEUSDT: 'AAVE/USDT', UNIUSDT: 'UNI/USDT', PEPEUSDT: 'PEPE/USDT', WIFUSDT: 'WIF/USDT',
+    ORDIUSDT: 'ORDI/USDT', RUNEUSDT: 'RUNE/USDT', ENSUSDT: 'ENS/USDT', SANDUSDT: 'SAND/USDT',
+  };
+
+  /** Pares «principales» (los de arriba), en orden. */
+  DS.MAIN_SYMBOLS = Object.keys(DS.PAIRS);
+
+  /** Nombre de un par, aunque no esté en la lista de referencia. */
+  DS.label = function (symbol) {
+    if (DS.PAIRS[symbol]) return DS.PAIRS[symbol];
+    const m = /^(.+?)(USDT|USDC|FDUSD|BTC|ETH|EUR|TRY|BUSD)$/.exec(symbol);
+    return m ? m[1] + '/' + m[2] : symbol;
+  };
+
+  /** Divisa de cotización de un par (USDT, BTC, EUR…). */
+  DS.quoteOf = function (symbol) {
+    const m = /(USDT|USDC|FDUSD|BUSD|BTC|ETH|EUR|TRY)$/.exec(symbol);
+    return m ? m[1] : 'OTROS';
+  };
+  /** Moneda base de un par (BTC, ETH…). */
+  DS.baseOf = function (symbol) {
+    const q = DS.quoteOf(symbol);
+    return symbol.slice(0, symbol.length - (q === 'OTROS' ? 0 : q.length)) || symbol;
   };
 
   // CoinGecko ids para el fallback
@@ -211,6 +241,49 @@
     }
     if (cur) out.push(cur);
     return out;
+  };
+
+  /* --------------------- Lista de símbolos del exchange --------------------- */
+
+  /**
+   * Descarga la lista REAL de pares disponibles (Binance /exchangeInfo) y la
+   * guarda en caché 24 h. Es lo que alimenta el buscador de símbolos.
+   * Si no hay conexión, se devuelve la lista de referencia local.
+   * @returns {Promise<Array<{symbol, base, quote, label, main}>>}
+   */
+  DS.fetchSymbols = async function () {
+    const cache = (global.ST && ST.get) ? ST.get('symbols', null) : null;
+    if (cache && cache.list && cache.at && (Date.now() - cache.at) < 24 * 3600 * 1000) {
+      return cache.list;
+    }
+    try {
+      const url = (DS.BINANCE_HOSTS.includes('') ? '' : DS.BINANCE_HOSTS[0]) + '/api/v3/exchangeInfo';
+      const info = await fetchJSON(url, 8000);
+      const validas = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'EUR', 'TRY'];
+      const list = (info.symbols || [])
+        .filter((x) => x.status === 'TRADING' && validas.indexOf(x.quoteAsset) >= 0)
+        .map((x) => ({
+          symbol: x.symbol, base: x.baseAsset, quote: x.quoteAsset,
+          label: x.baseAsset + '/' + x.quoteAsset,
+          main: !!DS.PAIRS[x.symbol],
+        }))
+        .sort((a, b) => (b.main - a.main) || (DS.MAIN_SYMBOLS.indexOf(a.symbol) - DS.MAIN_SYMBOLS.indexOf(b.symbol)) || a.symbol.localeCompare(b.symbol));
+      if (list.length && global.ST && ST.set) ST.set('symbols', { at: Date.now(), list });
+      U.log('🔎 Lista de símbolos actualizada: ' + list.length + ' pares', 'sys');
+      return list;
+    } catch (e) {
+      U.log('⚠ No se pudo descargar la lista de símbolos (' + e.message + '): se usa la local', 'warn');
+      return DS.MAIN_SYMBOLS.map((s) => ({
+        symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
+      }));
+    }
+  };
+
+  /** Versión SIN red (para pintar el buscador al instante). */
+  DS.localSymbols = function () {
+    return DS.MAIN_SYMBOLS.map((s) => ({
+      symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
+    }));
   };
 
   /* ------------------------ Instantánea incrustada ------------------------ */

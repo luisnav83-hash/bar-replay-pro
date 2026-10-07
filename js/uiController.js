@@ -270,6 +270,29 @@
     });
 
     /* --- Ajustes --- */
+    /* ---- Buscador de símbolos ---- */
+    document.getElementById('btnSymbols').addEventListener('click', () => UI.openSymbols());
+    document.getElementById('symQuery').addEventListener('input', () => UI.renderSymbols());
+    document.getElementById('symQuery').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const primera = document.querySelector('#symList .sym-row');
+        if (primera) UI.pickSymbol(primera.dataset.sym);
+      }
+    });
+    U.$$('#symCats .sym-cat').forEach((b) => {
+      b.addEventListener('click', () => {
+        UI.symCat = b.dataset.cat;
+        U.$$('#symCats .sym-cat').forEach((x) => x.classList.toggle('active', x === b));
+        UI.renderSymbols();
+      });
+    });
+
+    /* ---- Temporalidades rápidas (1m · 5m · 15m · 1h · 4h · 1d · 1w) ---- */
+    U.$$('#tfQuick .tf-btn').forEach((b) => {
+      b.addEventListener('click', () => UI.setTimeframe(b.dataset.tf));
+    });
+    document.getElementById('tfSelect').addEventListener('change', () => UI.syncTfButtons());
+
     // Interruptor del gesto (se aplica al instante)
     const chkGesture = document.getElementById('setGesture');
     if (chkGesture) {
@@ -560,10 +583,189 @@
     });
   };
 
+  /* ======================= BUSCADOR DE SÍMBOLOS ======================= */
+
+  UI.symCat = 'favoritos';
+  UI.symAll = [];          // lista completa (la real del exchange si hay red)
+  UI.symLoaded = false;
+
+  /** Abre el buscador y carga la lista (sin bloquear la interfaz). */
+  UI.openSymbols = function () {
+    UI.openModal('modalSymbols');
+    const q = document.getElementById('symQuery');
+    if (q) { q.value = ''; setTimeout(() => q.focus(), 60); }
+    UI.renderSymbols();                       // pinta ya con la lista local
+    if (!UI.symLoaded) {
+      DS.fetchSymbols().then((list) => {
+        UI.symAll = list;
+        UI.symLoaded = true;
+        UI.renderSymbols();
+        const n = document.getElementById('symNote');
+        if (n) n.textContent = list.length + ' pares disponibles en Binance (spot). Marca con ⭐ los que más uses.';
+      }).catch(() => {});
+    }
+  };
+
+  /** Datos auxiliares guardados por el usuario. */
+  UI.getFavs = function () { return ST.get('favs', []) || []; };
+  UI.getRecents = function () { return ST.get('recents', []) || []; };
+  UI.toggleFav = function (symbol) {
+    const favs = UI.getFavs();
+    const i = favs.indexOf(symbol);
+    if (i >= 0) favs.splice(i, 1); else favs.unshift(symbol);
+    ST.set('favs', favs.slice(0, 60));
+    U.toast(i >= 0 ? '⭐ Quitado de favoritos' : '⭐ Añadido a favoritos', 'info', 1400);
+    UI.renderSymbols();
+  };
+
+  /** Color identificativo de la moneda base (mismo color siempre para cada una). */
+  UI.symColor = function (base) {
+    const PALETA = ['#f7931a', '#627eea', '#14f195', '#f0b90b', '#e8e8e8', '#00c853',
+      '#ff1744', '#00e5ff', '#b388ff', '#ffab40', '#7c4dff', '#26c6da'];
+    let h = 0;
+    for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) % 997;
+    return PALETA[h % PALETA.length];
+  };
+
+  /**
+   * Pinta la lista según categoría y búsqueda.
+   * Categorías: favoritos · recientes · principales · por divisa (USDT, USDC,
+   * BTC, ETH) · todos. Todo sale de la lista real del exchange cuando hay red.
+   */
+  UI.renderSymbols = function () {
+    const cont = document.getElementById('symList');
+    if (!cont) return;
+    const q = (document.getElementById('symQuery').value || '').trim().toUpperCase();
+    const base = UI.symAll.length ? UI.symAll : DS.localSymbols();
+    const favs = UI.getFavs();
+    const recents = UI.getRecents();
+    const cat = UI.symCat;
+
+    // 1) Filtro por categoría
+    let lista = base;
+    if (cat === 'favoritos') lista = favs.map((s) => base.find((x) => x.symbol === s) || { symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s) });
+    else if (cat === 'recientes') lista = recents.map((s) => base.find((x) => x.symbol === s) || { symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s) });
+    else if (cat === 'principales') lista = base.filter((x) => x.main);
+    else if (cat !== 'todos') lista = base.filter((x) => x.quote === cat);
+
+    // 2) Filtro por texto (símbolo o nombre)
+    if (q) {
+      lista = lista.filter((x) => x.symbol.toUpperCase().indexOf(q) >= 0 || x.label.toUpperCase().indexOf(q) >= 0);
+      if (!lista.length && q.length >= 2) {
+        // Quizá están buscando fuera de la categoría: buscamos en toda la lista
+        const alt = base.filter((x) => x.symbol.toUpperCase().indexOf(q) >= 0);
+        if (alt.length) { lista = alt; }
+      }
+    }
+
+    const max = 300;
+    const total = lista.length;
+    lista = lista.slice(0, max);
+
+    const cnt = document.getElementById('symCount');
+    if (cnt) cnt.textContent = total ? total + (total > max ? ' (mostrando ' + max + ')' : '') : 'sin resultados';
+
+    if (!lista.length) {
+      cont.innerHTML = '<div class="hint">' + (cat === 'favoritos'
+        ? 'Todavía no tienes favoritos: busca un par y pulsa la ⭐ de su fila.'
+        : 'No hay resultados para «' + U.esc(q) + '».') + '</div>';
+      return;
+    }
+
+    cont.innerHTML = lista.map((x) => {
+      const activo = x.symbol === document.getElementById('pairSelect').value;
+      const esFav = favs.indexOf(x.symbol) >= 0;
+      const color = UI.symColor(x.base);
+      return `<div class="sym-row ${activo ? 'active' : ''}" data-sym="${x.symbol}">` +
+        `<span class="sym-ico" style="background:${color}22;color:${color};border-color:${color}66">${U.esc(x.base.slice(0, 3))}</span>` +
+        `<span class="sym-name"><b>${U.esc(x.label)}</b><i>${U.esc(x.symbol)}${x.main ? ' · principal' : ''}</i></span>` +
+        `<span class="sym-actions">` +
+          `<button class="sym-fav ${esFav ? 'on' : ''}" data-fav="${x.symbol}" title="${esFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}">${esFav ? '★' : '☆'}</button>` +
+        `</span>` +
+      `</div>`;
+    }).join('');
+
+    // Filas: elegir el símbolo
+    cont.querySelectorAll('.sym-row').forEach((el) => {
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('.sym-fav')) return;
+        UI.pickSymbol(el.dataset.sym);
+      });
+    });
+    // Estrellas: favoritos
+    cont.querySelectorAll('[data-fav]').forEach((b) => {
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); UI.toggleFav(b.dataset.fav); });
+    });
+  };
+
+  /** Cambia el par activo, lo apunta en «recientes» y recarga los datos. */
+  UI.pickSymbol = function (symbol) {
+    const sel = document.getElementById('pairSelect');
+    if (!sel.querySelector('option[value="' + symbol + '"]')) {
+      const o = document.createElement('option');
+      o.value = symbol; o.textContent = DS.label(symbol);
+      sel.appendChild(o);
+    }
+    sel.value = symbol;
+
+    const recents = UI.getRecents().filter((s) => s !== symbol);
+    recents.unshift(symbol);
+    ST.set('recents', recents.slice(0, 12));
+
+    UI.updateSymbolButton();
+    UI.closeModal('modalSymbols');
+    U.toast('🔎 ' + DS.label(symbol) + ' seleccionado: cargando velas…', 'info', 2400);
+    App.loadDataFromForm({ silent: true })     // recarga automática, como en un terminal
+      .catch(() => {})
+      .then(() => { UI.refreshStats(true); UI.renderSymbols(); });
+  };
+
+  /** Refresca el botón grande de símbolo que hay en la barra superior. */
+  UI.updateSymbolButton = function () {
+    const sel = document.getElementById('pairSelect');
+    if (!sel) return;
+    const sym = sel.value;
+    const pares = DS.label(sym).split('/');
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('sbPair', DS.label(sym));
+    set('sbQuote', (pares[1] || '') + ' · Binance');
+    set('sbIco', (pares[0] || '?').slice(0, 3));
+    const ico = document.getElementById('sbIco');
+    if (ico) {
+      const c = UI.symColor(pares[0] || 'X');
+      ico.style.color = c;
+      ico.style.background = c + '22';
+      ico.style.borderColor = c + '66';
+    }
+  };
+
+  /** Cambia la temporalidad y recarga los datos (como al elegir par). */
+  UI.setTimeframe = function (tf) {
+    if (!DS.TIMEFRAMES[tf]) { U.toast('Temporalidad no válida', 'err'); return; }
+    const sel = document.getElementById('tfSelect');
+    if (sel.value === tf) { UI.syncTfButtons(); return; }
+    sel.value = tf;
+    UI.syncTfButtons();
+    U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
+    App.loadDataFromForm({ silent: true })
+      .catch(() => {})
+      .then(() => { UI.refreshStats(true); });
+  };
+
+  /** Marca como activa la temporalidad pulsada en los botones rápidos. */
+  UI.syncTfButtons = function () {
+    const actual = document.getElementById('tfSelect').value;
+    U.$$('#tfQuick .tf-btn').forEach((b) => b.classList.toggle('active', b.dataset.tf === actual));
+  };
+
   /* --------------------------------- Atajos --------------------------------- */
 
   UI._wireKeyboard = function () {
     document.addEventListener('keydown', (e) => {
+      // Ctrl/⌘+K: buscar símbolo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault(); UI.openSymbols(); return;
+      }
       const tag = (e.target.tagName || '').toLowerCase();
       const typing = tag === 'input' || tag === 'select' || tag === 'textarea';
 
@@ -595,6 +797,7 @@
         case 'B': App.placeOrderLimit('long'); break;
         case 'S': App.placeOrderLimit('short'); break;
         case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
+        case '/': e.preventDefault(); UI.openSymbols(); break;
         case 'r': case 'R': App.resetReplay(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
@@ -642,6 +845,10 @@
     UI.updateOrderHint();
     UI.updateHiddenNotice();
     UI.refreshPriceTag();
+    // La leyenda del gráfico refleja SIEMPRE el par y la temporalidad activos
+    // (evita desajustes si una recarga termina después de cambiar de par o TF)
+    setText('lgPair', DS.label ? DS.label(App.pair) : App.pair);
+    setText('lgTf', App.interval);
     UI.renderPending();     // órdenes límite en espera
     UI.renderPanels();      // lista de indicadores con su valor actual
     UI.updateLimitHint && UI.updateLimitHint();
@@ -903,7 +1110,8 @@
   /* ------------------------------- Leyenda / pares ------------------------------- */
 
   UI.setPairLabels = function (pair, interval) {
-    const label = DS.PAIRS[pair] || pair;
+    const label = DS.label ? DS.label(pair) : (DS.PAIRS[pair] || pair);
+    UI.updateSymbolButton && UI.updateSymbolButton();
     setText('lgPair', label);
     setText('lgTf', interval);
     // Fuente de datos visible en la leyenda: Binance (real), DEMO (sintético)…
@@ -954,7 +1162,7 @@
     ctx.fillRect(0, 0, areaRect.width, 22);
     ctx.fillStyle = '#e8eaf6';
     ctx.font = 'bold 12px ui-monospace, monospace';
-    const pair = DS.PAIRS[App.pair] || App.pair;
+    const pair = (DS.label ? DS.label(App.pair) : (DS.PAIRS[App.pair] || App.pair));
     ctx.fillText(`BAR REPLAY PRO · ${pair} · ${App.interval} · ${c ? U.fmtDate(c.time) + ' UTC' : ''} · ` +
                  `Balance ${U.fmtMoney(TE.state.balance)} · Equity ${U.fmtMoney(TE.state.equity)}`, 10, 15);
     return cv;

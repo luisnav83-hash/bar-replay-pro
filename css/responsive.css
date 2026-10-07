@@ -100,6 +100,14 @@
    Paneles muy bajos: compresión máxima para que siga entrando todo. */
 @media (max-height:700px){
   .brand-text{display:none;}       /* en un panel mínimo, el logo basta */
+  /* Controles nuevos (buscador de símbolo + temporalidades rápidas) en mini:
+     así la barra superior no gana una fila y el gráfico conserva su alto. */
+  #topbar .symbol-btn{padding:4px 7px;font-size:10.5px;gap:6px;}
+  #topbar .symbol-btn .sb-ico{width:20px;height:20px;font-size:9px;}
+  .tf-quick{padding:1px;}
+  .tf-quick .tf-btn{padding:4px 5px;font-size:9.5px;border-radius:5px;}
+  #topbar{padding-block:4px;}
+  #replayBar{padding-block:6px;}     /* 2 px más para el gráfico */
   #bottomPanel{height:100px;}      /* el registro de operaciones es lo prescindible */
   .indPane{height:72px;}           /* paneles RSI/MACD/ATR compactos */
   #chartWrap{min-height:140px;}
