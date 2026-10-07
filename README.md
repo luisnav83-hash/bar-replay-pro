@@ -81,6 +81,13 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 - Selector de **rango de fechas** y de **par**: BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, MATIC.
 
 ### 8. Extras
+- **PANEL DE INDICADORES con valores en vivo** (estilo terminal de trading): la
+  tarjeta «📈 Paneles» lista todos los indicadores con su valor actual —Vol, SMA,
+  EMA, EMA2, BB, RSI, MACD (hist/macd/señal) y ATR— y se actualiza en cada vela
+  del replay. Cada fila lleva punto de color, ojo 👁 para mostrar/ocultar la serie
+  en el gráfico y abre la configuración al hacer clic.
+- **ÓRDENES LÍMITE**: se colocan y esperan; el replay las ejecuta solas al llegar
+  el precio (línea ámbar punteada + tarjeta «⏳ Órdenes pendientes» con botón ✖).
 - **Guardar/cargar sesiones** completas (replay, dibujos, indicadores, trades, cuenta).
 - **Exportar**: trades a CSV · curva de capital a CSV · velas visibles a CSV ·
   sesión a JSON · **informe imprimible → PDF** (incluye captura del gráfico).
