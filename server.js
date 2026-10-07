@@ -119,6 +119,54 @@ function proxyKlines(query, res) {
   next();
 }
 
+/**
+ * Proxy del catálogo de símbolos de Binance (/api/v3/exchangeInfo).
+ * El buscador de símbolos lo usa para listar TODOS los pares disponibles, no
+ * solo los 40 de referencia. Igual que con las velas, se prueban los hosts en
+ * orden hasta que uno responda (algunos devuelven 451 por región).
+ * Se cachea 6 h: el catálogo cambia muy poco.
+ */
+function proxyExchangeInfo(res) {
+  let i = 0;
+  const tried = [];
+  const next = () => {
+    if (i >= BINANCE_HOSTS.length) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Ningún host de Binance respondió', hosts: tried }));
+      return;
+    }
+    const host = BINANCE_HOSTS[i++];
+    const req = https.get(`https://${host}/api/v3/exchangeInfo`,
+      { timeout: 12000, headers: { 'User-Agent': 'bar-replay-pro/1.0', 'Accept': 'application/json' } },
+      (up) => {
+        let body = '';
+        up.on('data', (c) => { body += c; });
+        up.on('end', () => {
+          tried.push({ host, status: up.statusCode });
+          if (up.statusCode !== 200) {
+            console.warn(`  · ${host} (catálogo) → HTTP ${up.statusCode}, probando el siguiente host…`);
+            next();
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=21600',
+            'Access-Control-Allow-Origin': '*',
+            'X-Binance-Host': host,
+          });
+          res.end(body);
+        });
+      });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', (err) => {
+      tried.push({ host, error: err.message });
+      console.warn(`  · ${host} (catálogo) → ${err.message}, probando el siguiente host…`);
+      next();
+    });
+  };
+  next();
+}
+
 /** Sirve un archivo estático. */
 function serveStatic(pathname, res) {
   let rel = decodeURIComponent(pathname.split('?')[0]);
@@ -160,6 +208,10 @@ const handler = (req, res) => {
     return;
   }
   // El mismo origen puede exponer también otros endpoints de Binance
+  if (pathname === '/api/v3/exchangeInfo') {
+    proxyExchangeInfo(res);
+    return;
+  }
   if (pathname === '/api/v3/time') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ serverTime: Date.now() }));
@@ -178,6 +230,7 @@ try {
   app.use(express.static(ROOT, { extensions: ['html'] }));
   app.get('/api/status', (req, res) => res.json({ ok: true, app: 'Bar Replay Pro', binance: BINANCE_HOSTS }));
   app.get('/api/v3/klines', (req, res) => proxyKlines(req.query, res));
+  app.get('/api/v3/exchangeInfo', (req, res) => proxyExchangeInfo(res));
   app.get('/api/v3/time', (req, res) => res.json({ serverTime: Date.now() }));
   server = http.createServer(app);
   engine = 'express';

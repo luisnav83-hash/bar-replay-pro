@@ -663,7 +663,9 @@
     lista = lista.slice(0, max);
 
     const cnt = document.getElementById('symCount');
-    if (cnt) cnt.textContent = total ? total + (total > max ? ' (mostrando ' + max + ')' : '') : 'sin resultados';
+    if (cnt) cnt.textContent = total
+      ? total + (total === 1 ? ' par' : ' pares') + (total > max ? ' · mostrando ' + max : '')
+      : 'sin resultados';
 
     if (!lista.length) {
       cont.innerHTML = '<div class="hint">' + (cat === 'favoritos'

@@ -74,6 +74,8 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 
 ### 7. Gestión de datos
 - **Binance** `/api/v3/klines` con **paginación automática** de 1000 velas y 6 hosts espejo.
+- **Catálogo de símbolos** `/api/v3/exchangeInfo` (1.100+ pares reales) para el buscador,
+  con proxy propio en `server.js` y caché de 6 h; si no hay red, lista local de 40 pares.
 - **Fallback a CoinGecko** si Binance no está disponible.
 - **Caché local** (localStorage) de lo descargado, con aviso de velas en caché.
 - Importación de **CSV** (con o sin cabecera, separador `,`/`;`/tabulador, fechas ISO o epoch).
