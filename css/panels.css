@@ -72,6 +72,31 @@
 .draw-del{background:none;border:none;color:var(--tx-4);font-size:11px;}
 .draw-del:hover{color:var(--down);}
 
+/* --- Gestor de dibujos: barra superior, 👁 por fila y renombrado --- */
+.draw-bar{
+  display:flex;align-items:center;gap:6px;padding:2px 2px 8px;
+  border-bottom:1px solid var(--line-soft);margin-bottom:6px;
+}
+.draw-total{font-size:10.5px;color:var(--tx-4);margin-right:auto;letter-spacing:.2px;}
+.draw-btn{
+  background:var(--bg-3);border:1px solid var(--line);color:var(--tx-2);
+  border-radius:6px;padding:3px 8px;font-size:10.5px;cursor:pointer;transition:all .12s;
+}
+.draw-btn:hover{border-color:var(--accent);color:var(--tx-1);}
+.draw-btn.danger:hover{border-color:var(--down);color:#ff8a94;}
+.draw-eye{
+  background:none;border:none;color:var(--tx-4);font-size:12px;cursor:pointer;
+  padding:1px 4px;border-radius:5px;line-height:1;
+}
+.draw-eye:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}
+.draw-item.oculto .draw-swatch{opacity:.3;}
+.draw-item.oculto .draw-name{color:var(--tx-4);text-decoration:line-through;}
+.draw-name{cursor:text;}
+.draw-edit{
+  background:var(--bg-3);border:1px solid var(--accent);border-radius:5px;color:var(--tx-1);
+  font:inherit;font-size:11px;padding:1px 5px;width:150px;
+}
+
 /* ------------------------------ Modo compacto ------------------------------ */
 @media (max-width:1440px){
   #sidebar{width:auto;}

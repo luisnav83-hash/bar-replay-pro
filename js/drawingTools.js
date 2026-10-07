@@ -33,6 +33,7 @@
     trend: 'Línea de tendencia', ray: 'Línea extendida', hline: 'Soporte/Resistencia',
     vline: 'Línea vertical', rect: 'Rectángulo / zona', channel: 'Canal paralelo',
     fib: 'Retroceso Fibonacci', measure: 'Medición', ellipse: 'Elipse',
+    arrow: 'Flecha', path: 'Camino (polilínea)',
   };
 
   DT.drawings = [];
@@ -263,6 +264,22 @@
       return;
     }
 
+    // El CAMINO (polilínea) se construye clic a clic y no se cierra solo: se
+    // termina con doble clic, con Enter o pulsando Esc para cancelar. El
+    // último punto es «elástico» (sigue al cursor) y se descarta al cerrar.
+    if (DT.tool === 'path') {
+      if (!DT.draft) {
+        DT.draft = { type: 'path', points: [pt, { dtime: pt.dtime, price: pt.price }],
+                     style: Object.assign({}, DT.defaultStyle) };
+      } else {
+        const ult = DT.draft.points[DT.draft.points.length - 1];
+        DT.draft.points.push({ dtime: ult.dtime, price: ult.price });
+      }
+      U.toast(`Camino: ${DT.draft.points.length - 1} puntos · doble clic o Enter para terminar`, 'info', 1400);
+      DT.render();
+      return;
+    }
+
     if (!DT.draft) {
       DT.draft = { type: DT.tool, points: [pt], style: Object.assign({}, DT.defaultStyle) };
     } else {
@@ -314,6 +331,7 @@
       if (!pt) return;
       if (DT.draft.points.length === 1) DT.draft.points[1] = pt;
       else if (DT.draft.type === 'channel') DT.draft.points[2] = pt;
+      else if (DT.draft.type === 'path') DT.draft.points[DT.draft.points.length - 1] = pt;
       DT.render();
     }
   };
@@ -327,6 +345,8 @@
   };
 
   DT._onDblClick = function () {
+    // Si hay un dibujo a medias (camino), el doble clic lo TERMINA
+    if (DT.draft) { DT.finishDraft(); return; }
     // Doble clic sobre un dibujo lo elimina (atajo rápido)
     const p = DT._lastPos || { x: -99, y: -99 };
     const hit = DT._hitTest(p.x, p.y);
@@ -401,6 +421,64 @@
 
   DT.cancelDraft = function () { DT.draft = null; DT.render(); };
 
+  /**
+   * Cierra el dibujo en curso (lo usa el camino: doble clic o Enter).
+   * @returns {boolean} true si se ha creado el dibujo.
+   */
+  DT.finishDraft = function () {
+    const d = DT.draft;
+    if (!d) return false;
+    let pts = d.points.map((p) => ({ dtime: p.dtime, price: p.price }));
+    // El camino arrastra un punto «elástico» al final: si al cerrar está en el
+    // mismo sitio que el anterior, no cuenta como vértice.
+    if (d.type === 'path' && pts.length > 1) {
+      const a = pts[pts.length - 2], b = pts[pts.length - 1];
+      if (a.dtime === b.dtime && a.price === b.price) pts = pts.slice(0, -1);
+    }
+    const min = d.type === 'channel' ? 3 : 2;
+    DT.draft = null;
+    if (pts.length < min) {
+      DT.render();
+      U.toast('Trazo demasiado corto: no se ha creado ningún dibujo', 'warn', 2200);
+      return false;
+    }
+    DT._addDrawing({ type: d.type, points: pts, style: d.style });
+    DT.setTool('cursor');
+    return true;
+  };
+
+  /* ------------------- Gestor de dibujos (ocultar / renombrar) ------------------- */
+
+  /** Muestra u oculta un dibujo en el gráfico (sin borrarlo). */
+  DT.setHidden = function (id, on) {
+    const d = DT.drawings.find((x) => x.id === id);
+    if (!d) return;
+    d.hidden = !!on;
+    if (d.hidden && DT.selected === d) DT.selected = null;
+    DT.render(); DT._emitChange();
+  };
+
+  /** Muestra u oculta TODOS los dibujos de golpe. */
+  DT.toggleAllHidden = function () {
+    if (!DT.drawings.length) return false;
+    const todosOcultos = DT.drawings.every((d) => d.hidden);
+    DT.drawings.forEach((d) => { d.hidden = !todosOcultos; });
+    if (!todosOcultos) DT.selected = null;
+    DT.render(); DT._emitChange();
+    U.toast(todosOcultos ? '👁 Dibujos visibles otra vez' : '🚫 Dibujos ocultos (siguen guardados)', 'info', 1800);
+    return todosOcultos;
+  };
+
+  /** Renombra un dibujo (etiqueta propia del usuario). */
+  DT.rename = function (id, txt) {
+    const d = DT.drawings.find((x) => x.id === id);
+    if (!d) return;
+    const limpio = String(txt || '').trim().slice(0, 40);
+    if (limpio) d.label = limpio; else delete d.label;
+    DT.render(); DT._emitChange();
+    if (limpio) U.toast(`✏️ Dibujo renombrado: «${limpio}»`, 'ok', 1800);
+  };
+
   /* ============================== HANDLES SL/TP ============================== */
 
   /** Define los handles arrastrables de la posición abierta. */
@@ -431,6 +509,7 @@
     const tol = 7;
     for (let i = DT.drawings.length - 1; i >= 0; i--) {
       const d = DT.drawings[i];
+      if (d.hidden) continue;                     // oculto = no seleccionable
       const h = DT._hitHandle(d, x, y, tol);
       if (h !== null) return { drawing: d, handle: h };
       if (DT._hitBody(d, x, y, tol)) return { drawing: d, handle: 'body' };
@@ -473,20 +552,7 @@
         if (d.type === 'ray') p2 = { x: a.x + (b.x - a.x) * 40, y: a.y + (b.y - a.y) * 40 };
         return DT._distToSegment(x, y, p1, p2) <= tol;
       }
-      case 'ellipse': {
-        const [a, b] = pts;
-        if (!a || !b) break;
-        ctx.save();
-        ctx.strokeStyle = d.style.color;
-        ctx.lineWidth = d.style.width;
-        ctx.beginPath();
-        ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2,
-          Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-        if (selected) DT._drawHandles(ctx, [a, b]);
-        break;
-      }
+      // (El pintado de la elipse vive en DT._draw; aquí solo se detecta el clic.)
       case 'ellipse': {
         const [a, b] = pts;
         if (!a || !b) return false;
@@ -494,6 +560,19 @@
         const rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2);
         const k = Math.hypot((x - cx) / rx, (y - cy) / ry);
         return Math.abs(k - 1) <= tol / Math.min(rx, ry) + 0.12;
+      }
+      case 'arrow': {
+        const [a, b] = pts;
+        if (!a || !b) return false;
+        return DT._distToSegment(x, y, a, b) <= tol + 2;   // tolerancia algo mayor: es un trazo fino
+      }
+      case 'path': {
+        // Se toca si el clic está cerca de CUALQUIERA de sus tramos
+        for (let i = 1; i < pts.length; i++) {
+          if (!pts[i - 1] || !pts[i]) continue;
+          if (DT._distToSegment(x, y, pts[i - 1], pts[i]) <= tol) return true;
+        }
+        return false;
       }
       case 'rect': {
         const [a, b] = pts;
@@ -806,7 +885,8 @@
     ctx.clearRect(0, 0, DT.width, DT.height);
 
     // Todos los dibujos
-    DT.drawings.forEach((d) => DT._draw(ctx, d, d === DT.selected));
+    // Los dibujos ocultos con el 👁 del gestor no se pintan
+    DT.drawings.forEach((d) => { if (!d.hidden) DT._draw(ctx, d, d === DT.selected); });
 
     // Trazo del gesto «mantener pulsado y dibujar»
     if (DT.gesture.stroke && DT.gesture.stroke.length > 1) {
@@ -848,7 +928,10 @@
     // Aviso de herramienta activa: en la esquina superior izquierda, con
     // fondo propio, para no tapar el volumen ni la acción del precio.
     if (DT.tool !== 'cursor') {
-      const txt = `${TYPE_NAMES[DT.tool] || ''} — clic para fijar puntos · clic derecho cancela`;
+      const enCurso = (DT.draft && DT.draft.type === 'path')
+        ? `${DT.draft.points.length - 1} puntos puestos · doble clic o Enter para terminar`
+        : 'clic para fijar puntos · clic derecho cancela';
+      const txt = `${TYPE_NAMES[DT.tool] || ''} — ${enCurso}`;
       ctx.save();
       ctx.font = '10.5px ui-monospace, monospace';
       const w = ctx.measureText(txt).width + 14;
@@ -997,6 +1080,58 @@
         }
         break;
       }
+      case 'ellipse': {
+        const [a, b] = pts;
+        if (a && b) {
+          const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+          const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+          ctx.globalAlpha = 0.10; ctx.fillStyle = d.color;
+          ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+          DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
+        }
+        break;
+      }
+      case 'arrow': {
+        const [a, b] = pts;
+        if (a && b) {
+          const ang = Math.atan2(b.y - a.y, b.x - a.x);
+          const L = 13;                       // longitud de las dos «barbas» de la punta
+          const abanico = 0.42;               // apertura en radianes (±24°)
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(b.x, b.y);
+          ctx.lineTo(b.x - L * Math.cos(ang - abanico), b.y - L * Math.sin(ang - abanico));
+          ctx.moveTo(b.x, b.y);
+          ctx.lineTo(b.x - L * Math.cos(ang + abanico), b.y - L * Math.sin(ang + abanico));
+          ctx.stroke();
+          DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
+        }
+        break;
+      }
+      case 'path': {
+        // Polilínea libre: une los puntos que vaya marcando el usuario
+        const vivos = pts.filter(Boolean);
+        if (vivos.length >= 2) {
+          ctx.beginPath();
+          ctx.moveTo(vivos[0].x, vivos[0].y);
+          for (let i = 1; i < vivos.length; i++) ctx.lineTo(vivos[i].x, vivos[i].y);
+          ctx.stroke();
+          ctx.fillStyle = d.color;
+          vivos.forEach((v) => { ctx.beginPath(); ctx.arc(v.x, v.y, 2.4, 0, Math.PI * 2); ctx.fill(); });
+          const p0 = d.points[0], pn = d.points[d.points.length - 1];
+          if (p0 && pn) {
+            const dp = pn.price - p0.price;
+            const pct = p0.price ? (dp / p0.price) * 100 : 0;
+            const minX = Math.min.apply(null, vivos.map((v) => v.x));
+            const minY = Math.min.apply(null, vivos.map((v) => v.y));
+            DT._label(ctx, `Camino (${d.points.length} puntos) ${dp >= 0 ? '+' : ''}${U.fmtPrice(dp)} (${pct >= 0 ? '+' : ''}${U.num(pct, 2)}%)`,
+                      minX, minY - 8, d.color);
+          }
+        }
+        break;
+      }
     }
 
     /* --- Selección: handles --- */
@@ -1077,13 +1212,22 @@
       container.innerHTML = '<div class="empty">Sin dibujos. Elige una herramienta en la barra del gráfico y haz clic para dibujar.</div>';
       return;
     }
-    container.innerHTML = DT.drawings.map((d) => {
+    const ocultos = DT.drawings.filter((d) => d.hidden).length;
+    const barra = `<div class="draw-bar">
+      <span class="draw-total">${DT.drawings.length} dibujo${DT.drawings.length === 1 ? '' : 's'}` +
+      (ocultos ? ` · ${ocultos} oculto${ocultos === 1 ? '' : 's'}` : '') + `</span>
+      <button class="draw-btn" data-eye-all="1" title="Mostrar u ocultar todos los dibujos">${ocultos === DT.drawings.length ? '👁 Mostrar todos' : '🚫 Ocultar todos'}</button>
+      <button class="draw-btn danger" data-clear="1" title="Borrar todos los dibujos">🗑️ Borrar todo</button>
+    </div>`;
+    container.innerHTML = barra + DT.drawings.map((d) => {
       const p0 = d.points[0];
       const meta = `${U.fmtPrice(p0.price)}${p0.dtime ? ' · ' + U.fmtDate(p0.dtime) : ''}`;
-      return `<div class="draw-item ${d === DT.selected ? 'sel' : ''}" data-id="${d.id}">
+      const nombre = U.esc(d.label || TYPE_NAMES[d.type] || d.type);
+      return `<div class="draw-item ${d === DT.selected ? 'sel' : ''}${d.hidden ? ' oculto' : ''}" data-id="${d.id}">
         <span class="draw-swatch" style="background:${d.color}"></span>
-        <span class="draw-name">${TYPE_NAMES[d.type] || d.type}</span>
+        <span class="draw-name" data-nombre="${d.id}" title="Doble clic para renombrarlo">${nombre}</span>
         <span class="draw-meta">${meta}</span>
+        <button class="draw-eye" data-eye="${d.id}" title="${d.hidden ? 'Mostrar en el gráfico' : 'Ocultar en el gráfico'}">${d.hidden ? '🚫' : '👁'}</button>
         <button class="draw-del" data-del="${d.id}" title="Eliminar este dibujo">✕</button>
       </div>`;
     }).join('');
@@ -1106,7 +1250,7 @@
     DT.width = w; DT.height = h;
     const oldCtx = DT.ctx;
     DT.ctx = ctx;
-    DT.drawings.forEach((d) => DT._draw(ctx, d, false));
+    DT.drawings.forEach((d) => { if (!d.hidden) DT._draw(ctx, d, false); });
     DT.ctx = oldCtx;
     DT.width = saved.w; DT.height = saved.h;
   };

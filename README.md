@@ -31,10 +31,18 @@ drawdown, curva de capital y más).
 ### 3. Herramientas de dibujo (persistentes)
 Línea de tendencia · línea extendida · soporte/resistencia horizontal · línea vertical ·
 rectángulo/zona · **canal paralelo** (3 clics) · **retroceso de Fibonacci** ·
-**medición** (Δprecio, Δ%, nº de velas y tiempo). Color, grosor y estilo configurables,
-selección y arrastre con el ratón, imán a OHLC de las velas, borrado individual o total.
-Los dibujos se anclan a **tiempo + precio**, así que siguen en su sitio al hacer zoom,
-scroll o avanzar el replay.
+**medición** (Δprecio, Δ%, nº de velas y tiempo) · **flecha** (2 clics, atajo `A`) ·
+**camino/polilínea** (clics y doble clic o `Enter` para cerrar, atajo `P`).
+Color, grosor y estilo configurables, selección y arrastre con el ratón, imán a OHLC
+de las velas. Los dibujos se anclan a **tiempo + precio**, así que siguen en su sitio
+al hacer zoom, scroll o avanzar el replay.
+
+**Gestor de dibujos** (pestaña «✏️ Dibujos» del panel inferior): cada dibujo aparece
+con su color, su nombre y su punto de anclaje, y se puede **renombrar** (doble clic en
+el nombre), **ocultar sin borrar** (👁, desaparece del gráfico y no molesta al pasar el
+ratón) o **eliminar** (✕), además de «🚫 Ocultar todos» y «🗑️ Borrar todo» (con
+confirmación). Lo oculto y los nombres propios se guardan en la sesión y en la
+instantánea.
 
 ### 4. Indicadores técnicos (cálculo propio, sin librerías)
 | Indicador | Parámetros | Panel |
@@ -164,6 +172,11 @@ soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
 
 ![Gesto de dibujo](docs/captura-18-gesto-dibujo.png)
 
+**Flecha, camino y gestor de dibujos** — flecha de proyección, polilíneas libres con su
+Δ precio/% y la lista de dibujos con 👁 ocultar, renombrar y borrar:
+
+![Dibujos](docs/captura-23-dibujos-flecha-camino.png)
+
 *(Generadas automáticamente por `tests/browser.capture.js` en Chromium headless.)*
 
 ---
@@ -228,11 +241,12 @@ node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (cicl
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
 node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
+node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **449 comprobaciones, 0 fallos** ✅
+Resultado actual: **467 comprobaciones, 0 fallos** ✅
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -268,6 +282,8 @@ omitido en lugar de fallar.
 | `Supr` | Borrar el dibujo seleccionado |
 | `+` / `-` | Subir / bajar velocidad |
 | `1`…`9` | Seleccionar herramienta de dibujo |
+| `A` / `P` | Herramienta **flecha** / **camino** |
+| `Enter` | Terminar el **camino** en curso |
 | `Ctrl+S` | Guardar sesión |
 
 ---

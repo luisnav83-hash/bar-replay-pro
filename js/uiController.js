@@ -235,7 +235,7 @@
       setTimeout(() => { DT.resize(); DT.render(); CM.refresh(); }, 300);
     });
 
-    // Lista de dibujos: seleccionar / eliminar
+    // Gestor de dibujos: seleccionar · 👁 ocultar · ✕ eliminar · borrar todo
     document.getElementById('drawList').addEventListener('click', (e) => {
       const del = e.target.closest('[data-del]');
       if (del) {
@@ -243,11 +243,44 @@
         if (d) DT.deleteDrawing(d);
         return;
       }
+      const ojo = e.target.closest('[data-eye]');
+      if (ojo) {
+        const d = DT.drawings.find((x) => x.id === ojo.dataset.eye);
+        if (d) DT.setHidden(d.id, !d.hidden);
+        return;
+      }
+      if (e.target.closest('[data-eye-all]')) { DT.toggleAllHidden(); return; }
+      if (e.target.closest('[data-clear]')) {
+        if (!DT.drawings.length) { U.toast('No hay dibujos que borrar', 'info', 1500); return; }
+        if (confirm('¿Borrar TODOS los dibujos del gráfico?')) {
+          DT.clearAll(); U.toast('🗑️ Todos los dibujos borrados', 'info', 1800);
+        }
+        return;
+      }
       const item = e.target.closest('.draw-item');
       if (item) {
         DT.selected = DT.drawings.find((x) => x.id === item.dataset.id) || null;
         DT.render(); DT.renderList(document.getElementById('drawList'));
       }
+    });
+
+    // Doble clic sobre el nombre → renombrar el dibujo en línea
+    document.getElementById('drawList').addEventListener('dblclick', (e) => {
+      const nom = e.target.closest('[data-nombre]');
+      if (!nom || nom.querySelector('input')) return;
+      const d = DT.drawings.find((x) => x.id === nom.dataset.nombre);
+      if (!d) return;
+      const previo = d.label || '';
+      nom.innerHTML = '<input class="draw-edit" type="text" maxlength="40" value="' + U.esc(previo) + '">';
+      const inp = nom.querySelector('input');
+      inp.focus(); inp.select();
+      const guardar = () => { DT.rename(d.id, inp.value); };
+      inp.addEventListener('keydown', (ev) => {
+        ev.stopPropagation();                     // que no actúen los atajos globales
+        if (ev.key === 'Enter') { guardar(); }
+        else if (ev.key === 'Escape') { DT.renderList(document.getElementById('drawList')); }
+      });
+      inp.addEventListener('blur', guardar);
     });
   };
 
@@ -809,12 +842,15 @@
         case 'S': App.placeOrderLimit('short'); break;
         case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
         case '/': e.preventDefault(); UI.openSymbols(); break;
+        case 'a': case 'A': DT.setTool('arrow'); break;
+        case 'p': case 'P': DT.setTool('path'); break;
+        case 'Enter': if (DT.draft) { e.preventDefault(); DT.finishDraft(); } break;
         case 'r': case 'R': App.resetReplay(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
         case '-': case '_': case 'PageDown': App.bumpSpeed(-1); break;
         case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
-          const tools = ['cursor', 'trend', 'ray', 'hline', 'vline', 'rect', 'channel', 'fib', 'measure'];
+          const tools = ['cursor', 'trend', 'ray', 'hline', 'vline', 'rect', 'channel', 'fib', 'measure', 'arrow', 'path'];
           DT.setTool(tools[+e.key - 1] || 'cursor');
           break;
         }
