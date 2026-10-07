@@ -62,6 +62,7 @@
       e.target.value = '';
     });
     document.getElementById('btnIndicators').addEventListener('click', () => UI.openModal('modalIndicators'));
+    document.getElementById('btnPanelsConfig').addEventListener('click', () => UI.openModal('modalIndicators'));
     document.getElementById('btnSessions').addEventListener('click', () => { UI.renderSessions(); UI.openModal('modalSessions'); });
     document.getElementById('btnExport').addEventListener('click', () => UI.openModal('modalExport'));
     document.getElementById('btnShot').addEventListener('click', () => App.screenshot());
@@ -376,6 +377,87 @@
     }).join('');
   };
 
+  /* ================== PANELES DE INDICADORES (valores vivos) ================== */
+
+  /**
+   * Lista de indicadores con su VALOR ACTUAL, al estilo de OpenMarket: cada fila
+   * muestra el nombre, un botón 👁 para mostrar/ocultar la serie y el último
+   * valor calculado en la vela visible del replay.
+   *
+   * Se refresca en cada vela (UI.refreshAll), así que los números van cambiando
+   * a medida que avanza el replay, igual que en un panel de trading real.
+   */
+  UI.renderPanels = function () {
+    const cont = document.getElementById('panelsList');
+    if (!cont || !CM || !CM.indData) return;
+    const cfg = App.indicators || {};
+    const i = CM._lastIndex;
+    const d = CM.indData;
+    const val = (arr) => (i >= 0 && arr && arr[i] != null && Number.isFinite(arr[i])) ? arr[i] : null;
+    const ultima = App.candles && App.candles[CM._lastIndex];
+    const filas = [];
+
+    const push = (clave, nombre, valores, color, extras) => {
+      const c = cfg[clave] || {};
+      const on = !!c.on;
+      // Solo mostramos los que están activos o los que el usuario tenga puestos
+      filas.push({ clave, nombre, on, color: c.color || color, valores: on ? valores : [], extras });
+    };
+
+    // Volumen (siempre del gráfico principal)
+    push('vol', 'Vol', ultima ? [U.fmtVol(ultima.volume)] : [], '#5c6bc0');
+    push('sma', `SMA ${cfg.sma ? cfg.sma.p : 50}`, fmt1(val(d.sma)), '#ffd54f');
+    push('ema', `EMA ${cfg.ema ? cfg.ema.p : 21}`, fmt1(val(d.ema)), '#00e5ff');
+    push('ema2', `EMA ${cfg.ema2 ? cfg.ema2.p : 200}`, fmt1(val(d.ema2)), '#e040fb');
+    push('bb', `BB ${cfg.bb ? cfg.bb.p : 20}`, fmt1(val(d.bb && d.bb.middle)), '#7c4dff');
+    push('rsi', `RSI ${cfg.rsi ? cfg.rsi.p : 14}`, fmtNum(val(d.rsi), 1), '#b388ff');
+    push('macd', `MACD ${cfg.macd ? cfg.macd.f : 12} ${cfg.macd ? cfg.macd.s : 26} ${cfg.macd ? cfg.macd.sig : 9}`,
+      [['hist', fmtNum(val(d.macd && d.macd.hist), 2)],
+       ['macd', fmtNum(val(d.macd && d.macd.macd), 2)],
+       ['señal', fmtNum(val(d.macd && d.macd.signal), 2)]],
+      '#40c4ff', true);
+    push('atr', `ATR ${cfg.atr ? cfg.atr.p : 14}`, fmtNum(val(d.atr), 2), '#ffab40');
+
+    const activos = filas.filter((f) => f.on).length;
+    const tag = document.getElementById('panelsCount');
+    if (tag) tag.textContent = activos + (activos === 1 ? ' indicador' : ' indicadores');
+
+    cont.innerHTML = filas.map((f) => {
+      const ojo = `<button class="pl-eye" data-eye="${f.clave}" title="${f.on ? 'Ocultar del gráfico' : 'Mostrar en el gráfico'}">${f.on ? '👁' : '🚫'}</button>`;
+      let vals;
+      if (f.extras) {
+        vals = f.valores.map(([etq, v]) => `<span class="pl-kv"><i>${etq}</i>${v}</span>`).join('');
+      } else {
+        vals = f.valores.map((v) => `<b class="pl-val">${v}</b>`).join('');
+      }
+      return `<div class="pl-item ${f.on ? 'on' : 'off'}${f.extras ? ' pl-multi' : ''}" data-key="${f.clave}" title="Clic para configurar ${f.nombre}">` +
+        `<span class="pl-dot" style="background:${f.on ? f.color : '#3a3f5c'}"></span>` +
+        `<span class="pl-name">${f.nombre}</span>` +
+        `<span class="pl-vals">${vals || '<span class="pl-off">—</span>'}</span>` +
+        ojo +
+      `</div>`;
+    }).join('');
+
+    // 👁 mostrar/ocultar sin abrir el modal
+    cont.querySelectorAll('[data-eye]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const k = b.dataset.eye;
+        if (!App.indicators[k]) App.indicators[k] = { on: false };
+        App.indicators[k].on = !App.indicators[k].on;
+        App.applyIndicators(App.indicators);
+        U.toast((App.indicators[k].on ? 'Mostrando ' : 'Ocultando ') + k.toUpperCase(), 'info', 1500);
+      });
+    });
+    // Clic en la fila → modal de configuración
+    cont.querySelectorAll('.pl-item').forEach((el) => {
+      el.addEventListener('click', () => UI.openModal('modalIndicators'));
+    });
+
+    function fmt1(v) { return v == null ? [] : [U.fmtPrice(v)]; }
+    function fmtNum(v, dec) { return v == null ? [] : [U.num(v, dec)]; }
+  };
+
   /* ============================ ÓRDENES LÍMITE ============================ */
 
   /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
@@ -548,6 +630,7 @@
     UI.updateHiddenNotice();
     UI.refreshPriceTag();
     UI.renderPending();     // órdenes límite en espera
+    UI.renderPanels();      // lista de indicadores con su valor actual
     UI.updateLimitHint && UI.updateLimitHint();
   };
 

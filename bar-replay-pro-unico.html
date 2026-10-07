@@ -397,6 +397,31 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
 .pi-eta{color:#ffc857;font-size:10px;margin-top:3px;}
 .hint.ok{color:var(--up);}
 .hint.warn{color:var(--warn);}
+.panels-list{display:flex;flex-direction:column;gap:2px;}
+.pl-item{
+  display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:5px;
+  cursor:pointer;font-size:11px;line-height:1.35;border:1px solid transparent;
+}
+.pl-item:hover{background:rgba(255,255,255,.045);border-color:var(--line-soft);}
+.pl-item.off{opacity:.45;}
+.pl-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 6px currentColor;}
+.pl-name{color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:74px;}
+.pl-item.on .pl-name{color:#c9cee8;}
+.pl-vals{display:flex;align-items:center;gap:8px;margin-left:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+.pl-val{font-size:11.5px;color:#eef1ff;}
+.pl-kv{display:flex;align-items:baseline;gap:3px;font-size:10px;color:#8b93b0;}
+.pl-kv i{font-style:normal;opacity:.7;}
+.pl-kv{color:#cfd4ea;}
+.pl-off{color:#4b5170;font-size:10.5px;}
+.pl-eye{
+  border:0;background:transparent;cursor:pointer;font-size:10px;line-height:1;
+  padding:2px 3px;border-radius:4px;opacity:.55;flex:0 0 auto;
+}
+.pl-eye:hover{opacity:1;background:rgba(255,255,255,.08);}
+.pl-item.pl-multi{flex-wrap:wrap;row-gap:1px;}
+.pl-item.pl-multi .pl-name{min-width:0;}
+.pl-item.pl-multi .pl-vals{margin-left:0;width:100%;padding-left:14px;gap:9px;}
+.pl-item.pl-multi .pl-eye{margin-left:auto;}
 /* ==== css/modals.css ==== */
 .modal{
   position:fixed;inset:0;z-index:200;display:none;
@@ -823,6 +848,20 @@ kbd{
 
   <!-- ---------- BARRA LATERAL ---------- -->
   <aside id="sidebar">
+
+    <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
+         actuales de cada indicador, que se refrescan en cada vela del replay.
+         El botón 👁 muestra u oculta la serie; clic en la fila configura. -->
+    <div class="card" id="panelsCard">
+      <div class="card-head">
+        <span class="card-title">📈 Paneles</span>
+        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
+        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
+      </div>
+      <div class="card-body">
+        <div id="panelsList" class="panels-list"></div>
+      </div>
+    </div>
 
     <!-- CUENTA -->
     <div class="card">
@@ -4866,6 +4905,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       e.target.value = '';
     });
     document.getElementById('btnIndicators').addEventListener('click', () => UI.openModal('modalIndicators'));
+    document.getElementById('btnPanelsConfig').addEventListener('click', () => UI.openModal('modalIndicators'));
     document.getElementById('btnSessions').addEventListener('click', () => { UI.renderSessions(); UI.openModal('modalSessions'); });
     document.getElementById('btnExport').addEventListener('click', () => UI.openModal('modalExport'));
     document.getElementById('btnShot').addEventListener('click', () => App.screenshot());
@@ -5180,6 +5220,87 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }).join('');
   };
 
+  /* ================== PANELES DE INDICADORES (valores vivos) ================== */
+
+  /**
+   * Lista de indicadores con su VALOR ACTUAL, al estilo de OpenMarket: cada fila
+   * muestra el nombre, un botón 👁 para mostrar/ocultar la serie y el último
+   * valor calculado en la vela visible del replay.
+   *
+   * Se refresca en cada vela (UI.refreshAll), así que los números van cambiando
+   * a medida que avanza el replay, igual que en un panel de trading real.
+   */
+  UI.renderPanels = function () {
+    const cont = document.getElementById('panelsList');
+    if (!cont || !CM || !CM.indData) return;
+    const cfg = App.indicators || {};
+    const i = CM._lastIndex;
+    const d = CM.indData;
+    const val = (arr) => (i >= 0 && arr && arr[i] != null && Number.isFinite(arr[i])) ? arr[i] : null;
+    const ultima = App.candles && App.candles[CM._lastIndex];
+    const filas = [];
+
+    const push = (clave, nombre, valores, color, extras) => {
+      const c = cfg[clave] || {};
+      const on = !!c.on;
+      // Solo mostramos los que están activos o los que el usuario tenga puestos
+      filas.push({ clave, nombre, on, color: c.color || color, valores: on ? valores : [], extras });
+    };
+
+    // Volumen (siempre del gráfico principal)
+    push('vol', 'Vol', ultima ? [U.fmtVol(ultima.volume)] : [], '#5c6bc0');
+    push('sma', `SMA ${cfg.sma ? cfg.sma.p : 50}`, fmt1(val(d.sma)), '#ffd54f');
+    push('ema', `EMA ${cfg.ema ? cfg.ema.p : 21}`, fmt1(val(d.ema)), '#00e5ff');
+    push('ema2', `EMA ${cfg.ema2 ? cfg.ema2.p : 200}`, fmt1(val(d.ema2)), '#e040fb');
+    push('bb', `BB ${cfg.bb ? cfg.bb.p : 20}`, fmt1(val(d.bb && d.bb.middle)), '#7c4dff');
+    push('rsi', `RSI ${cfg.rsi ? cfg.rsi.p : 14}`, fmtNum(val(d.rsi), 1), '#b388ff');
+    push('macd', `MACD ${cfg.macd ? cfg.macd.f : 12} ${cfg.macd ? cfg.macd.s : 26} ${cfg.macd ? cfg.macd.sig : 9}`,
+      [['hist', fmtNum(val(d.macd && d.macd.hist), 2)],
+       ['macd', fmtNum(val(d.macd && d.macd.macd), 2)],
+       ['señal', fmtNum(val(d.macd && d.macd.signal), 2)]],
+      '#40c4ff', true);
+    push('atr', `ATR ${cfg.atr ? cfg.atr.p : 14}`, fmtNum(val(d.atr), 2), '#ffab40');
+
+    const activos = filas.filter((f) => f.on).length;
+    const tag = document.getElementById('panelsCount');
+    if (tag) tag.textContent = activos + (activos === 1 ? ' indicador' : ' indicadores');
+
+    cont.innerHTML = filas.map((f) => {
+      const ojo = `<button class="pl-eye" data-eye="${f.clave}" title="${f.on ? 'Ocultar del gráfico' : 'Mostrar en el gráfico'}">${f.on ? '👁' : '🚫'}</button>`;
+      let vals;
+      if (f.extras) {
+        vals = f.valores.map(([etq, v]) => `<span class="pl-kv"><i>${etq}</i>${v}</span>`).join('');
+      } else {
+        vals = f.valores.map((v) => `<b class="pl-val">${v}</b>`).join('');
+      }
+      return `<div class="pl-item ${f.on ? 'on' : 'off'}${f.extras ? ' pl-multi' : ''}" data-key="${f.clave}" title="Clic para configurar ${f.nombre}">` +
+        `<span class="pl-dot" style="background:${f.on ? f.color : '#3a3f5c'}"></span>` +
+        `<span class="pl-name">${f.nombre}</span>` +
+        `<span class="pl-vals">${vals || '<span class="pl-off">—</span>'}</span>` +
+        ojo +
+      `</div>`;
+    }).join('');
+
+    // 👁 mostrar/ocultar sin abrir el modal
+    cont.querySelectorAll('[data-eye]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const k = b.dataset.eye;
+        if (!App.indicators[k]) App.indicators[k] = { on: false };
+        App.indicators[k].on = !App.indicators[k].on;
+        App.applyIndicators(App.indicators);
+        U.toast((App.indicators[k].on ? 'Mostrando ' : 'Ocultando ') + k.toUpperCase(), 'info', 1500);
+      });
+    });
+    // Clic en la fila → modal de configuración
+    cont.querySelectorAll('.pl-item').forEach((el) => {
+      el.addEventListener('click', () => UI.openModal('modalIndicators'));
+    });
+
+    function fmt1(v) { return v == null ? [] : [U.fmtPrice(v)]; }
+    function fmtNum(v, dec) { return v == null ? [] : [U.num(v, dec)]; }
+  };
+
   /* ============================ ÓRDENES LÍMITE ============================ */
 
   /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
@@ -5352,6 +5473,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.updateHiddenNotice();
     UI.refreshPriceTag();
     UI.renderPending();     // órdenes límite en espera
+    UI.renderPanels();      // lista de indicadores con su valor actual
     UI.updateLimitHint && UI.updateLimitHint();
   };
 
@@ -6063,6 +6185,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.syncIndicatorModalFromConfig(cfg);
     CM.refresh(BR.getIndex());     // reconstruye hasta la vela actual del replay
     DT.render();
+    UI.renderPanels && UI.renderPanels();   // la lista de paneles refleja el cambio al instante
     if (!silent) {
       const on = Object.keys(cfg).filter((k) => cfg[k].on);
       U.log('📈 Indicadores activos: ' + (on.length ? on.join(', ').toUpperCase() : 'ninguno'), 'sys');

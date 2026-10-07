@@ -375,6 +375,7 @@
     UI.syncIndicatorModalFromConfig(cfg);
     CM.refresh(BR.getIndex());     // reconstruye hasta la vela actual del replay
     DT.render();
+    UI.renderPanels && UI.renderPanels();   // la lista de paneles refleja el cambio al instante
     if (!silent) {
       const on = Object.keys(cfg).filter((k) => cfg[k].on);
       U.log('📈 Indicadores activos: ' + (on.length ? on.join(', ').toUpperCase() : 'ninguno'), 'sys');

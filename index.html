@@ -299,6 +299,20 @@
   <!-- ---------- BARRA LATERAL ---------- -->
   <aside id="sidebar">
 
+    <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
+         actuales de cada indicador, que se refrescan en cada vela del replay.
+         El botón 👁 muestra u oculta la serie; clic en la fila configura. -->
+    <div class="card" id="panelsCard">
+      <div class="card-head">
+        <span class="card-title">📈 Paneles</span>
+        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
+        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
+      </div>
+      <div class="card-body">
+        <div id="panelsList" class="panels-list"></div>
+      </div>
+    </div>
+
     <!-- CUENTA -->
     <div class="card">
       <div class="card-head"><span class="card-title">💼 Cuenta</span>
