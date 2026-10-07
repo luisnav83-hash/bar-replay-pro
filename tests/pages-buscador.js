@@ -82,6 +82,9 @@ const URL = 'https://luisnav83-hash.github.io/bar-replay-pro/bar-replay-pro-unic
     par: document.getElementById('sbPair').textContent,
   }));
   ok(A0.abierto, 'la ventana del buscador se abre');
+  const A0filas = await page.evaluate(() => document.querySelectorAll('#symList .sym-row').length);
+  const A0cat = await page.evaluate(() => (document.querySelector('#symCats .sym-cat.active') || {}).dataset?.cat);
+  ok(A0filas >= 5, `al abrir no sale vacío: arranca en «${A0cat}» con ${A0filas} pares (primer uso, sin favoritos)`);
   await page.evaluate(() => document.querySelector('.sym-cat[data-cat="todos"]').click());
   await wait(1500);
   const A = await page.evaluate(() => ({

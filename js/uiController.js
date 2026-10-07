@@ -594,6 +594,15 @@
     UI.openModal('modalSymbols');
     const q = document.getElementById('symQuery');
     if (q) { q.value = ''; setTimeout(() => q.focus(), 60); }
+    // Primer uso (o sin favoritos guardados): abrir en «Principales» para no
+    // recibir al usuario con una lista vacía. En cuanto marque una ⭐, la
+    // categoría «Favoritos» pasa a ser la de arranque.
+    if (UI.symCat === 'favoritos' && !UI.getFavs().length) {
+      UI.symCat = 'principales';
+      U.$$('#symCats .sym-cat').forEach((x) => x.classList.toggle('active', x.dataset.cat === 'principales'));
+      const nota = document.getElementById('symNote');
+      if (nota) nota.textContent = 'Marca con ⭐ tus pares favoritos: aparecerán aquí la próxima vez.';
+    }
     UI.renderSymbols();                       // pinta ya con la lista local
     if (!UI.symLoaded) {
       DS.fetchSymbols().then((list) => {
