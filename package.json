@@ -23,7 +23,8 @@
     "demo:video": "node tools/demo-video.js",
     "test:limites": "node tests/limites.test.js",
     "test:gesto": "node tests/gesto.test.js",
-    "test:simbolos": "node tests/simbolos.test.js"
+    "test:simbolos": "node tests/simbolos.test.js",
+    "test:pages": "node tests/pages-buscador.js"
   },
   "keywords": [
     "backtesting",

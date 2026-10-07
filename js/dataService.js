@@ -256,27 +256,39 @@
     if (cache && cache.list && cache.at && (Date.now() - cache.at) < 24 * 3600 * 1000) {
       return cache.list;
     }
-    try {
-      const url = (DS.BINANCE_HOSTS.includes('') ? '' : DS.BINANCE_HOSTS[0]) + '/api/v3/exchangeInfo';
-      const info = await fetchJSON(url, 8000);
-      const validas = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'EUR', 'TRY'];
-      const list = (info.symbols || [])
-        .filter((x) => x.status === 'TRADING' && validas.indexOf(x.quoteAsset) >= 0)
-        .map((x) => ({
-          symbol: x.symbol, base: x.baseAsset, quote: x.quoteAsset,
-          label: x.baseAsset + '/' + x.quoteAsset,
-          main: !!DS.PAIRS[x.symbol],
-        }))
-        .sort((a, b) => (b.main - a.main) || (DS.MAIN_SYMBOLS.indexOf(a.symbol) - DS.MAIN_SYMBOLS.indexOf(b.symbol)) || a.symbol.localeCompare(b.symbol));
-      if (list.length && global.ST && ST.set) ST.set('symbols', { at: Date.now(), list });
-      U.log('🔎 Lista de símbolos actualizada: ' + list.length + ' pares', 'sys');
-      return list;
-    } catch (e) {
-      U.log('⚠ No se pudo descargar la lista de símbolos (' + e.message + '): se usa la local', 'warn');
-      return DS.MAIN_SYMBOLS.map((s) => ({
-        symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
-      }));
+    // Se prueban los hosts EN ORDEN: primero el proxy del mismo origen (solo
+    // existe si la app la sirve server.js) y después los hosts públicos de
+    // Binance. data-api.binance.vision envía «access-control-allow-origin: *»,
+    // así que el catálogo completo funciona igual en local y en GitHub Pages
+    // (donde NO hay /api/v3/exchangeInfo propio y antes solo se veía la lista
+    // de referencia de 40 pares).
+    const hosts = DS.BINANCE_HOSTS.slice();
+    let ultimoError = null;
+    for (let i = 0; i < hosts.length; i++) {
+      try {
+        const info = await fetchJSON(hosts[i] + '/api/v3/exchangeInfo', 8000);
+        const validas = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'EUR', 'TRY'];
+        const list = (info.symbols || [])
+          .filter((x) => x.status === 'TRADING' && validas.indexOf(x.quoteAsset) >= 0)
+          .map((x) => ({
+            symbol: x.symbol, base: x.baseAsset, quote: x.quoteAsset,
+            label: x.baseAsset + '/' + x.quoteAsset,
+            main: !!DS.PAIRS[x.symbol],
+          }))
+          .sort((a, b) => (b.main - a.main) || (DS.MAIN_SYMBOLS.indexOf(a.symbol) - DS.MAIN_SYMBOLS.indexOf(b.symbol)) || a.symbol.localeCompare(b.symbol));
+        if (!list.length) throw new Error('catálogo vacío');
+        if (global.ST && ST.set) ST.set('symbols', { at: Date.now(), list });
+        const via = hosts[i] ? hosts[i].replace('https://', '') : 'proxy local';
+        U.log('🔎 Lista de símbolos actualizada: ' + list.length + ' pares (' + via + ')', 'sys');
+        return list;
+      } catch (e) {
+        ultimoError = e;   // se prueba el host siguiente
+      }
     }
+    U.log('⚠ No se pudo descargar la lista de símbolos (' + (ultimoError && ultimoError.message || 'sin conexión') + '): se usa la local', 'warn');
+    return DS.MAIN_SYMBOLS.map((s) => ({
+      symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
+    }));
   };
 
   /** Versión SIN red (para pintar el buscador al instante). */

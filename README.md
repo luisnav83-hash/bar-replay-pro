@@ -227,6 +227,7 @@ node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta 
 node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
 node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
+node tests/pages-buscador.js  #  10 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
