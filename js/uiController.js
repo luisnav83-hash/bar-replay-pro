@@ -998,6 +998,13 @@
     const now = performance.now();
     const tradeClosed = closedCount !== UI._closedCount;
     const shouldHeavy = force || tradeClosed || !UI._statsAt || (now - UI._statsAt > 250);
+
+    // La fila de la posición abierta es barata de refrescar (unos pocos textos),
+    // así que se actualiza SIEMPRE, incluso cuando el cómputo pesado de
+    // estadísticas se salta por el tope de 250 ms: si no, avanzando rápido la
+    // fila mostraba barras y PnL atrasados.
+    UI.updateOpenTradeRow();
+
     if (!shouldHeavy) return;
     UI._statsAt = now;
 

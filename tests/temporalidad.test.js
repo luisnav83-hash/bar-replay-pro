@@ -120,6 +120,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(avanzado.pnlAbierto !== pnl0,
      `el PnL de la fila abierta se actualiza con las velas (${pnl0} → ${avanzado.pnlAbierto})`);
   ok(avanzado.filaAbierta, 'la fila sigue visible mientras la posición vive');
+  const coherente = await page.evaluate(() => {
+    const bars = TE.state.position ? TE.state.position.bars : null;
+    const celda = document.getElementById('openBars') ? document.getElementById('openBars').textContent : '';
+    return { bars, celda };
+  });
+  ok(coherente.celda.startsWith(String(coherente.bars)),
+     `la columna «Velas» de la fila viva va al día (estado ${coherente.bars} · celda «${coherente.celda}»)`);
 
   /* ---------------- A3) cambiar de TF cierra la posición y la registra ---------------- */
   console.log('\n▸ A3) Cambiar de temporalidad con posición abierta');
