@@ -569,6 +569,13 @@ kbd{
   background:var(--bg-4);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
   padding:1px 6px;font-family:var(--mono);font-size:11px;color:#fff;
 }
+.help-links{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:10px;}
+.help-links li{font-size:11.5px;line-height:1.55;color:var(--tx-3);border-left:2px solid var(--line);padding-left:10px;}
+.help-links a{color:var(--accent);text-decoration:none;}
+.help-links a:hover{text-decoration:underline;}
+.help-links a b{color:var(--tx-1);}
+.help-link-note{display:block;margin-top:3px;color:var(--tx-4);font-size:10.5px;}
+.help-link-note a{color:var(--accent);}
 /* ==== css/responsive.css ==== */
 @media (max-width:1000px){
   #workspace{grid-template-columns:1fr !important;}
@@ -1398,6 +1405,23 @@ kbd{
         <li>Todo el cálculo de indicadores y de PnL es propio, en JavaScript, sin librerías externas (solo Lightweight Charts para el render).</li>
         <li>Todas las marcas de tiempo se manejan en <b>UTC</b>. La ejecución de SL/TP dentro de una vela se simula de forma pesimista por defecto.</li>
         <li>En modo sin conexión usa el botón <b>Demo</b> (datos sintéticos) o importa un CSV propio.</li>
+      </ul>
+
+      <h4>Proyectos relacionados</h4>
+      <ul class="help-links">
+        <li>
+          <a href="https://luisnav83-hash.github.io/openmarket-chart/" target="_blank" rel="noopener noreferrer">
+            <b>OpenMarket Chart</b> — clon del terminal de <code>openmarket.xyz</code> en React + Vite
+          </a>
+          <span class="help-link-note">Mismo enfoque (terminal propio, sin librerías pesadas) aplicado a la
+            fidelidad de interfaz: layout medido del original, gráfico real con indicadores calculados a mano
+            y paneles de flujo de mercado. <a href="https://github.com/luisnav83-hash/openmarket-chart" target="_blank" rel="noopener noreferrer">Código en GitHub</a>.</span>
+        </li>
+        <li>
+          <a href="https://github.com/luisnav83-hash/bar-replay-pro" target="_blank" rel="noopener noreferrer">
+            <b>Bar Replay Pro</b> — este proyecto: código, documento de publicación y capturas
+          </a>
+        </li>
       </ul>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>

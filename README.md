@@ -167,6 +167,16 @@ dependencias pesadas— y la **comparación visual medida** contra la referencia
 Bar Replay Pro aporta el replay vela a vela y la operativa simulada, el clon aporta
 la fidelidad de interfaz y los paneles de flujo de mercado.
 
+## 🔗 Enlace al proyecto hermano dentro de la app
+
+El botón **?** de la barra superior abre «Guía rápida y atajos», que termina con la
+sección **Proyectos relacionados** y un enlace directo a
+**[OpenMarket Chart](https://luisnav83-hash.github.io/openmarket-chart/)** (el clon
+del terminal de `openmarket.xyz` en React + Vite), con su código en GitHub. Los
+enlaces abren en pestaña nueva con `rel="noopener noreferrer"` y viajan también en el
+archivo único (`bar-replay-pro-unico.html`) y en la versión publicada; lo comprueba
+`tests/enlaces.test.js`.
+
 ## 🎬 Vídeo de demostración
 
 Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
@@ -272,11 +282,12 @@ node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y l
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
+node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **477 comprobaciones, 0 fallos** ✅
+Resultado actual: **493 comprobaciones, 0 fallos** ✅ · **18 suites**
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).

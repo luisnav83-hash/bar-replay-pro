@@ -77,3 +77,12 @@ kbd{
   background:var(--bg-4);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
   padding:1px 6px;font-family:var(--mono);font-size:11px;color:#fff;
 }
+
+/* --- Proyectos relacionados (modal de ayuda) --- */
+.help-links{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:10px;}
+.help-links li{font-size:11.5px;line-height:1.55;color:var(--tx-3);border-left:2px solid var(--line);padding-left:10px;}
+.help-links a{color:var(--accent);text-decoration:none;}
+.help-links a:hover{text-decoration:underline;}
+.help-links a b{color:var(--tx-1);}
+.help-link-note{display:block;margin-top:3px;color:var(--tx-4);font-size:10.5px;}
+.help-link-note a{color:var(--accent);}
