@@ -441,6 +441,23 @@
     return -1;
   };
 
+  /* ============================ PANORÁMICA ============================ */
+
+  /**
+   * Activa o desactiva el desplazamiento/zoom con el ratón.
+   * Se usa mientras se "dibuja manteniendo pulsado": así el trazo no arrastra
+   * el gráfico sin querer.
+   */
+  CM.setPanEnabled = function (on) {
+    if (!CM.main) return;
+    try {
+      CM.main.applyOptions({
+        handleScroll: { mouseWheel: !!on, pressedMouseMove: !!on, horzTouchDrag: !!on, vertTouchDrag: !!on },
+        handleScale: { mouseWheel: !!on, pinch: !!on, axisPressedMouseMove: !!on, axisDoubleClickReset: true },
+      });
+    } catch (e) { /* la librería puede no soportarlo en versiones antiguas */ }
+  };
+
   /* =========================== LÍNEAS DE POSICIÓN =========================== */
 
   /** Dibuja (o redibuja) las líneas de entrada / SL / TP / liquidación. */

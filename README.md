@@ -81,6 +81,15 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 - Selector de **rango de fechas** y de **par**: BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, MATIC.
 
 ### 8. Extras
+- **DIBUJAR MANTENIENDO PULSADO** (gesto, estilo tableta gráfica): mantén pulsado
+  ⅓ s sobre el gráfico y traza una forma; al soltar, se reconoce sola y se
+  convierte en el dibujo que parece: un trazo horizontal → soporte/resistencia,
+  vertical → línea de tiempo, diagonal → línea de tendencia, cuatro lados →
+  rectángulo/zona, un bucle → elipse, un zigzag → retroceso de Fibonacci.
+  Un **garabato** encima de un dibujo lo borra. Mientras dibujas, el gráfico no
+  se desplaza (se bloquea la panorámica). Se puede desactivar en Ajustes
+  (`gestureDraw`). El reconocimiento es geométrico (giro acumulado, cierre,
+  rectitud), sin librerías externas.
 - **PANEL DE INDICADORES con valores en vivo** (estilo terminal de trading): la
   tarjeta «📈 Paneles» lista todos los indicadores con su valor actual —Vol, SMA,
   EMA, EMA2, BB, RSI, MACD (hist/macd/señal) y ATR— y se actualiza en cada vela
@@ -193,11 +202,12 @@ node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos r
 node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin recortes
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
 node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (ciclo completo)
+node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **398 comprobaciones, 0 fallos** ✅
+Resultado actual: **410 comprobaciones, 0 fallos** ✅
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).

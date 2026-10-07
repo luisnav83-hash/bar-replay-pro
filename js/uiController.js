@@ -270,6 +270,17 @@
     });
 
     /* --- Ajustes --- */
+    // Interruptor del gesto (se aplica al instante)
+    const chkGesture = document.getElementById('setGesture');
+    if (chkGesture) {
+      chkGesture.addEventListener('change', () => {
+        DT.gesture.on = chkGesture.checked;
+        ST.setSettings({ gestureDraw: chkGesture.checked });
+        U.toast(chkGesture.checked
+          ? '✍️ Gesto activado: mantén pulsado ⅓ s y traza'
+          : 'Gesto desactivado', 'info', 2600);
+      });
+    }
     document.getElementById('btnApplySettings').addEventListener('click', () => App.applySettings());
     document.getElementById('btnHardReset').addEventListener('click', () => UI.confirmHardReset());
 
@@ -353,6 +364,8 @@
     document.getElementById('setSlFirst').value = TE.state.slFirst;
     document.getElementById('setSound').checked = !!U.sound.enabled;
     document.getElementById('setAutoReveal').checked = !!App.autoReveal;
+    const cg = document.getElementById('setGesture');
+    if (cg) cg.checked = DT.gesture.on !== false;
   };
 
   /* --------------------------------- Sesiones --------------------------------- */

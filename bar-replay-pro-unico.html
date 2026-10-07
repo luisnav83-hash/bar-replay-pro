@@ -1181,6 +1181,7 @@ kbd{
       </div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setSound" checked><span>🔊 Sonido al ejecutar órdenes</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setAutoReveal" checked><span>🔎 Auto-scroll al avanzar el replay</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setGesture" checked><span>✍️ Dibujar manteniendo pulsado (⅓ s y trazar: recta = tendencia, horizontal = soporte, rectángulo, elipse, Fibonacci; garabato = borrar)</span></label></div>
       <div class="modal-note">Los cambios de capital reinician la cuenta. La comisión se cobra al abrir y al cerrar (ida y vuelta).</div>
     </div>
     <div class="modal-foot">
@@ -2321,6 +2322,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     warmup: 150,
     sound: true,
     autoReveal: true,
+    gestureDraw: true,     // dibujar manteniendo pulsado ⅓ s
     funding: 0,
     slFirst: 'worst',
     pair: 'BTCUSDT',
@@ -3901,6 +3903,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return -1;
   };
 
+  /* ============================ PANORÁMICA ============================ */
+
+  /**
+   * Activa o desactiva el desplazamiento/zoom con el ratón.
+   * Se usa mientras se "dibuja manteniendo pulsado": así el trazo no arrastra
+   * el gráfico sin querer.
+   */
+  CM.setPanEnabled = function (on) {
+    if (!CM.main) return;
+    try {
+      CM.main.applyOptions({
+        handleScroll: { mouseWheel: !!on, pressedMouseMove: !!on, horzTouchDrag: !!on, vertTouchDrag: !!on },
+        handleScale: { mouseWheel: !!on, pinch: !!on, axisPressedMouseMove: !!on, axisDoubleClickReset: true },
+      });
+    } catch (e) { /* la librería puede no soportarlo en versiones antiguas */ }
+  };
+
   /* =========================== LÍNEAS DE POSICIÓN =========================== */
 
   /** Dibuja (o redibuja) las líneas de entrada / SL / TP / liquidación. */
@@ -4089,7 +4108,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   const TYPE_NAMES = {
     trend: 'Línea de tendencia', ray: 'Línea extendida', hline: 'Soporte/Resistencia',
     vline: 'Línea vertical', rect: 'Rectángulo / zona', channel: 'Canal paralelo',
-    fib: 'Retroceso Fibonacci', measure: 'Medición',
+    fib: 'Retroceso Fibonacci', measure: 'Medición', ellipse: 'Elipse',
   };
 
   DT.drawings = [];
@@ -4102,6 +4121,21 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   DT.draft = null;          // dibujo en curso {type, points:[...], style}
   DT.drag = null;           // {drawing, handle, startPoint...}
   DT.tradeHandles = [];     // [{id:'sl'|'tp', price, color}]
+
+  /* -------- Dibujar manteniendo pulsado (gesto) --------
+   * Mantén pulsado ⅓ s sobre el gráfico y dibuja un trazo: al soltar, el gesto
+   * se reconoce solo y se convierte en la herramienta que parece (recta →
+   * tendencia, horizontal → soporte, bucle → elipse, zigzag → Fibonacci…).
+   * Un garabato encima de un dibujo lo borra. */
+  DT.gesture = {
+    on: true,          // se puede desactivar en Ajustes
+    holdMs: 330,       // tiempo que hay que mantener pulsado
+    stroke: null,      // puntos del trazo en curso (coordenadas del lienzo)
+    timer: null,
+    start: null,       // punto inicial
+    armed: false,      // true mientras se dibuja el trazo
+    lastScreen: null,
+  };
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
   DT.onChange = null;       // callback al cambiar la lista de dibujos
 
@@ -4119,6 +4153,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     CM.main.timeScale().subscribeVisibleLogicalRangeChange(() => DT.render());
 
     // Eventos de ratón
+    DT._initGesture();          // dibujar manteniendo pulsado
     canvas.addEventListener('mousedown', DT._onDown);
     canvas.addEventListener('dblclick', DT._onDblClick);
     window.addEventListener('mousemove', DT._onMove);
@@ -4392,6 +4427,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /** Punto de anclaje opuesto al handle arrastrado (para el "anchor" del body). */
   DT._anchorOf = function () { return null; };
+  DT._ellipseHandles = function (d) { return d && d.type === 'ellipse'; };
 
   /* ============================== DIBUJOS ============================== */
 
@@ -4513,6 +4549,28 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         if (d.type === 'ray') p2 = { x: a.x + (b.x - a.x) * 40, y: a.y + (b.y - a.y) * 40 };
         return DT._distToSegment(x, y, p1, p2) <= tol;
       }
+      case 'ellipse': {
+        const [a, b] = pts;
+        if (!a || !b) break;
+        ctx.save();
+        ctx.strokeStyle = d.style.color;
+        ctx.lineWidth = d.style.width;
+        ctx.beginPath();
+        ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2,
+          Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        if (selected) DT._drawHandles(ctx, [a, b]);
+        break;
+      }
+      case 'ellipse': {
+        const [a, b] = pts;
+        if (!a || !b) return false;
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+        const rx = Math.max(1, Math.abs(b.x - a.x) / 2), ry = Math.max(1, Math.abs(b.y - a.y) / 2);
+        const k = Math.hypot((x - cx) / rx, (y - cy) / ry);
+        return Math.abs(k - 1) <= tol / Math.min(rx, ry) + 0.12;
+      }
       case 'rect': {
         const [a, b] = pts;
         if (!a || !b) return false;
@@ -4551,6 +4609,271 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return Math.hypot(px - cx, py - cy);
   };
 
+  /* ===================== DIBUJAR MANTENIENDO PULSADO ===================== */
+
+  /** Conecta los eventos del gesto. Se llama desde DT.init(). */
+  DT._initGesture = function () {
+    const wrap = document.getElementById('chartWrap');
+    if (!wrap || wrap._brpGesture) return;
+    wrap._brpGesture = true;
+
+    const usaPointer = typeof global.PointerEvent !== 'undefined';
+    const EV_DOWN = usaPointer ? 'pointerdown' : 'mousedown';
+    const EV_MOVE = usaPointer ? 'pointermove' : 'mousemove';
+    const EV_UP = usaPointer ? 'pointerup' : 'mouseup';
+
+    // El «down» se escucha en fase de captura: así nos enteramos antes de que
+    // la librería del gráfico empiece a arrastrar.
+    wrap.addEventListener(EV_DOWN, DT._gestureDown, true);
+    global.addEventListener(EV_MOVE, DT._gestureMove, true);
+    global.addEventListener(EV_UP, DT._gestureUp, true);
+  };
+
+  /** ¿Se puede empezar un gesto con este evento? */
+  DT._gesturePickable = function (e) {
+    if (!DT.gesture.on || DT.tool !== 'cursor') return false;   // solo en modo cursor
+    if (e.button !== undefined && e.button !== 0) return false; // solo botón izquierdo
+    if (e.target && e.target.closest && e.target.closest('#replayBar, #drawToolbar, .card, button, input, select')) return false;
+    return true;
+  };
+
+  DT._gestureDown = function (e) {
+    if (!DT._gesturePickable(e)) return;
+    const p = DT._localPos(e);
+    if (!DT._insideChart(p)) return;
+    const g = DT.gesture;
+    g.start = p;
+    g.stroke = null;
+    g.armed = false;
+    // Si el usuario mueve el ratón antes de tiempo, es un arrastre: se cancela.
+    g.timer = setTimeout(() => DT._gestureArm(p), g.holdMs);
+  };
+
+  /** Se cumple el tiempo de pulsación: empieza el trazo. */
+  DT._gestureArm = function (p) {
+    const g = DT.gesture;
+    if (!g.start || g.armed) return;
+    g.armed = true;
+    g.stroke = [{ x: p.x, y: p.y }];
+    g.lastScreen = p;
+    CM.setPanEnabled(false);              // que el trazo no arrastre el gráfico
+    DT._lightHint('✍️ Dibuja… (un garabato borra)');
+    DT.render();
+    if (U.playSound) U.playSound('open');
+  };
+
+  DT._gestureMove = function (e) {
+    const g = DT.gesture;
+
+    // Fase 1: esperando a que se cumpla el tiempo de pulsación
+    if (g.timer && !g.armed) {
+      const p = DT._localPos(e);
+      const d = Math.hypot(p.x - g.start.x, p.y - g.start.y);
+      if (d > 6) { clearTimeout(g.timer); g.timer = null; g.start = null; }   // es un arrastre
+      return;
+    }
+
+    // Fase 2: dibujando el trazo
+    if (!g.armed || !g.stroke) return;
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    const p = DT._localPos(e);
+    const last = g.stroke[g.stroke.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 2.5) return;   // 2,5 px: suficiente detalle
+    g.stroke.push({ x: p.x, y: p.y });
+    g.lastScreen = p;
+    DT.render();
+  };
+
+  DT._gestureUp = function (e) {
+    const g = DT.gesture;
+    if (g.timer) { clearTimeout(g.timer); g.timer = null; }
+    g.start = null;
+    if (!g.armed || !g.stroke) { DT.gesture.stroke = null; return; }
+    if (e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); }
+
+    const trazo = g.stroke;
+    g.armed = false;
+    g.stroke = null;
+    CM.setPanEnabled(true);                 // devuelve el arrastre al gráfico
+    DT._finishGesture(trazo);
+    DT.render();
+  };
+
+  /** Aviso breve en el lienzo (se borra al siguiente render con trazo vacío). */
+  DT._lightHint = function (txt) { DT._gestureHint = { txt, t: Date.now() }; };
+
+  /**
+   * Convierte el trazo en un dibujo (o borra lo que haya debajo si es un garabato).
+   * Todo el reconocimiento es geométrico y funciona con coordenadas de pantalla.
+   */
+  DT._finishGesture = function (trazo) {
+    if (!trazo || trazo.length < 2) return;
+    const r = DT.classifyStroke(trazo);
+
+    // --- Garabato: borra los dibujos que cruza ---
+    if (r.tipo === 'borrar') {
+      let n = 0;
+      DT.drawings.slice().forEach((d) => {
+        const cruza = trazo.some((p) => DT._hitBody(d, p.x, p.y, 10));
+        if (cruza) { DT.deleteDrawing(d); n++; }
+      });
+      U.toast(n ? `🧽 ${n} dibujo(s) borrado(s) con el garabato` : '🧽 Garabato: no había nada que borrar',
+        n ? 'ok' : 'info', 2200);
+      return;
+    }
+    if (!r.tipo) { U.toast('No se reconoció el trazo (prueba una recta o un rectángulo)', 'info', 2400); return; }
+
+    // --- Trazo → puntos de datos ---
+    const a = DT._dataPoint(trazo[0].x, trazo[0].y);
+    const b = DT._dataPoint(trazo[trazo.length - 1].x, trazo[trazo.length - 1].y);
+    if (!a || !b) { U.toast('El trazo se sale del gráfico', 'warn', 2000); return; }
+
+    const bbox = DT._strokeBBox(trazo);
+    let points;
+    if (r.tipo === 'hline') {
+      const centro = DT._dataPoint(bbox.cx, bbox.cy);
+      points = [centro];
+    } else if (r.tipo === 'vline') {
+      const centro = DT._dataPoint(bbox.cx, bbox.cy);
+      points = [centro];
+    } else if (r.tipo === 'rect' || r.tipo === 'ellipse') {
+      const p1 = DT._dataPoint(bbox.x1, bbox.y1);
+      const p2 = DT._dataPoint(bbox.x2, bbox.y2);
+      points = [p1, p2];
+    } else {
+      points = [a, b];                       // tendencia, rayo y Fibonacci
+    }
+    if (points.some((p) => !p)) return;
+
+    DT._addDrawing({ type: r.tipo, points, style: Object.assign({}, DT.defaultStyle) });
+    DT.setTool('cursor');
+    U.toast(`${r.icono} ${TYPE_NAMES[r.tipo]} creado con el gesto`, 'ok', 2400);
+  };
+
+  /** Caja que encierra el trazo (en coordenadas de pantalla). */
+  DT._strokeBBox = function (t) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    t.forEach((p) => {
+      x1 = Math.min(x1, p.x); x2 = Math.max(x2, p.x);
+      y1 = Math.min(y1, p.y); y2 = Math.max(y2, p.y);
+    });
+    // 12 px de margen para que el rectángulo no quede pegado al trazo
+    return { x1: x1 - 12, y1: y1 - 12, x2: x2 + 12, y2: y2 + 12, cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 };
+  };
+
+  /** ¿El punto está dentro del lienzo del gráfico? */
+  DT._insideChart = function (p) {
+    return p.x >= 0 && p.y >= 0 && p.x <= (DT.width || 800) && p.y <= (DT.height || 400);
+  };
+
+  /**
+   * RECONOCEDOR DE TRAZOS
+   * Devuelve { tipo, icono } a partir de la forma dibujada:
+   *   línea recta horizontal  → soporte/resistencia (hline)
+   *   línea recta vertical    → línea de tiempo (vline)
+   *   línea recta cualquiera  → línea de tendencia (trend)
+   *   cuatro lados que cierran→ rectángulo/zona (rect)
+   *   bucle redondo           → elipse (ellipse)
+   *   zigzag de 3 lados       → retroceso de Fibonacci (fib)
+   *   garabato con muchos giros → borrar
+   * Es un clasificador geométrico simple (sin librerías): mide cuánto se
+   * desvía el trazo de la recta, cuántos giros hace y si vuelve al inicio.
+   */
+  DT.classifyStroke = function (t) {
+    if (!t || t.length < 4) return { tipo: null };
+
+    /* ---------- 1) Métricas del trazo ---------- */
+    const first = t[0], last = t[t.length - 1];
+    let pathLen = 0;
+    for (let i = 1; i < t.length; i++) pathLen += Math.hypot(t[i].x - t[i - 1].x, t[i].y - t[i - 1].y);
+    if (pathLen < 18) return { tipo: null };                 // fue un clic, no un trazo
+
+    const bb = DT._strokeBBox(t);
+    const w = bb.x2 - bb.x1 - 24, h = bb.y2 - bb.y1 - 24;     // sin el margen añadido
+    const diag = Math.max(1, Math.hypot(w, h));
+    const directa = Math.hypot(last.x - first.x, last.y - first.y);
+    const rectitud = pathLen / Math.max(1, directa);          // 1 = recta perfecta
+    const cierre = directa / diag;                            // 0 = vuelve al inicio
+
+    /* ---------- 2) Giro acumulado ----------
+     * Sumar los ángulos (con signo) es mucho más fiable que contar «giros»:
+     *   · recta      → ≈ 0
+     *   · bucle/rect → ≈ ±2π (una vuelta completa)
+     *   · zigzag     → se compensa (ida y vuelta ≈ 0) pero suma mucho en valor
+     *     absoluto                                                        */
+    const simple = DT._simplifyStroke(t, 5);
+    let neto = 0, total = 0, maxGiro = 0;
+    for (let i = 2; i < simple.length; i++) {
+      const a1 = Math.atan2(simple[i - 1].y - simple[i - 2].y, simple[i - 1].x - simple[i - 2].x);
+      const a2 = Math.atan2(simple[i].y - simple[i - 1].y, simple[i].x - simple[i - 1].x);
+      let d = a2 - a1;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      neto += d;
+      total += Math.abs(d);
+      maxGiro = Math.max(maxGiro, Math.abs(d));
+    }
+    const vuelta = Math.abs(neto);          // ≈ 2π si el trazo da una vuelta
+    const esquinas = DT._countSharp(simple, 1.1);   // giros de más de 63°
+
+    /* ---------- 3) Clasificación ---------- */
+
+    // a) Línea recta (cualquier orientación)
+    if (rectitud < 1.22 && total < 0.9) {
+      const dx = Math.abs(last.x - first.x), dy = Math.abs(last.y - first.y);
+      if (dx > 34 && dy < Math.max(7, dx * 0.22)) return { tipo: 'hline', icono: '➖' };
+      if (dy > 34 && dx < Math.max(7, dy * 0.22)) return { tipo: 'vline', icono: '｜' };
+      return { tipo: 'trend', icono: '📐' };
+    }
+
+    // b) Trazo que da una vuelta completa → figura cerrada
+    if (vuelta > 4.6 && cierre < 0.62) {
+      // Con esquinas marcadas es un rectángulo; si gira suave, un óvalo
+      if (esquinas >= 3 && maxGiro > 1.1) return { tipo: 'rect', icono: '▭' };
+      return { tipo: 'ellipse', icono: '◯' };
+    }
+
+    // c) Garabato: va y viene sin parar → borra
+    if (total > 7.5 || (total > 5.2 && rectitud > 2.4)) return { tipo: 'borrar', icono: '🧽' };
+
+    // d) Zigzag (tres tramos) → retroceso de Fibonacci
+    if (total > 2.4 && cierre > 0.42 && rectitud > 1.2) return { tipo: 'fib', icono: '🌀' };
+
+    // e) Rectángulo imperfecto: recto y con esquinas
+    if (esquinas >= 3 && cierre < 0.6 && rectitud > 1.5 && w > 26 && h > 20) return { tipo: 'rect', icono: '▭' };
+
+    // f) Trazo curvo amplio (arco) → tendencia
+    if (rectitud < 2.6) return { tipo: 'trend', icono: '📐' };
+
+    return { tipo: null };
+  };
+
+  /** Cuenta los giros fuertes (más de `umbral` radianes) del trazo. */
+  DT._countSharp = function (simple, umbral) {
+    let n = 0;
+    for (let i = 2; i < simple.length; i++) {
+      const a1 = Math.atan2(simple[i - 1].y - simple[i - 2].y, simple[i - 1].x - simple[i - 2].x);
+      const a2 = Math.atan2(simple[i].y - simple[i - 1].y, simple[i].x - simple[i - 1].x);
+      let d = a2 - a1;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      if (Math.abs(d) > umbral) n++;
+    }
+    return n;
+  };
+
+  /** Reduce el trazo a sus vértices (distancia mínima entre puntos). */
+  DT._simplifyStroke = function (t, minDist) {
+    const out = [t[0]];
+    for (let i = 1; i < t.length; i++) {
+      const p = out[out.length - 1];
+      if (Math.hypot(t[i].x - p.x, t[i].y - p.y) >= minDist) out.push(t[i]);
+    }
+    if (out[out.length - 1] !== t[t.length - 1]) out.push(t[t.length - 1]);
+    return out;
+  };
+
   /* ================================ RENDER ================================ */
 
   DT.render = function () {
@@ -4560,6 +4883,34 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     // Todos los dibujos
     DT.drawings.forEach((d) => DT._draw(ctx, d, d === DT.selected));
+
+    // Trazo del gesto «mantener pulsado y dibujar»
+    if (DT.gesture.stroke && DT.gesture.stroke.length > 1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,229,255,.9)';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.shadowColor = 'rgba(0,229,255,.45)';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      DT.gesture.stroke.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.restore();
+      // Pista de qué hacer al soltar
+      const aviso = 'Suelta para fijar el dibujo · garabato encima = borrar';
+      ctx.save();
+      ctx.font = '10.5px ui-monospace, monospace';
+      const w = ctx.measureText(aviso).width + 14;
+      const x = Math.max(8, (DT.width || 800) / 2 - w / 2), y = 26;
+      ctx.fillStyle = 'rgba(0,229,255,.14)';
+      ctx.strokeStyle = 'rgba(0,229,255,.5)';
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y - 15, w, 19, 4); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = '#9fe9ff';
+      ctx.fillText(aviso, x + 7, y - 2);
+      ctx.restore();
+    }
 
     // Borrador en curso
     if (DT.draft) {
@@ -5113,6 +5464,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     });
 
     /* --- Ajustes --- */
+    // Interruptor del gesto (se aplica al instante)
+    const chkGesture = document.getElementById('setGesture');
+    if (chkGesture) {
+      chkGesture.addEventListener('change', () => {
+        DT.gesture.on = chkGesture.checked;
+        ST.setSettings({ gestureDraw: chkGesture.checked });
+        U.toast(chkGesture.checked
+          ? '✍️ Gesto activado: mantén pulsado ⅓ s y traza'
+          : 'Gesto desactivado', 'info', 2600);
+      });
+    }
     document.getElementById('btnApplySettings').addEventListener('click', () => App.applySettings());
     document.getElementById('btnHardReset').addEventListener('click', () => UI.confirmHardReset());
 
@@ -5196,6 +5558,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.getElementById('setSlFirst').value = TE.state.slFirst;
     document.getElementById('setSound').checked = !!U.sound.enabled;
     document.getElementById('setAutoReveal').checked = !!App.autoReveal;
+    const cg = document.getElementById('setGesture');
+    if (cg) cg.checked = DT.gesture.on !== false;
   };
 
   /* --------------------------------- Sesiones --------------------------------- */
@@ -5869,6 +6233,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
+    DT.gesture.on = s.gestureDraw !== false;      // dibujar manteniendo pulsado
     U.sound.enabled = s.sound;
 
     document.getElementById('pairSelect').value = App.pair;

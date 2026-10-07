@@ -120,6 +120,7 @@
     warmup: 150,
     sound: true,
     autoReveal: true,
+    gestureDraw: true,     // dibujar manteniendo pulsado ⅓ s
     funding: 0,
     slFirst: 'worst',
     pair: 'BTCUSDT',

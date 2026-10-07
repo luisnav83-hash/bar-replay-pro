@@ -59,6 +59,7 @@
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
+    DT.gesture.on = s.gestureDraw !== false;      // dibujar manteniendo pulsado
     U.sound.enabled = s.sound;
 
     document.getElementById('pairSelect').value = App.pair;
