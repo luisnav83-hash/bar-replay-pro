@@ -25,7 +25,8 @@
     "test:gesto": "node tests/gesto.test.js",
     "test:simbolos": "node tests/simbolos.test.js",
     "test:pages": "node tests/pages-buscador.js",
-    "test:dibujos": "node tests/dibujos.test.js"
+    "test:dibujos": "node tests/dibujos.test.js",
+    "test:pages-dibujos": "node tests/pages-dibujos.js"
   },
   "keywords": [
     "backtesting",

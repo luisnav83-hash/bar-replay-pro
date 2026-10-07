@@ -242,11 +242,12 @@ node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza co
 node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
+node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **467 comprobaciones, 0 fallos** ✅
+Resultado actual: **477 comprobaciones, 0 fallos** ✅
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
