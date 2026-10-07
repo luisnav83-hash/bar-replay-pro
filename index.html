@@ -322,6 +322,32 @@
         <span class="tag tag-muted" id="tagPrice">—</span>
       </div>
       <div class="card-body">
+        <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
+          <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
+          <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+        </div>
+
+        <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
+        <div id="limitRow" style="display:none">
+          <label class="field full">
+            <span class="field-label">Precio límite</span>
+            <span class="input-row">
+              <input type="number" id="limitInput" step="any" placeholder="ej. 64000">
+              <span class="suffix">USD</span>
+            </span>
+          </label>
+          <div class="quick-row" id="quickLimit">
+            <button class="chip" data-limpct="-2">−2%</button>
+            <button class="chip" data-limpct="-1">−1%</button>
+            <button class="chip" data-limpct="-0.5">−0,5%</button>
+            <button class="chip" data-limpct="actual">= precio</button>
+            <button class="chip" data-limpct="0.5">+0,5%</button>
+            <button class="chip" data-limpct="1">+1%</button>
+            <button class="chip" data-limpct="2">+2%</button>
+          </div>
+          <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
+        </div>
+
         <div class="seg" id="segSize">
           <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
           <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
@@ -389,6 +415,19 @@
         <button class="btn btn-ghost full" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">✖ CERRAR POSICIÓN (Esc)</button>
 
         <div class="hint" id="orderHint">Sin posición abierta.</div>
+      </div>
+    </div>
+
+    <!-- ÓRDENES LÍMITE PENDIENTES -->
+    <div class="card" id="pendingCard">
+      <div class="card-head"><span class="card-title">⏳ Órdenes pendientes</span>
+        <span class="tag" id="pendingCount">0</span>
+        <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
+      </div>
+      <div class="card-body">
+        <div id="pendingList" class="pending-list">
+          <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
+        </div>
       </div>
     </div>
 

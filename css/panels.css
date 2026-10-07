@@ -77,3 +77,32 @@
   #sidebar{width:auto;}
   .stat-grid{gap:5px;}
 }
+
+/* ======================= ÓRDENES LÍMITE PENDIENTES ======================= */
+/* Tarjeta «⏳ Órdenes pendientes»: lista de órdenes en espera. Cuando hay
+   alguna, el borde se ilumina en ámbar para que no se olvide que están vivas. */
+#pendingCard.has-orders{border-color:rgba(255,171,0,.45);box-shadow:0 0 0 1px rgba(255,171,0,.12) inset;}
+#pendingCard .card-head{gap:6px;}
+#pendingCard #pendingCount{background:rgba(255,171,0,.16);color:#ffc857;border:1px solid rgba(255,171,0,.35);}
+.pending-list{display:flex;flex-direction:column;gap:7px;max-height:216px;overflow-y:auto;}
+.pending-item{
+  border:1px solid rgba(255,171,0,.28);border-left-width:3px;border-radius:7px;
+  background:rgba(255,171,0,.06);padding:7px 9px;font-size:11px;line-height:1.4;
+}
+.pending-item.long{border-left-color:var(--up);}
+.pending-item.short{border-left-color:var(--down);}
+.pi-head{display:flex;align-items:center;gap:7px;}
+.pi-side{font-weight:700;font-size:10px;letter-spacing:.3px;color:#dfe3f5;}
+.pending-item.long .pi-side{color:var(--up);}
+.pending-item.short .pi-side{color:var(--down);}
+.pi-price{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#ffd479;flex:1;}
+.pi-cancel{
+  border:1px solid rgba(255,107,129,.45);background:rgba(255,23,68,.12);color:#ff8a9c;
+  width:19px;height:19px;border-radius:5px;font-size:10px;line-height:1;cursor:pointer;padding:0;
+}
+.pi-cancel:hover{background:rgba(255,23,68,.28);color:#fff;}
+.pi-sub{color:var(--text-dim);font-size:10px;margin-top:2px;}
+.pi-eta{color:#ffc857;font-size:10px;margin-top:3px;}
+/* Pista del precio límite: verde si es un nivel válido, ámbar si se cruza */
+.hint.ok{color:var(--up);}
+.hint.warn{color:var(--warn);}

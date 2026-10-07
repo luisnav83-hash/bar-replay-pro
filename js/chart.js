@@ -21,6 +21,7 @@
     text: '#7d81a8', crosshair: '#5d628f',
     up: '#00c853', down: '#ff1744',
     entry: '#2979ff', sl: '#ff1744', tp: '#00e5ff', liq: '#ff9100',
+    limit: '#ffab00',   // órdenes límite pendientes (ámbar punteado)
   };
 
   /**
@@ -460,6 +461,31 @@
     const liq = TE.liquidationPrice(pos);
     if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, 'LIQ ≈ ' + U.fmtPrice(liq), 1);
   };
+
+  /**
+   * Dibuja las líneas de las ÓRDENES LÍMITE pendientes: discontinuas, en color
+   * ámbar y con etiqueta «LÍMITE LONG 64.000,00» para no confundirlas con las
+   * líneas de una posición (entrada azul, SL rojo, TP cian).
+   */
+  CM.setPendingLines = function (ordenes) {
+    (CM._pendingLines || []).forEach((l) => { try { CM.series.candles.removePriceLine(l); } catch (e) {} });
+    CM._pendingLines = [];
+    if (!ordenes || !ordenes.length) return;
+    ordenes.forEach((o, i) => {
+      const etiqueta = `⏳ LÍMITE ${o.side === 'long' ? 'LONG' : 'SHORT'} ${U.fmtPrice(o.limitPrice)}`;
+      const line = CM.series.candles.createPriceLine({
+        price: o.limitPrice,
+        color: COLORS.limit || '#ffab00',
+        lineWidth: 1,
+        lineStyle: 1,                 // 1 = punteada
+        axisLabelVisible: true,
+        title: i === 0 ? etiqueta : '⏳ ' + U.fmtPrice(o.limitPrice),
+      });
+      CM._pendingLines.push(line);
+    });
+  };
+
+  CM.clearPendingLines = function () { CM.setPendingLines([]); };
 
   CM.updatePositionLines = function (pos) {
     // Rehace las líneas (son solo 3-4 objetos: coste despreciable)

@@ -373,6 +373,30 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
   #sidebar{width:auto;}
   .stat-grid{gap:5px;}
 }
+#pendingCard.has-orders{border-color:rgba(255,171,0,.45);box-shadow:0 0 0 1px rgba(255,171,0,.12) inset;}
+#pendingCard .card-head{gap:6px;}
+#pendingCard #pendingCount{background:rgba(255,171,0,.16);color:#ffc857;border:1px solid rgba(255,171,0,.35);}
+.pending-list{display:flex;flex-direction:column;gap:7px;max-height:216px;overflow-y:auto;}
+.pending-item{
+  border:1px solid rgba(255,171,0,.28);border-left-width:3px;border-radius:7px;
+  background:rgba(255,171,0,.06);padding:7px 9px;font-size:11px;line-height:1.4;
+}
+.pending-item.long{border-left-color:var(--up);}
+.pending-item.short{border-left-color:var(--down);}
+.pi-head{display:flex;align-items:center;gap:7px;}
+.pi-side{font-weight:700;font-size:10px;letter-spacing:.3px;color:#dfe3f5;}
+.pending-item.long .pi-side{color:var(--up);}
+.pending-item.short .pi-side{color:var(--down);}
+.pi-price{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#ffd479;flex:1;}
+.pi-cancel{
+  border:1px solid rgba(255,107,129,.45);background:rgba(255,23,68,.12);color:#ff8a9c;
+  width:19px;height:19px;border-radius:5px;font-size:10px;line-height:1;cursor:pointer;padding:0;
+}
+.pi-cancel:hover{background:rgba(255,23,68,.28);color:#fff;}
+.pi-sub{color:var(--text-dim);font-size:10px;margin-top:2px;}
+.pi-eta{color:#ffc857;font-size:10px;margin-top:3px;}
+.hint.ok{color:var(--up);}
+.hint.warn{color:var(--warn);}
 /* ==== css/modals.css ==== */
 .modal{
   position:fixed;inset:0;z-index:200;display:none;
@@ -823,6 +847,32 @@ kbd{
         <span class="tag tag-muted" id="tagPrice">—</span>
       </div>
       <div class="card-body">
+        <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
+          <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
+          <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+        </div>
+
+        <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
+        <div id="limitRow" style="display:none">
+          <label class="field full">
+            <span class="field-label">Precio límite</span>
+            <span class="input-row">
+              <input type="number" id="limitInput" step="any" placeholder="ej. 64000">
+              <span class="suffix">USD</span>
+            </span>
+          </label>
+          <div class="quick-row" id="quickLimit">
+            <button class="chip" data-limpct="-2">−2%</button>
+            <button class="chip" data-limpct="-1">−1%</button>
+            <button class="chip" data-limpct="-0.5">−0,5%</button>
+            <button class="chip" data-limpct="actual">= precio</button>
+            <button class="chip" data-limpct="0.5">+0,5%</button>
+            <button class="chip" data-limpct="1">+1%</button>
+            <button class="chip" data-limpct="2">+2%</button>
+          </div>
+          <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
+        </div>
+
         <div class="seg" id="segSize">
           <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
           <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
@@ -890,6 +940,19 @@ kbd{
         <button class="btn btn-ghost full" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">✖ CERRAR POSICIÓN (Esc)</button>
 
         <div class="hint" id="orderHint">Sin posición abierta.</div>
+      </div>
+    </div>
+
+    <!-- ÓRDENES LÍMITE PENDIENTES -->
+    <div class="card" id="pendingCard">
+      <div class="card-head"><span class="card-title">⏳ Órdenes pendientes</span>
+        <span class="tag" id="pendingCount">0</span>
+        <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
+      </div>
+      <div class="card-body">
+        <div id="pendingList" class="pending-list">
+          <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
+        </div>
       </div>
     </div>
 
@@ -2419,7 +2482,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
  * tradingEngine.js — Motor de trading simulado.
  *
  *  · Cuenta con balance, equity, margen y comisiones.
- *  · Órdenes a mercado (LONG/SHORT) con tamaño en %, USD o cantidad.
+ *  · Órdenes a MERCADO (LONG/SHORT) con tamaño en %, USD o cantidad.
+ *  · ÓRDENES LÍMITE pendientes: se ejecutan cuando el precio entra en el
+ *    nivel indicado, vela a vela, durante el replay (y se pueden cancelar).
  *  · Apalancamiento, precio de liquidación estimado.
  *  · SL / TP automáticos evaluados vela a vela por el Bar Replay.
  *  · PnL en tiempo real sobre la última vela mostrada.
@@ -2446,6 +2511,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     fundingPct: 0,           // % por vela sobre el notional (opcional)
     slFirst: 'worst',        // 'worst' | 'best'
     position: null,          // posición abierta
+    pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
@@ -2472,6 +2538,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     s.balance = s.initialCapital;
     s.equity = s.initialCapital;
     s.position = null;
+    s.pending = [];
     s.trades = [];
     s.equitySeries = [];
     s.feesPaid = 0;
@@ -2586,12 +2653,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       mfe: 0, mae: 0,      // excursión favorable/adversa máxima
       bars: 0,
       initialSl: sl, initialTp: tp,
+      origin: params.origin || 'market',   // 'market' (a mercado) | 'limite'
+      limitPrice: params.limitPrice !== undefined ? params.limitPrice : null,
     };
     s.position = position;
     s.trades.push(position);
 
     U.playSound('open');
-    U.log(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto @ ${U.fmtPrice(entryPrice)} · ` +
+    U.log(`${params.origin === 'limite' ? '⏳→✅ ' : ''}${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto @ ${U.fmtPrice(entryPrice)} · ` +
           `tamaño ${U.num(qty, 6)} (${U.fmtMoney(notional)}) · ${leverage}x · ` +
           `SL ${sl ? U.fmtPrice(sl) : '—'} · TP ${tp ? U.fmtPrice(tp) : '—'} · ` +
           `comisión ${U.fmtMoney(fee)}`, side === 'long' ? 'ok' : 'bad');
@@ -2708,6 +2777,158 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ----------------------------- Replay hooks ----------------------------- */
 
+  /* ======================= ÓRDENES LÍMITE PENDIENTES ======================= */
+
+  /**
+   * Coloca una ORDEN LÍMITE: no se ejecuta ahora, queda en espera hasta que el
+   * precio del replay entre en el nivel indicado.
+   *
+   * Criterio de colocación (como en un exchange real):
+   *   · COMPRA (LONG)  límite: se coloca POR DEBAJO del precio actual
+   *                            («compra más barato en un retroceso»).
+   *   · VENTA  (SHORT) límite: se coloca POR ENCIMA del precio actual
+   *                            («vende más caro en un rebote»).
+   * Si el nivel está al otro lado (se cruzaría al instante), la orden se
+   * ejecuta YA a precio de mercado, igual que haría un exchange, y se avisa.
+   *
+   * @param {'long'|'short'} side
+   * @param {object} params { limitPrice, mode, size, sl, tp, leverage, feePct, time }
+   * @returns {object|null} la orden creada (o null si se ejecutó al instante por error)
+   */
+  TE.placeLimit = function (side, params) {
+    const s = TE.state;
+    const limitPrice = +params.limitPrice;
+    if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+      U.toast('Precio límite no válido', 'err'); return null;
+    }
+    const ref = +params.refPrice || s.lastPrice;
+    if (!ref) { U.toast('No hay precio de referencia todavía', 'err'); return null; }
+
+    // ¿El nivel se cruzaría inmediatamente?
+    const inmediata = side === 'long' ? limitPrice >= ref : limitPrice <= ref;
+    if (inmediata) {
+      U.log(`⚡ El límite ${U.fmtPrice(limitPrice)} está al otro lado del precio ` +
+            `(${U.fmtPrice(ref)}): se ejecuta a mercado, como en un exchange.`, 'warn');
+      const pos = TE.openPosition(side, Object.assign({}, params, {
+        entryPrice: ref, origin: 'market',
+      }));
+      if (pos) U.toast('Tu límite se cruzaba con el precio: se ejecutó a mercado', 'warn', 3800);
+      return pos ? { orden: null, ejecutada: pos } : null;
+    }
+
+    const orden = {
+      id: ++s.seq,
+      tipo: 'limite',
+      side,
+      limitPrice,
+      mode: params.mode || 'pct',
+      size: +params.size || 0,
+      leverage: Math.max(1, +(params.leverage || s.leverage || 1)),
+      feePct: params.feePct !== undefined ? +params.feePct : s.feePct,
+      sl: Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null,
+      tp: Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null,
+      creada: params.time || s.lastTime,
+      refPrice: ref,
+      estado: 'pendiente',
+    };
+
+    // Distancia al nivel, para mostrarla en el panel
+    orden.distPct = ((limitPrice - ref) / ref) * 100;
+
+    s.pending.push(orden);
+    U.playSound('open');
+    U.log(`⏳ Orden LÍMITE ${side === 'long' ? 'de COMPRA (LONG)' : 'de VENTA (SHORT)'} a ` +
+          `${U.fmtPrice(limitPrice)} (${U.num(orden.distPct, 2)}% del precio actual) · ` +
+          `tamaño ${orden.size} ${orden.mode === 'pct' ? '%' : orden.mode === 'qty' ? 'uds' : 'USD'}` +
+          `${orden.sl ? ' · SL ' + U.fmtPrice(orden.sl) : ''}` +
+          `${orden.tp ? ' · TP ' + U.fmtPrice(orden.tp) : ''}`, 'sys');
+    TE._emit();
+    return orden;
+  };
+
+  /** Cancela una orden pendiente por su id. */
+  TE.cancelOrder = function (id) {
+    const s = TE.state;
+    const i = s.pending.findIndex((o) => o.id === id);
+    if (i < 0) { U.toast('Esa orden ya no está pendiente', 'warn', 1800); return false; }
+    const [o] = s.pending.splice(i, 1);
+    U.log(`🚫 Orden límite cancelada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(o.limitPrice)}`, 'warn');
+    U.playSound('close');
+    TE._emit();
+    return true;
+  };
+
+  /** Cancela todas las órdenes pendientes. */
+  TE.cancelAllOrders = function () {
+    const n = TE.state.pending.length;
+    if (!n) { U.toast('No hay órdenes pendientes', 'warn', 1500); return 0; }
+    TE.state.pending = [];
+    U.log(`🚫 ${n} orden(es) límite cancelada(s)`, 'warn');
+    TE._emit();
+    return n;
+  };
+
+  /** Número de órdenes pendientes. */
+  TE.pendingCount = function () { return TE.state.pending.length; };
+
+  /**
+   * Precio de ejecución de una orden límite dentro de una vela:
+   *  · Si la vela abrió MEJOR que el nivel (hueco a favor) → se ejecuta a la
+   *    apertura, que es un precio aún mejor para el operador.
+   *  · En cualquier otro caso → se ejecuta exactamente en el nivel.
+   * (Un límite nunca se ejecuta peor que su precio, por definición.)
+   */
+  TE._fillLimit = function (candle, level, side) {
+    if (side === 'long') return candle.open <= level ? candle.open : level;
+    return candle.open >= level ? candle.open : level;
+  };
+
+  /**
+   * Recorre las órdenes pendientes y ejecuta las que el precio ha alcanzado
+   * durante esta vela. Las que no caben por margen se cancelan con aviso.
+   * @returns {Array} posiciones abiertas en esta vela
+   */
+  TE._checkPending = function (candle) {
+    const s = TE.state;
+    if (!s.pending.length) return [];
+    const abiertas = [];
+    for (let i = s.pending.length - 1; i >= 0; i--) {
+      const o = s.pending[i];
+      if (s.position) break;   // con una posición abierta las órdenes esperan
+      const alcanzada = o.side === 'long' ? candle.low <= o.limitPrice : candle.high >= o.limitPrice;
+      if (!alcanzada) continue;
+
+      const precio = TE._fillLimit(candle, o.limitPrice, o.side);
+      const pos = TE.openPosition(o.side, {
+        mode: o.mode, size: o.size, entryPrice: precio,
+        sl: o.sl, tp: o.tp, leverage: o.leverage, feePct: o.feePct,
+        time: candle.time, origin: 'limite', limitPrice: o.limitPrice,
+      });
+
+      if (!pos) {
+        // Sin margen suficiente: la orden se retira (como un rechazo del bróker)
+        s.pending.splice(i, 1);
+        U.log(`🚫 Orden límite ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(o.limitPrice)} ` +
+              `cancelada: no hay margen suficiente`, 'bad');
+        U.toast('Se canceló una orden límite por margen insuficiente', 'err', 4200);
+        continue;
+      }
+
+      // Marca de «ejecutada en esta vela»: el SL/TP de esta misma vela no se
+      // evalúa (con solo OHLC no sabemos si se tocó antes o después del fill).
+      pos.filledAtTime = candle.time;
+      pos.limitPrice = o.limitPrice;
+      s.pending.splice(i, 1);
+      abiertas.push(pos);
+
+      if (TE.onFill) TE.onFill(pos, o);
+      U.log(`✅ Orden LÍMITE ejecutada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(precio)}` +
+            `${precio !== o.limitPrice ? ` (límite ${U.fmtPrice(o.limitPrice)}, hueco a favor)` : ''}`, 'ok');
+      U.toast(`✅ Orden límite ejecutada a ${U.fmtPrice(precio)}`, 'ok', 3000);
+    }
+    return abiertas;
+  };
+
   /**
    * Llamado por el Bar Replay cada vez que se "cierra" una vela nueva
    * (avance). Evalúa liquidación, SL y TP, y actualiza estadísticas.
@@ -2719,9 +2940,21 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     s.lastPrice = candle.close;
     s.lastTime = candle.time;
 
+    // --- 0) ÓRDENES LÍMITE: se comprueban antes que la posición, porque si el
+    //        precio entra en el nivel la orden se ejecuta DENTRO de esta vela.
+    TE._checkPending(candle);
+
     const p = s.position;
     if (p) {
       p.bars++;
+
+      // Una posición recién ejecutada por un límite no se evalúa en su misma
+      // vela: ignoramos el orden real de los precios dentro de ella.
+      if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
+        TE.updateEquity(candle.close, candle.time);
+        TE._emit();
+        return null;
+      }
 
       // Excursiones máximas durante la vela
       const dir = p.side === 'long' ? 1 : -1;
@@ -2841,6 +3074,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     } else {
       s.position = null;
     }
+    // Las órdenes límite pendientes también vuelven a su estado de ese momento
+    s.pending = cp.pending ? JSON.parse(JSON.stringify(cp.pending)) : [];
     TE._emit();
   };
 
@@ -2879,6 +3114,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         seq: TE.state.seq,
       },
       position: TE.state.position,
+      pending: TE.state.pending,
       trades: TE.state.trades,
       equitySeries: TE.state.equitySeries.slice(-5000),
     };
@@ -2888,6 +3124,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!data) return;
     Object.assign(TE.state, data.state || {});
     TE.state.position = data.position || null;
+    TE.state.pending = data.pending || [];
     TE.state.trades = data.trades || [];
     TE.state.equitySeries = data.equitySeries || [];
     TE._emit();
@@ -3205,6 +3442,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     text: '#7d81a8', crosshair: '#5d628f',
     up: '#00c853', down: '#ff1744',
     entry: '#2979ff', sl: '#ff1744', tp: '#00e5ff', liq: '#ff9100',
+    limit: '#ffab00',   // órdenes límite pendientes (ámbar punteado)
   };
 
   /**
@@ -3644,6 +3882,31 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const liq = TE.liquidationPrice(pos);
     if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, 'LIQ ≈ ' + U.fmtPrice(liq), 1);
   };
+
+  /**
+   * Dibuja las líneas de las ÓRDENES LÍMITE pendientes: discontinuas, en color
+   * ámbar y con etiqueta «LÍMITE LONG 64.000,00» para no confundirlas con las
+   * líneas de una posición (entrada azul, SL rojo, TP cian).
+   */
+  CM.setPendingLines = function (ordenes) {
+    (CM._pendingLines || []).forEach((l) => { try { CM.series.candles.removePriceLine(l); } catch (e) {} });
+    CM._pendingLines = [];
+    if (!ordenes || !ordenes.length) return;
+    ordenes.forEach((o, i) => {
+      const etiqueta = `⏳ LÍMITE ${o.side === 'long' ? 'LONG' : 'SHORT'} ${U.fmtPrice(o.limitPrice)}`;
+      const line = CM.series.candles.createPriceLine({
+        price: o.limitPrice,
+        color: COLORS.limit || '#ffab00',
+        lineWidth: 1,
+        lineStyle: 1,                 // 1 = punteada
+        axisLabelVisible: true,
+        title: i === 0 ? etiqueta : '⏳ ' + U.fmtPrice(o.limitPrice),
+      });
+      CM._pendingLines.push(line);
+    });
+  };
+
+  CM.clearPendingLines = function () { CM.setPendingLines([]); };
 
   CM.updatePositionLines = function (pos) {
     // Rehace las líneas (son solo 3-4 objetos: coste despreciable)
@@ -4730,6 +4993,27 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     document.getElementById('btnLong').addEventListener('click', () => App.placeOrder('long'));
     document.getElementById('btnShort').addEventListener('click', () => App.placeOrder('short'));
+
+    /* ---- Tipo de orden: ⚡ Mercado / ⏳ Límite ---- */
+    document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
+      b.addEventListener('click', () => UI.setOrderType(b.dataset.otype));
+    });
+    // Atajos rápidos de precio límite (% respecto al precio actual)
+    document.querySelectorAll('#quickLimit .chip').forEach((c) => {
+      c.addEventListener('click', () => {
+        const ref = App.currentPrice();
+        if (!ref) { U.toast('Carga datos antes de fijar el precio límite', 'warn'); return; }
+        const v = c.dataset.limpct;
+        const precio = v === 'actual' ? ref : ref * (1 + parseFloat(v) / 100);
+        document.getElementById('limitInput').value = precio.toFixed(2);
+        UI.updateLimitHint();
+      });
+    });
+    ['limitInput', 'slInput', 'tpInput'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', UI.updateLimitHint);
+    });
+    document.getElementById('btnCancelOrders').addEventListener('click', () => App.cancelAllOrders());
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
   };
@@ -4896,6 +5180,95 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }).join('');
   };
 
+  /* ============================ ÓRDENES LÍMITE ============================ */
+
+  /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
+  UI.setOrderType = function (tipo) {
+    App.orderType = tipo === 'limite' ? 'limite' : 'market';
+    document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.otype === App.orderType);
+    });
+    const esLimite = App.orderType === 'limite';
+    document.getElementById('limitRow').style.display = esLimite ? '' : 'none';
+    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR LÍMITE' : '▲ COMPRAR / LONG';
+    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER LÍMITE' : '▼ VENDER / SHORT';
+    if (esLimite) {
+      const el = document.getElementById('limitInput');
+      if (el && !parseFloat(el.value)) {
+        const ref = App.currentPrice();
+        if (ref) el.value = (ref * 0.995).toFixed(2);
+      }
+      UI.updateLimitHint();
+    }
+  };
+
+  /** Explica si el nivel elegido es de compra, de venta o se cruzaría. */
+  UI.updateLimitHint = function () {
+    const el = document.getElementById('limitInput');
+    const hint = document.getElementById('limitHint');
+    if (!el || !hint) return;
+    const ref = App.currentPrice();
+    const v = parseFloat(el.value);
+    if (!ref || !Number.isFinite(v) || v <= 0) {
+      hint.textContent = 'Elige un nivel por debajo del precio para comprar, o por encima para vender.';
+      hint.className = 'hint';
+      return;
+    }
+    const pct = ((v - ref) / ref) * 100;
+    if (v < ref) {
+      hint.textContent = `Nivel ${U.num(Math.abs(pct), 2)}% por debajo del precio (${U.fmtPrice(ref)}): orden de COMPRA (LONG) en un retroceso.`;
+      hint.className = 'hint ok';
+    } else if (v > ref) {
+      hint.textContent = `Nivel ${U.num(pct, 2)}% por encima del precio (${U.fmtPrice(ref)}): orden de VENTA (SHORT) en un rebote.`;
+      hint.className = 'hint ok';
+    } else {
+      hint.textContent = 'El nivel coincide con el precio actual: se ejecutará al instante a mercado.';
+      hint.className = 'hint warn';
+    }
+  };
+
+  /** Pinta la lista de órdenes límite pendientes (con botón de cancelar). */
+  UI.renderPending = function () {
+    const cont = document.getElementById('pendingList');
+    const tag = document.getElementById('pendingCount');
+    if (!cont) return;
+    const ordenes = (TE.state.pending || []);
+    if (tag) tag.textContent = String(ordenes.length);
+    const card = document.getElementById('pendingCard');
+    if (card) card.classList.toggle('has-orders', ordenes.length > 0);
+
+    if (!ordenes.length) {
+      cont.innerHTML = '<div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar ' +
+        'una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>';
+      return;
+    }
+
+    const ref = App.currentPrice();
+    cont.innerHTML = ordenes.map((o) => {
+      const dist = ref ? ((o.limitPrice - ref) / ref) * 100 : null;
+      const eta = dist === null ? '' :
+        (o.side === 'long'
+          ? (dist < 0 ? `faltan ${U.num(Math.abs(dist), 2)}% a la baja (${U.fmtPrice(ref - o.limitPrice)} USD)` : 'se ejecutará en la próxima vela')
+          : (dist > 0 ? `faltan ${U.num(dist, 2)}% al alza (${U.fmtPrice(o.limitPrice - ref)} USD)` : 'se ejecutará en la próxima vela'));
+      return `<div class="pending-item ${o.side}">` +
+        `<div class="pi-head">` +
+          `<span class="pi-side">${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
+          `<b class="pi-price">${U.fmtPrice(o.limitPrice)}</b>` +
+          `<button class="pi-cancel" data-cancel="${o.id}" title="Cancelar esta orden">✖</button>` +
+        `</div>` +
+        `<div class="pi-sub">` +
+          `tamaño ${o.size}${o.mode === 'pct' ? '%' : o.mode === 'qty' ? ' uds' : ' USD'}` +
+          `${o.sl ? ' · SL ' + U.fmtPrice(o.sl) : ''}${o.tp ? ' · TP ' + U.fmtPrice(o.tp) : ''}` +
+        `</div>` +
+        `<div class="pi-eta">${eta}</div>` +
+      `</div>`;
+    }).join('');
+
+    cont.querySelectorAll('[data-cancel]').forEach((b) => {
+      b.addEventListener('click', () => App.cancelOrder(+b.dataset.cancel));
+    });
+  };
+
   /* --------------------------------- Atajos --------------------------------- */
 
   UI._wireKeyboard = function () {
@@ -4925,8 +5298,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
           e.preventDefault(); App.stepForward(); break;
         case 'ArrowLeft':
           e.preventDefault(); App.stepBack(); break;
-        case 'b': case 'B': App.placeOrder('long'); break;
-        case 's': case 'S': App.placeOrder('short'); break;
+        // B / S → según el tipo elegido (mercado o límite)
+        case 'b': case 's': App.placeOrder(e.key === 'b' ? 'long' : 'short'); break;
+        // Mayús+B / Mayús+S → SIEMPRE orden límite, aunque estés en modo mercado
+        case 'B': App.placeOrderLimit('long'); break;
+        case 'S': App.placeOrderLimit('short'); break;
+        case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
         case 'r': case 'R': App.resetReplay(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
@@ -4974,6 +5351,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.updateOrderHint();
     UI.updateHiddenNotice();
     UI.refreshPriceTag();
+    UI.renderPending();     // órdenes límite en espera
+    UI.updateLimitHint && UI.updateLimitHint();
   };
 
   UI.refreshPriceTag = function () {
@@ -5342,6 +5721,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   App.checkpoints = [];          // estado de la cuenta en cada índice del replay
   App.indicators = null;         // configuración de indicadores activos
   App.source = '—';
+  App.orderType = 'market';        // 'market' (a mercado) | 'limite' (orden límite)
 
   const MAX_CANDLES = 6000;      // límite de velas en memoria/caché (rendimiento)
   const LS_IND = 'indicators';
@@ -5389,6 +5769,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.setPairLabels(App.pair, App.interval);
     UI.setSizeMode(App.sizeMode);
     App.applyIndicators(App.indicators, true);
+
+    // 5b) Cuando una orden límite se ejecuta durante el replay: redibujar
+    TE.onFill = (pos) => {
+      App.refreshOrderLines();
+      DT.setTradeHandles(pos);
+      UI.refreshAll();
+      UI.refreshStats(true);
+    };
 
     // 6) Conexión de eventos del replay
     BR.onStateChange = (playing) => UI.setPlaying(playing);
@@ -5754,6 +6142,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     TE.endBatch();
 
     CM.render(to);
+    App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(false);
     if (App.autoReveal && !isSeek) App.followLast();
@@ -5779,6 +6168,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     CM.render(index);
     DT.render();
+    App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
     UI.renderTrades();
@@ -5813,6 +6203,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       eqLen: s.equitySeries.length,
       hasPos: !!s.position,
       pos: s.position ? JSON.parse(JSON.stringify(s.position)) : null,
+      pending: JSON.parse(JSON.stringify(s.pending || [])),
       lastPrice: s.lastPrice,
       lastTime: s.lastTime,
     };
@@ -5857,6 +6248,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    */
   App.placeOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
+    if (App.orderType === 'limite') return App.placeLimitOrder(side);
+
     const price = App.currentPrice();
     if (!price) { U.toast('No hay vela actual', 'err'); return; }
 
@@ -5884,12 +6277,85 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     });
 
     if (pos) {
-      CM.setPositionLines(pos);
+      App.refreshOrderLines();
       DT.setTradeHandles(pos);
       UI.refreshAll();
       UI.refreshStats(true);
       U.toast(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto a ${U.fmtPrice(price)}`, side === 'long' ? 'ok' : 'err', 2200);
     }
+  };
+
+  /**
+   * Coloca una ORDEN LÍMITE: queda en espera y se ejecuta sola cuando el
+   * precio del replay alcance el nivel indicado.
+   * El precio se toma del campo «Precio límite» (se puede arrastrar en el
+   * gráfico). El tamaño, apalancamiento, comisión y SL/TP son los mismos
+   * campos del panel de orden.
+   */
+  App.placeLimitOrder = function (side) {
+    if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
+    const ref = App.currentPrice();
+    if (!ref) { U.toast('No hay vela actual', 'err'); return null; }
+
+    const el = document.getElementById('limitInput');
+    let limite = el ? parseFloat(el.value) : NaN;
+    if (!Number.isFinite(limite) || limite <= 0) {
+      // Sin precio escrito: se propone un 0,5% por debajo/encima del actual
+      limite = side === 'long' ? ref * 0.995 : ref * 1.005;
+      if (el) el.value = limite.toFixed(2);
+      U.toast('Sin precio límite: se propone ' + U.fmtPrice(limite) + ' (puedes cambiarlo)', 'info', 3600);
+    }
+
+    const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
+    if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
+
+    // SL / TP: los campos son NIVELES de precio (opcionales)
+    const slIn = parseFloat(document.getElementById('slInput').value);
+    const tpIn = parseFloat(document.getElementById('tpInput').value);
+    const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
+    const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
+
+    const orden = TE.placeLimit(side, {
+      limitPrice: limite,
+      mode: App.sizeMode,
+      size: sizeVal,
+      sl, tp,
+      leverage: TE.state.leverage,
+      feePct: TE.state.feePct,
+      refPrice: ref,
+      time: App.currentTime(),
+    });
+
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+    if (orden) {
+      U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
+    }
+    return orden;
+  };
+
+  /** Redibuja las líneas de las órdenes límite pendientes. */
+  App.refreshOrderLines = function () {
+    CM.setPendingLines(TE.state.pending || []);
+    CM.setPositionLines(TE.state.position);
+  };
+
+  /** Cancela una orden límite concreta. */
+  App.cancelOrder = function (id) {
+    if (!TE.cancelOrder(id)) return;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+  };
+
+  /** Cancela todas las órdenes límite pendientes. */
+  App.cancelAllOrders = function () {
+    const n = TE.cancelAllOrders();
+    if (!n) return;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
   };
 
   /** Cierra la posición abierta al precio actual. */
@@ -5898,7 +6364,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const price = App.currentPrice();
     TE.closePosition(price, 'manual', App.currentTime());
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
-    CM.clearPositionLines();
+    App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
     UI.refreshStats(true);
@@ -5911,6 +6377,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     App.checkpoints = App.checkpoints.map(() => App.snapshot(0));
     for (let i = 0; i <= BR.getIndex(); i++) App.checkpoints[i] = App.snapshot(0);
     CM.clearPositionLines();
+    App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
     UI.refreshStats(true);

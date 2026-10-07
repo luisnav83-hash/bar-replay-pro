@@ -2,7 +2,9 @@
  * tradingEngine.js — Motor de trading simulado.
  *
  *  · Cuenta con balance, equity, margen y comisiones.
- *  · Órdenes a mercado (LONG/SHORT) con tamaño en %, USD o cantidad.
+ *  · Órdenes a MERCADO (LONG/SHORT) con tamaño en %, USD o cantidad.
+ *  · ÓRDENES LÍMITE pendientes: se ejecutan cuando el precio entra en el
+ *    nivel indicado, vela a vela, durante el replay (y se pueden cancelar).
  *  · Apalancamiento, precio de liquidación estimado.
  *  · SL / TP automáticos evaluados vela a vela por el Bar Replay.
  *  · PnL en tiempo real sobre la última vela mostrada.
@@ -29,6 +31,7 @@
     fundingPct: 0,           // % por vela sobre el notional (opcional)
     slFirst: 'worst',        // 'worst' | 'best'
     position: null,          // posición abierta
+    pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
@@ -55,6 +58,7 @@
     s.balance = s.initialCapital;
     s.equity = s.initialCapital;
     s.position = null;
+    s.pending = [];
     s.trades = [];
     s.equitySeries = [];
     s.feesPaid = 0;
@@ -169,12 +173,14 @@
       mfe: 0, mae: 0,      // excursión favorable/adversa máxima
       bars: 0,
       initialSl: sl, initialTp: tp,
+      origin: params.origin || 'market',   // 'market' (a mercado) | 'limite'
+      limitPrice: params.limitPrice !== undefined ? params.limitPrice : null,
     };
     s.position = position;
     s.trades.push(position);
 
     U.playSound('open');
-    U.log(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto @ ${U.fmtPrice(entryPrice)} · ` +
+    U.log(`${params.origin === 'limite' ? '⏳→✅ ' : ''}${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto @ ${U.fmtPrice(entryPrice)} · ` +
           `tamaño ${U.num(qty, 6)} (${U.fmtMoney(notional)}) · ${leverage}x · ` +
           `SL ${sl ? U.fmtPrice(sl) : '—'} · TP ${tp ? U.fmtPrice(tp) : '—'} · ` +
           `comisión ${U.fmtMoney(fee)}`, side === 'long' ? 'ok' : 'bad');
@@ -291,6 +297,158 @@
 
   /* ----------------------------- Replay hooks ----------------------------- */
 
+  /* ======================= ÓRDENES LÍMITE PENDIENTES ======================= */
+
+  /**
+   * Coloca una ORDEN LÍMITE: no se ejecuta ahora, queda en espera hasta que el
+   * precio del replay entre en el nivel indicado.
+   *
+   * Criterio de colocación (como en un exchange real):
+   *   · COMPRA (LONG)  límite: se coloca POR DEBAJO del precio actual
+   *                            («compra más barato en un retroceso»).
+   *   · VENTA  (SHORT) límite: se coloca POR ENCIMA del precio actual
+   *                            («vende más caro en un rebote»).
+   * Si el nivel está al otro lado (se cruzaría al instante), la orden se
+   * ejecuta YA a precio de mercado, igual que haría un exchange, y se avisa.
+   *
+   * @param {'long'|'short'} side
+   * @param {object} params { limitPrice, mode, size, sl, tp, leverage, feePct, time }
+   * @returns {object|null} la orden creada (o null si se ejecutó al instante por error)
+   */
+  TE.placeLimit = function (side, params) {
+    const s = TE.state;
+    const limitPrice = +params.limitPrice;
+    if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+      U.toast('Precio límite no válido', 'err'); return null;
+    }
+    const ref = +params.refPrice || s.lastPrice;
+    if (!ref) { U.toast('No hay precio de referencia todavía', 'err'); return null; }
+
+    // ¿El nivel se cruzaría inmediatamente?
+    const inmediata = side === 'long' ? limitPrice >= ref : limitPrice <= ref;
+    if (inmediata) {
+      U.log(`⚡ El límite ${U.fmtPrice(limitPrice)} está al otro lado del precio ` +
+            `(${U.fmtPrice(ref)}): se ejecuta a mercado, como en un exchange.`, 'warn');
+      const pos = TE.openPosition(side, Object.assign({}, params, {
+        entryPrice: ref, origin: 'market',
+      }));
+      if (pos) U.toast('Tu límite se cruzaba con el precio: se ejecutó a mercado', 'warn', 3800);
+      return pos ? { orden: null, ejecutada: pos } : null;
+    }
+
+    const orden = {
+      id: ++s.seq,
+      tipo: 'limite',
+      side,
+      limitPrice,
+      mode: params.mode || 'pct',
+      size: +params.size || 0,
+      leverage: Math.max(1, +(params.leverage || s.leverage || 1)),
+      feePct: params.feePct !== undefined ? +params.feePct : s.feePct,
+      sl: Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null,
+      tp: Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null,
+      creada: params.time || s.lastTime,
+      refPrice: ref,
+      estado: 'pendiente',
+    };
+
+    // Distancia al nivel, para mostrarla en el panel
+    orden.distPct = ((limitPrice - ref) / ref) * 100;
+
+    s.pending.push(orden);
+    U.playSound('open');
+    U.log(`⏳ Orden LÍMITE ${side === 'long' ? 'de COMPRA (LONG)' : 'de VENTA (SHORT)'} a ` +
+          `${U.fmtPrice(limitPrice)} (${U.num(orden.distPct, 2)}% del precio actual) · ` +
+          `tamaño ${orden.size} ${orden.mode === 'pct' ? '%' : orden.mode === 'qty' ? 'uds' : 'USD'}` +
+          `${orden.sl ? ' · SL ' + U.fmtPrice(orden.sl) : ''}` +
+          `${orden.tp ? ' · TP ' + U.fmtPrice(orden.tp) : ''}`, 'sys');
+    TE._emit();
+    return orden;
+  };
+
+  /** Cancela una orden pendiente por su id. */
+  TE.cancelOrder = function (id) {
+    const s = TE.state;
+    const i = s.pending.findIndex((o) => o.id === id);
+    if (i < 0) { U.toast('Esa orden ya no está pendiente', 'warn', 1800); return false; }
+    const [o] = s.pending.splice(i, 1);
+    U.log(`🚫 Orden límite cancelada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(o.limitPrice)}`, 'warn');
+    U.playSound('close');
+    TE._emit();
+    return true;
+  };
+
+  /** Cancela todas las órdenes pendientes. */
+  TE.cancelAllOrders = function () {
+    const n = TE.state.pending.length;
+    if (!n) { U.toast('No hay órdenes pendientes', 'warn', 1500); return 0; }
+    TE.state.pending = [];
+    U.log(`🚫 ${n} orden(es) límite cancelada(s)`, 'warn');
+    TE._emit();
+    return n;
+  };
+
+  /** Número de órdenes pendientes. */
+  TE.pendingCount = function () { return TE.state.pending.length; };
+
+  /**
+   * Precio de ejecución de una orden límite dentro de una vela:
+   *  · Si la vela abrió MEJOR que el nivel (hueco a favor) → se ejecuta a la
+   *    apertura, que es un precio aún mejor para el operador.
+   *  · En cualquier otro caso → se ejecuta exactamente en el nivel.
+   * (Un límite nunca se ejecuta peor que su precio, por definición.)
+   */
+  TE._fillLimit = function (candle, level, side) {
+    if (side === 'long') return candle.open <= level ? candle.open : level;
+    return candle.open >= level ? candle.open : level;
+  };
+
+  /**
+   * Recorre las órdenes pendientes y ejecuta las que el precio ha alcanzado
+   * durante esta vela. Las que no caben por margen se cancelan con aviso.
+   * @returns {Array} posiciones abiertas en esta vela
+   */
+  TE._checkPending = function (candle) {
+    const s = TE.state;
+    if (!s.pending.length) return [];
+    const abiertas = [];
+    for (let i = s.pending.length - 1; i >= 0; i--) {
+      const o = s.pending[i];
+      if (s.position) break;   // con una posición abierta las órdenes esperan
+      const alcanzada = o.side === 'long' ? candle.low <= o.limitPrice : candle.high >= o.limitPrice;
+      if (!alcanzada) continue;
+
+      const precio = TE._fillLimit(candle, o.limitPrice, o.side);
+      const pos = TE.openPosition(o.side, {
+        mode: o.mode, size: o.size, entryPrice: precio,
+        sl: o.sl, tp: o.tp, leverage: o.leverage, feePct: o.feePct,
+        time: candle.time, origin: 'limite', limitPrice: o.limitPrice,
+      });
+
+      if (!pos) {
+        // Sin margen suficiente: la orden se retira (como un rechazo del bróker)
+        s.pending.splice(i, 1);
+        U.log(`🚫 Orden límite ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(o.limitPrice)} ` +
+              `cancelada: no hay margen suficiente`, 'bad');
+        U.toast('Se canceló una orden límite por margen insuficiente', 'err', 4200);
+        continue;
+      }
+
+      // Marca de «ejecutada en esta vela»: el SL/TP de esta misma vela no se
+      // evalúa (con solo OHLC no sabemos si se tocó antes o después del fill).
+      pos.filledAtTime = candle.time;
+      pos.limitPrice = o.limitPrice;
+      s.pending.splice(i, 1);
+      abiertas.push(pos);
+
+      if (TE.onFill) TE.onFill(pos, o);
+      U.log(`✅ Orden LÍMITE ejecutada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(precio)}` +
+            `${precio !== o.limitPrice ? ` (límite ${U.fmtPrice(o.limitPrice)}, hueco a favor)` : ''}`, 'ok');
+      U.toast(`✅ Orden límite ejecutada a ${U.fmtPrice(precio)}`, 'ok', 3000);
+    }
+    return abiertas;
+  };
+
   /**
    * Llamado por el Bar Replay cada vez que se "cierra" una vela nueva
    * (avance). Evalúa liquidación, SL y TP, y actualiza estadísticas.
@@ -302,9 +460,21 @@
     s.lastPrice = candle.close;
     s.lastTime = candle.time;
 
+    // --- 0) ÓRDENES LÍMITE: se comprueban antes que la posición, porque si el
+    //        precio entra en el nivel la orden se ejecuta DENTRO de esta vela.
+    TE._checkPending(candle);
+
     const p = s.position;
     if (p) {
       p.bars++;
+
+      // Una posición recién ejecutada por un límite no se evalúa en su misma
+      // vela: ignoramos el orden real de los precios dentro de ella.
+      if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
+        TE.updateEquity(candle.close, candle.time);
+        TE._emit();
+        return null;
+      }
 
       // Excursiones máximas durante la vela
       const dir = p.side === 'long' ? 1 : -1;
@@ -424,6 +594,8 @@
     } else {
       s.position = null;
     }
+    // Las órdenes límite pendientes también vuelven a su estado de ese momento
+    s.pending = cp.pending ? JSON.parse(JSON.stringify(cp.pending)) : [];
     TE._emit();
   };
 
@@ -462,6 +634,7 @@
         seq: TE.state.seq,
       },
       position: TE.state.position,
+      pending: TE.state.pending,
       trades: TE.state.trades,
       equitySeries: TE.state.equitySeries.slice(-5000),
     };
@@ -471,6 +644,7 @@
     if (!data) return;
     Object.assign(TE.state, data.state || {});
     TE.state.position = data.position || null;
+    TE.state.pending = data.pending || [];
     TE.state.trades = data.trades || [];
     TE.state.equitySeries = data.equitySeries || [];
     TE._emit();

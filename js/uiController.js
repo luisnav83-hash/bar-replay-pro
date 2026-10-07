@@ -189,6 +189,27 @@
 
     document.getElementById('btnLong').addEventListener('click', () => App.placeOrder('long'));
     document.getElementById('btnShort').addEventListener('click', () => App.placeOrder('short'));
+
+    /* ---- Tipo de orden: ⚡ Mercado / ⏳ Límite ---- */
+    document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
+      b.addEventListener('click', () => UI.setOrderType(b.dataset.otype));
+    });
+    // Atajos rápidos de precio límite (% respecto al precio actual)
+    document.querySelectorAll('#quickLimit .chip').forEach((c) => {
+      c.addEventListener('click', () => {
+        const ref = App.currentPrice();
+        if (!ref) { U.toast('Carga datos antes de fijar el precio límite', 'warn'); return; }
+        const v = c.dataset.limpct;
+        const precio = v === 'actual' ? ref : ref * (1 + parseFloat(v) / 100);
+        document.getElementById('limitInput').value = precio.toFixed(2);
+        UI.updateLimitHint();
+      });
+    });
+    ['limitInput', 'slInput', 'tpInput'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', UI.updateLimitHint);
+    });
+    document.getElementById('btnCancelOrders').addEventListener('click', () => App.cancelAllOrders());
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
   };
@@ -355,6 +376,95 @@
     }).join('');
   };
 
+  /* ============================ ÓRDENES LÍMITE ============================ */
+
+  /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
+  UI.setOrderType = function (tipo) {
+    App.orderType = tipo === 'limite' ? 'limite' : 'market';
+    document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.otype === App.orderType);
+    });
+    const esLimite = App.orderType === 'limite';
+    document.getElementById('limitRow').style.display = esLimite ? '' : 'none';
+    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR LÍMITE' : '▲ COMPRAR / LONG';
+    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER LÍMITE' : '▼ VENDER / SHORT';
+    if (esLimite) {
+      const el = document.getElementById('limitInput');
+      if (el && !parseFloat(el.value)) {
+        const ref = App.currentPrice();
+        if (ref) el.value = (ref * 0.995).toFixed(2);
+      }
+      UI.updateLimitHint();
+    }
+  };
+
+  /** Explica si el nivel elegido es de compra, de venta o se cruzaría. */
+  UI.updateLimitHint = function () {
+    const el = document.getElementById('limitInput');
+    const hint = document.getElementById('limitHint');
+    if (!el || !hint) return;
+    const ref = App.currentPrice();
+    const v = parseFloat(el.value);
+    if (!ref || !Number.isFinite(v) || v <= 0) {
+      hint.textContent = 'Elige un nivel por debajo del precio para comprar, o por encima para vender.';
+      hint.className = 'hint';
+      return;
+    }
+    const pct = ((v - ref) / ref) * 100;
+    if (v < ref) {
+      hint.textContent = `Nivel ${U.num(Math.abs(pct), 2)}% por debajo del precio (${U.fmtPrice(ref)}): orden de COMPRA (LONG) en un retroceso.`;
+      hint.className = 'hint ok';
+    } else if (v > ref) {
+      hint.textContent = `Nivel ${U.num(pct, 2)}% por encima del precio (${U.fmtPrice(ref)}): orden de VENTA (SHORT) en un rebote.`;
+      hint.className = 'hint ok';
+    } else {
+      hint.textContent = 'El nivel coincide con el precio actual: se ejecutará al instante a mercado.';
+      hint.className = 'hint warn';
+    }
+  };
+
+  /** Pinta la lista de órdenes límite pendientes (con botón de cancelar). */
+  UI.renderPending = function () {
+    const cont = document.getElementById('pendingList');
+    const tag = document.getElementById('pendingCount');
+    if (!cont) return;
+    const ordenes = (TE.state.pending || []);
+    if (tag) tag.textContent = String(ordenes.length);
+    const card = document.getElementById('pendingCard');
+    if (card) card.classList.toggle('has-orders', ordenes.length > 0);
+
+    if (!ordenes.length) {
+      cont.innerHTML = '<div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar ' +
+        'una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>';
+      return;
+    }
+
+    const ref = App.currentPrice();
+    cont.innerHTML = ordenes.map((o) => {
+      const dist = ref ? ((o.limitPrice - ref) / ref) * 100 : null;
+      const eta = dist === null ? '' :
+        (o.side === 'long'
+          ? (dist < 0 ? `faltan ${U.num(Math.abs(dist), 2)}% a la baja (${U.fmtPrice(ref - o.limitPrice)} USD)` : 'se ejecutará en la próxima vela')
+          : (dist > 0 ? `faltan ${U.num(dist, 2)}% al alza (${U.fmtPrice(o.limitPrice - ref)} USD)` : 'se ejecutará en la próxima vela'));
+      return `<div class="pending-item ${o.side}">` +
+        `<div class="pi-head">` +
+          `<span class="pi-side">${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
+          `<b class="pi-price">${U.fmtPrice(o.limitPrice)}</b>` +
+          `<button class="pi-cancel" data-cancel="${o.id}" title="Cancelar esta orden">✖</button>` +
+        `</div>` +
+        `<div class="pi-sub">` +
+          `tamaño ${o.size}${o.mode === 'pct' ? '%' : o.mode === 'qty' ? ' uds' : ' USD'}` +
+          `${o.sl ? ' · SL ' + U.fmtPrice(o.sl) : ''}${o.tp ? ' · TP ' + U.fmtPrice(o.tp) : ''}` +
+        `</div>` +
+        `<div class="pi-eta">${eta}</div>` +
+      `</div>`;
+    }).join('');
+
+    cont.querySelectorAll('[data-cancel]').forEach((b) => {
+      b.addEventListener('click', () => App.cancelOrder(+b.dataset.cancel));
+    });
+  };
+
   /* --------------------------------- Atajos --------------------------------- */
 
   UI._wireKeyboard = function () {
@@ -384,8 +494,12 @@
           e.preventDefault(); App.stepForward(); break;
         case 'ArrowLeft':
           e.preventDefault(); App.stepBack(); break;
-        case 'b': case 'B': App.placeOrder('long'); break;
-        case 's': case 'S': App.placeOrder('short'); break;
+        // B / S → según el tipo elegido (mercado o límite)
+        case 'b': case 's': App.placeOrder(e.key === 'b' ? 'long' : 'short'); break;
+        // Mayús+B / Mayús+S → SIEMPRE orden límite, aunque estés en modo mercado
+        case 'B': App.placeOrderLimit('long'); break;
+        case 'S': App.placeOrderLimit('short'); break;
+        case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
         case 'r': case 'R': App.resetReplay(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
@@ -433,6 +547,8 @@
     UI.updateOrderHint();
     UI.updateHiddenNotice();
     UI.refreshPriceTag();
+    UI.renderPending();     // órdenes límite en espera
+    UI.updateLimitHint && UI.updateLimitHint();
   };
 
   UI.refreshPriceTag = function () {

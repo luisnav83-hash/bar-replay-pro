@@ -185,11 +185,12 @@ node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
 node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin recortes
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
+node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (ciclo completo)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **385 comprobaciones, 0 fallos** ✅
+Resultado actual: **398 comprobaciones, 0 fallos** ✅
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -218,6 +219,8 @@ omitido en lugar de fallar.
 | `Espacio` | Play / Pausa |
 | `→` / `←` | Avanzar / retroceder una vela |
 | `B` / `S` | Comprar (Long) / Vender (Short) |
+| `Mayús+B` / `Mayús+S` | Colocar **orden límite** de compra / venta |
+| `T` | Alternar entre orden a **mercado** y **límite** |
 | `Esc` | Cerrar posición (y cancelar dibujo/cerrar modales) |
 | `R` | Reset del replay |
 | `Supr` | Borrar el dibujo seleccionado |
@@ -232,7 +235,7 @@ omitido en lugar de fallar.
 ```
 bar-replay-app/
 ├── index.html                # Estructura de la interfaz (todo en español)
-├── bar-replay-pro-unico.html # Build de un solo archivo (generado, 415 KB)
+├── bar-replay-pro-unico.html # Build de un solo archivo (generado)
 ├── server.js                 # Backend opcional: estáticos + proxy de klines
 ├── package.json
 ├── css/responsive.css      ← TODAS las reglas de tamaño (se carga la última)

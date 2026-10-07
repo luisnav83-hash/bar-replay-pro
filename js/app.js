@@ -33,6 +33,7 @@
   App.checkpoints = [];          // estado de la cuenta en cada índice del replay
   App.indicators = null;         // configuración de indicadores activos
   App.source = '—';
+  App.orderType = 'market';        // 'market' (a mercado) | 'limite' (orden límite)
 
   const MAX_CANDLES = 6000;      // límite de velas en memoria/caché (rendimiento)
   const LS_IND = 'indicators';
@@ -80,6 +81,14 @@
     UI.setPairLabels(App.pair, App.interval);
     UI.setSizeMode(App.sizeMode);
     App.applyIndicators(App.indicators, true);
+
+    // 5b) Cuando una orden límite se ejecuta durante el replay: redibujar
+    TE.onFill = (pos) => {
+      App.refreshOrderLines();
+      DT.setTradeHandles(pos);
+      UI.refreshAll();
+      UI.refreshStats(true);
+    };
 
     // 6) Conexión de eventos del replay
     BR.onStateChange = (playing) => UI.setPlaying(playing);
@@ -445,6 +454,7 @@
     TE.endBatch();
 
     CM.render(to);
+    App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(false);
     if (App.autoReveal && !isSeek) App.followLast();
@@ -470,6 +480,7 @@
 
     CM.render(index);
     DT.render();
+    App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
     UI.renderTrades();
@@ -504,6 +515,7 @@
       eqLen: s.equitySeries.length,
       hasPos: !!s.position,
       pos: s.position ? JSON.parse(JSON.stringify(s.position)) : null,
+      pending: JSON.parse(JSON.stringify(s.pending || [])),
       lastPrice: s.lastPrice,
       lastTime: s.lastTime,
     };
@@ -548,6 +560,8 @@
    */
   App.placeOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
+    if (App.orderType === 'limite') return App.placeLimitOrder(side);
+
     const price = App.currentPrice();
     if (!price) { U.toast('No hay vela actual', 'err'); return; }
 
@@ -575,12 +589,85 @@
     });
 
     if (pos) {
-      CM.setPositionLines(pos);
+      App.refreshOrderLines();
       DT.setTradeHandles(pos);
       UI.refreshAll();
       UI.refreshStats(true);
       U.toast(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto a ${U.fmtPrice(price)}`, side === 'long' ? 'ok' : 'err', 2200);
     }
+  };
+
+  /**
+   * Coloca una ORDEN LÍMITE: queda en espera y se ejecuta sola cuando el
+   * precio del replay alcance el nivel indicado.
+   * El precio se toma del campo «Precio límite» (se puede arrastrar en el
+   * gráfico). El tamaño, apalancamiento, comisión y SL/TP son los mismos
+   * campos del panel de orden.
+   */
+  App.placeLimitOrder = function (side) {
+    if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
+    const ref = App.currentPrice();
+    if (!ref) { U.toast('No hay vela actual', 'err'); return null; }
+
+    const el = document.getElementById('limitInput');
+    let limite = el ? parseFloat(el.value) : NaN;
+    if (!Number.isFinite(limite) || limite <= 0) {
+      // Sin precio escrito: se propone un 0,5% por debajo/encima del actual
+      limite = side === 'long' ? ref * 0.995 : ref * 1.005;
+      if (el) el.value = limite.toFixed(2);
+      U.toast('Sin precio límite: se propone ' + U.fmtPrice(limite) + ' (puedes cambiarlo)', 'info', 3600);
+    }
+
+    const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
+    if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
+
+    // SL / TP: los campos son NIVELES de precio (opcionales)
+    const slIn = parseFloat(document.getElementById('slInput').value);
+    const tpIn = parseFloat(document.getElementById('tpInput').value);
+    const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
+    const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
+
+    const orden = TE.placeLimit(side, {
+      limitPrice: limite,
+      mode: App.sizeMode,
+      size: sizeVal,
+      sl, tp,
+      leverage: TE.state.leverage,
+      feePct: TE.state.feePct,
+      refPrice: ref,
+      time: App.currentTime(),
+    });
+
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+    if (orden) {
+      U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
+    }
+    return orden;
+  };
+
+  /** Redibuja las líneas de las órdenes límite pendientes. */
+  App.refreshOrderLines = function () {
+    CM.setPendingLines(TE.state.pending || []);
+    CM.setPositionLines(TE.state.position);
+  };
+
+  /** Cancela una orden límite concreta. */
+  App.cancelOrder = function (id) {
+    if (!TE.cancelOrder(id)) return;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+  };
+
+  /** Cancela todas las órdenes límite pendientes. */
+  App.cancelAllOrders = function () {
+    const n = TE.cancelAllOrders();
+    if (!n) return;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
   };
 
   /** Cierra la posición abierta al precio actual. */
@@ -589,7 +676,7 @@
     const price = App.currentPrice();
     TE.closePosition(price, 'manual', App.currentTime());
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
-    CM.clearPositionLines();
+    App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
     UI.refreshStats(true);
@@ -602,6 +689,7 @@
     App.checkpoints = App.checkpoints.map(() => App.snapshot(0));
     for (let i = 0; i <= BR.getIndex(); i++) App.checkpoints[i] = App.snapshot(0);
     CM.clearPositionLines();
+    App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
     UI.refreshStats(true);
