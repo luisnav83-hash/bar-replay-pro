@@ -283,11 +283,12 @@ node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálog
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
+node tests/temporalidad.test.js # 26 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **493 comprobaciones, 0 fallos** ✅ · **18 suites**
+Resultado actual: **519 comprobaciones, 0 fallos** ✅ · **19 suites**
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -369,6 +370,7 @@ bar-replay-app/
     ├── network.test.js       # Carga de velas reales / paginación (10)
     ├── browser.capture.js    # Navegador real (Chromium) + capturas (43)
     ├── boot.test.js          # Arranque robusto sin red / sin localStorage (13)
+    ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (26)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 

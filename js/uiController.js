@@ -70,11 +70,16 @@
     document.getElementById('btnHelp').addEventListener('click', () => UI.openModal('modalHelp'));
 
     // Cambiar de par o temporalidad no recarga solo: avisa al usuario
-    document.getElementById('pairSelect').addEventListener('change', () => {
-      U.log('🔄 Par seleccionado: ' + document.getElementById('pairSelect').value + ' — pulsa «Cargar datos»', 'sys');
+    // El par se cambia con el buscador o con el desplegable, y en ambos casos
+    // la carga es inmediata.
+    document.getElementById('pairSelect').addEventListener('change', (e) => {
+      UI.pickSymbol(e.target.value);
     });
-    document.getElementById('tfSelect').addEventListener('change', () => {
-      U.log('🔄 Temporalidad seleccionada: ' + document.getElementById('tfSelect').value + ' — pulsa «Cargar datos»', 'sys');
+    // Cambiar la temporalidad en el desplegable recarga los datos al instante
+    // (igual que los botones rápidos): así nunca queda el select diciendo una
+    // temporalidad y el gráfico mostrando otra.
+    document.getElementById('tfSelect').addEventListener('change', (e) => {
+      UI.setTimeframe(e.target.value, { force: true });
     });
   };
 
@@ -758,8 +763,12 @@
 
     UI.updateSymbolButton();
     UI.closeModal('modalSymbols');
+
+    // Cerrar lo que pertenecía a la serie anterior (misma razón que al cambiar TF)
+    App.guardSeriesChange('cambiar de par');
+
     U.toast('🔎 ' + DS.label(symbol) + ' seleccionado: cargando velas…', 'info', 2400);
-    App.loadDataFromForm({ silent: true })     // recarga automática, como en un terminal
+    App.loadDataFromForm({ silent: true, keepFocus: true })   // recarga automática, como en un terminal
       .catch(() => {})
       .then(() => { UI.refreshStats(true); UI.renderSymbols(); });
   };
@@ -783,15 +792,26 @@
     }
   };
 
-  /** Cambia la temporalidad y recarga los datos (como al elegir par). */
-  UI.setTimeframe = function (tf) {
+  /**
+   * Cambia la temporalidad y recarga los datos (como al elegir par).
+   * @param {string} tf
+   * @param {{force?: boolean}} [opts] force = viene del desplegable, que ya
+   *        cambió su valor: hay que recargar aunque coincida con la activa.
+   */
+  UI.setTimeframe = function (tf, opts = {}) {
     if (!DS.TIMEFRAMES[tf]) { U.toast('Temporalidad no válida', 'err'); return; }
     const sel = document.getElementById('tfSelect');
-    if (sel.value === tf) { UI.syncTfButtons(); return; }
+    if (!opts.force && sel.value === tf && App.interval === tf) { UI.syncTfButtons(); return; }
     sel.value = tf;
     UI.syncTfButtons();
+
+    // La posición abierta y las órdenes pendientes pertenecen a la serie
+    // anterior: se cierran/cancelan antes de traer las velas nuevas.
+    App.guardSeriesChange('cambiar de temporalidad');
+
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
-    App.loadDataFromForm({ silent: true })
+    // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.
+    return App.loadDataFromForm({ silent: true, keepFocus: true })
       .catch(() => {})
       .then(() => { UI.refreshStats(true); });
   };
@@ -1001,29 +1021,77 @@
     setText('eqValue', U.fmtMoney(metrics.equity));
 
     CM.drawEquity(TE.state.equitySeries, TE.state.initialCapital);
-    if (force) {
+    if (force || closedCount !== UI._closedCount) {
       UI.renderTrades();
       UI.refreshPosition();
-    } else if (closedCount !== UI._closedCount) {
-      UI.renderTrades();
+    } else {
+      // Sin cambios en los cerrados: basta con refrescar el PnL de la abierta
+      UI.updateOpenTradeRow();
       UI.refreshPosition();
     }
     UI._closedCount = closedCount;
   };
 
   /** Tabla de historial de trades. */
+  /**
+   * Fila de la POSICIÓN ABIERTA: la entrada se ve desde el primer momento, con
+   * su PnL flotante actualizándose vela a vela (antes sólo aparecía el trade
+   * cuando se cerraba, así que una entrada parecía «no registrada»).
+   */
+  UI._openTradeRow = function (p) {
+    const precio = App.currentPrice() || p.entryPrice;
+    const pnl = TE.unrealized(precio);
+    const pct = p.entryBalance ? (pnl / p.entryBalance) * 100 : 0;
+    const r = p.riskUsd ? U.num(pnl / p.riskUsd, 2) : '—';
+    return `<tr id="tradeOpenRow" class="open ${p.side}">
+      <td>·</td>
+      <td class="dir-${p.side}">${p.side === 'long' ? 'LONG' : 'SHORT'}</td>
+      <td>${U.fmtDate(p.entryTime)}</td>
+      <td class="open-tag">ABIERTA</td>
+      <td class="num">${U.fmtPrice(p.entryPrice)}</td>
+      <td class="num" id="openExit">${U.fmtPrice(precio)}</td>
+      <td class="num">${U.num(p.qty, 5)}</td>
+      <td class="num pnl ${pnl >= 0 ? 'up' : 'down'}" id="openPnl">${U.fmtMoney(pnl, true)}</td>
+      <td class="num pnl ${pct >= 0 ? 'up' : 'down'}" id="openPct">${U.fmtPct(pct, 2, true)}</td>
+      <td class="num" id="openR">${r}</td>
+      <td>${(TE.state.pending || []).length ? 'EN VIVO · pendientes: ' + TE.state.pending.length : 'EN VIVO'}</td>
+      <td id="openBars">${p.bars || 0} (${U.fmtDuration(p.entryTime, TE.state.lastTime || p.entryTime)})</td>
+    </tr>`;
+  };
+
+  /** Refresca sólo la fila abierta (PnL flotante, barras y motivo), sin rehacer la tabla. */
+  UI.updateOpenTradeRow = function () {
+    const p = TE.state.position;
+    const row = document.getElementById('tradeOpenRow');
+    if (!p) { if (row) UI.renderTrades(); return; }
+    if (!row) { UI.renderTrades(); return; }
+
+    const precio = App.currentPrice() || p.entryPrice;
+    const pnl = TE.unrealized(precio);
+    const pct = p.entryBalance ? (pnl / p.entryBalance) * 100 : 0;
+    const set = (id, txt, cls) => { const el = document.getElementById(id); if (!el) return; el.textContent = txt; if (cls) el.className = cls; };
+    set('openExit', U.fmtPrice(precio));
+    set('openPnl', U.fmtMoney(pnl, true), 'num pnl ' + (pnl >= 0 ? 'up' : 'down'));
+    set('openPct', U.fmtPct(pct, 2, true), 'num pnl ' + (pct >= 0 ? 'up' : 'down'));
+    set('openR', p.riskUsd ? U.num(pnl / p.riskUsd, 2) : '—');
+    set('openBars', `${p.bars || 0} (${U.fmtDuration(p.entryTime, TE.state.lastTime || p.entryTime)})`);
+    const pend = row.querySelector('td:nth-child(11)');
+    if (pend) pend.textContent = (TE.state.pending || []).length ? 'EN VIVO · pendientes: ' + TE.state.pending.length : 'EN VIVO';
+  };
+
   UI.renderTrades = function () {
     const body = document.getElementById('tradesBody');
     const empty = document.getElementById('tradesEmpty');
     const trades = TE.state.trades.filter((t) => t.status === 'closed').slice().reverse();
+    const abierta = TE.state.position;
     setText('tabTradeCount', TE.state.trades.filter((t) => t.status === 'closed').length);
-    if (!trades.length) {
+    if (!trades.length && !abierta) {
       body.innerHTML = '';
       empty.classList.remove('hidden');
       return;
     }
     empty.classList.add('hidden');
-    body.innerHTML = trades.map((t, i) => {
+    body.innerHTML = (abierta ? UI._openTradeRow(abierta) : '') + trades.map((t, i) => {
       const n = TE.state.trades.indexOf(t) + 1;
       const dur = U.fmtDuration(t.entryTime, t.exitTime);
       return `<tr class="${t.pnl > 0 ? 'win' : 'loss'}">

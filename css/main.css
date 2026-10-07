@@ -210,3 +210,13 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
    (se carga la última a propósito, para ganar la cascada frente a los valores
    por defecto de main.css, chart.css y panels.css). Aquí queda solo lo
    estructural: disposición general de la página. */
+
+/* Fila de la posición ABIERTA en el historial de trades: se distingue de las
+   cerradas y su PnL flotante se refresca en cada vela. */
+#tradesBody tr.open{background:rgba(0,200,83,.07);}
+#tradesBody tr.open.short{background:rgba(255,23,68,.07);}
+#tradesBody tr.open td{border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-weight:600;}
+#tradesBody tr.open td:first-child{border-left:3px solid var(--up);}
+#tradesBody tr.open.short td:first-child{border-left-color:var(--down);}
+#tradesBody tr.open .open-tag{color:var(--warn);font-size:9.5px;letter-spacing:.6px;}
+#tradesBody tr.open td:nth-child(11){color:var(--tx-3);font-size:10px;font-weight:500;}

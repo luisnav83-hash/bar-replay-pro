@@ -151,6 +151,46 @@
   /* ============================== CARGA DE DATOS ============================== */
 
   /** Lee el formulario superior y carga las velas necesarias. */
+  /**
+   * Protege la coherencia al CAMBIAR DE SERIE de datos (temporalidad o par).
+   *
+   * Una posición abierta quedó registrada con los precios de la serie anterior:
+   * si sobreviviera al cambio, su PnL se calcularía contra velas de otra
+   * temporalidad (y de otro momento del tiempo). Aquí se cierra a mercado al
+   * último precio conocido y se cancelan los niveles límite pendientes, con el
+   * aviso correspondiente. Devuelve true si tuvo que cerrar/cancelar algo.
+   */
+  App.guardSeriesChange = function (motivo) {
+    const st = TE.state;
+    let algo = false;
+
+    if (st.position) {
+      const precio = App.currentPrice() || st.lastPrice;
+      if (precio) {
+        TE.closePosition(precio, 'cambio', st.lastTime);
+        algo = true;
+        U.toast('🔁 Posición cerrada al ' + motivo + ' · ' + U.fmtPrice(precio), 'warn', 4200);
+      }
+    }
+
+    if (st.pending && st.pending.length) {
+      const n = TE.cancelAllOrders() || 0;
+      if (n) {
+        algo = true;
+        U.toast('🧹 ' + n + ' orden' + (n > 1 ? 'es' : '') + ' límite cancelada' + (n > 1 ? 's' : '') + ' al ' + motivo, 'info', 3600);
+      }
+    }
+
+    if (algo) {
+      DT.setTradeHandles(null);
+      App.refreshOrderLines();
+      UI.refreshAll();
+      UI.refreshStats(true);
+      UI.renderTrades();
+    }
+    return algo;
+  };
+
   App.loadDataFromForm = async function (opts = {}) {
     const pair = document.getElementById('pairSelect').value;
     const interval = document.getElementById('tfSelect').value;
@@ -166,6 +206,14 @@
       startTs = now - Math.min(2000, 1200) * tfSec;
       document.getElementById('startDate').value = U.tsToInput(startTs);
     }
+    // Al CAMBIAR DE SERIE (temporalidad o par) se conserva el punto del replay:
+    // manda la fecha de la vela actual sobre la del formulario, y el campo se
+    // actualiza para que lo que se ve y lo que se carga coincidan.
+    if (opts.keepFocus && BR.total() && BR.currentCandle()) {
+      startTs = BR.currentCandle().time;
+      document.getElementById('startDate').value = U.tsToInput(startTs);
+    }
+
     startTs = Math.min(startTs, now - 3 * tfSec);   // debe quedar histórico por delante
 
     const wantStart = startTs - App.warmup * 2 * tfSec;

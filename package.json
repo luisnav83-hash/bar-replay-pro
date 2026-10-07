@@ -14,7 +14,7 @@
     "test:logic": "node tests/logic.test.js",
     "test:dom": "node tests/dom.smoke.js",
     "test:iframe": "node tests/iframe.test.js",
-    "test:all": "npm run test && npm run test:single && npm run test:sanitizado && npm run test:limites && npm run test:gesto && npm run test:simbolos && npm run test:dibujos && npm run test:iframe && npm run test:layout && npm run test:incidencias && npm run test:preview && npm run test:net && npm run test:browser && npm run test:enlaces",
+    "test:all": "npm run test && npm run test:single && npm run test:sanitizado && npm run test:limites && npm run test:gesto && npm run test:simbolos && npm run test:dibujos && npm run test:iframe && npm run test:layout && npm run test:incidencias && npm run test:preview && npm run test:net && npm run test:browser && npm run test:enlaces && npm run test:temporalidad",
     "test:preview": "node tests/preview-live.test.js",
     "test:layout": "node tests/responsive.test.js",
     "test:incidencias": "node tests/incidencias.test.js",
@@ -27,7 +27,8 @@
     "test:pages": "node tests/pages-buscador.js",
     "test:dibujos": "node tests/dibujos.test.js",
     "test:pages-dibujos": "node tests/pages-dibujos.js",
-    "test:enlaces": "node tests/enlaces.test.js"
+    "test:enlaces": "node tests/enlaces.test.js",
+    "test:temporalidad": "node tests/temporalidad.test.js"
   },
   "keywords": [
     "backtesting",

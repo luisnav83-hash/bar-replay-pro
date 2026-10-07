@@ -255,6 +255,7 @@
       liq: 'LIQUIDACIÓN',
       reset: 'reinicio del replay',
       end: 'fin del replay',
+      cambio: 'cambio de serie',
     })[r] || r;
   };
 

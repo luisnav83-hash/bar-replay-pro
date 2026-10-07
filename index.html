@@ -731,7 +731,7 @@
     <div class="modal-body help-body">
       <h4>Flujo de trabajo</h4>
       <ol>
-        <li>Elige <b>par</b> y <b>temporalidad</b> y pulsa <b>Cargar datos</b> (se descargan de Binance con paginación automática de 1000 velas).</li>
+        <li>Elige <b>par</b> y <b>temporalidad</b>: los datos se cargan al instante (de Binance, con paginación automática de 1000 velas). También puedes pulsar <b>Cargar datos</b>.</li>
         <li>Indica la <b>fecha de inicio del replay</b>: el gráfico mostrará solo las velas anteriores (contexto) y el resto quedará oculto.</li>
         <li>Avanza con <b>PLAY</b>, <b>▶▶</b> (una vela) o el <b>slider de velocidad</b>. Puedes retroceder con <b>◀◀</b>.</li>
         <li>Dibuja soportes, canales, Fibonacci… y añade indicadores desde el botón 📈 de la barra superior.</li>
@@ -758,6 +758,8 @@
         <li>Todo el cálculo de indicadores y de PnL es propio, en JavaScript, sin librerías externas (solo Lightweight Charts para el render).</li>
         <li>Todas las marcas de tiempo se manejan en <b>UTC</b>. La ejecución de SL/TP dentro de una vela se simula de forma pesimista por defecto.</li>
         <li>En modo sin conexión usa el botón <b>Demo</b> (datos sintéticos) o importa un CSV propio.</li>
+        <li><b>Cambiar de temporalidad o de par</b> mantiene el replay en la misma fecha. La posición abierta se cierra a mercado y las órdenes límite pendientes se cancelan (con aviso), porque sus precios pertenecen a la serie anterior.</li>
+        <li>La <b>posición abierta</b> aparece en el historial como una fila <b>ABIERTA</b> con su PnL flotante, que se actualiza en cada vela.</li>
       </ul>
 
       <h4>Proyectos relacionados</h4>
