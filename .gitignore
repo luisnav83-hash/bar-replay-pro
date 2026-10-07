@@ -2,3 +2,9 @@ node_modules/
 package-lock.json
 .DS_Store
 *.log
+
+# El archivo de GitHub Pages requiere un token con permiso «workflow». Si tu
+# token no lo tiene, se excluye del push (la web se publica igualmente desde la
+# rama con «Settings → Pages»). Para incluirlo, genera un token con ese permiso
+# y borra esta línea.
+.github/workflows/pages.yml
