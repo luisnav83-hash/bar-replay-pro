@@ -124,8 +124,9 @@ El repositorio incluye `.github/workflows/pages.yml`: al subirlo a GitHub, la ap
 se publica sola y queda accesible desde cualquier navegador (también móvil) en
 `https://TU-USUARIO.github.io/TU-REPOSITORIO/`.
 
-- Aplicación completa: `https://TU-USUARIO.github.io/TU-REPOSITORIO/`
-- Archivo único (ideal para el móvil): `.../bar-replay-pro-unico.html`
+- Repositorio: **https://github.com/luisnav83-hash/bar-replay-pro**
+- Aplicación completa: **https://luisnav83-hash.github.io/bar-replay-pro/**
+- Archivo único (ideal para el móvil): **https://luisnav83-hash.github.io/bar-replay-pro/bar-replay-pro-unico.html**
 
 Instrucciones paso a paso en **[SUBIR-A-GITHUB.md](SUBIR-A-GITHUB.md)**.
 
@@ -153,6 +154,16 @@ Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
 
+**Buscador de símbolos en vivo** — catálogo completo de Binance (1.183 pares) con
+categorías, búsqueda al escribir, favoritos ⭐ y recientes 🕘:
+
+![Buscador de símbolos](docs/captura-20-buscador-en-vivo.png)
+
+**Dibujar manteniendo pulsado** — el gesto reconoce el trazo y lo convierte en
+soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
+
+![Gesto de dibujo](docs/captura-18-gesto-dibujo.png)
+
 *(Generadas automáticamente por `tests/browser.capture.js` en Chromium headless.)*
 
 ---
@@ -169,7 +180,7 @@ python3 -m http.server 8080
 ```
 
 ### Opción A′ — Archivo único, sin servidor ni instalación
-`bar-replay-pro-unico.html` es **toda la aplicación en un solo archivo** (≈415 KB:
+`bar-replay-pro-unico.html` es **toda la aplicación en un solo archivo** (≈709 KB:
 HTML + CSS + JS + la librería de gráficos incrustados). Se abre con doble clic,
 se puede enviar por correo o incrustar en cualquier visor. Sin conexión arranca
 en modo DEMO automáticamente.
