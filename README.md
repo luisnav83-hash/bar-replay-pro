@@ -200,8 +200,11 @@ la tarjeta: se puede operar sin rellenanar el formulario entero. Y ninguna fila
 del formulario se aplasta: con `max-height` en el cuerpo, el `flex-shrink` por
 defecto dejaba los segmentados a 2 px (botón vivo pero invisible), así que
 `#sidebar > .card > .card-body > *` es `flex: 0 0 auto`. Lo comprueba
-`tests/bitunix.test.js` trayendo cada fila a la vista y mirando qué element
-recibe el puntero.
+`tests/bitunix.test.js` trayendo cada fila a la vista y mirando qué elemento
+recibe el puntero. La misma suite exige además que **ningún control visible** del
+panel de órdenes mida menos de 20 px de alto: el deslizador de apalancamiento tenía
+la barra fina por diseño (`height: 3px`) y con el dedo era imposible de agarrar, así
+que ahora la caja del `input[type=range]` mide 22 px y la pista sigue viéndose de 3 px.
 
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
@@ -378,7 +381,7 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/bitunix.test.js      # 125 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+node tests/bitunix.test.js      # 126 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
 node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
@@ -390,7 +393,7 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**904 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
+**905 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las cinco que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1121 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)

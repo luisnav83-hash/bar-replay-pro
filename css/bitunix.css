@@ -342,7 +342,21 @@ body {
   border-radius: var(--r);
 }
 .bf-lev b { min-width: 26px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
-.bf-lev input[type="range"] { width: 86px; height: 3px; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
+/* El deslizador de apalancamiento: la BARRA se ve de 3px (look Bitunix) pero la
+   CAJA del control mide 22px, que es lo que pilla el dedo. Con height:3px en el
+   elemento, en móvil era imposible agarrarlo. */
+.bf-lev input[type="range"] {
+  width: 86px; height: 22px; margin: 0; padding: 0; cursor: ew-resize;
+  -webkit-appearance: none; appearance: none;
+  background: transparent; accent-color: var(--accent);
+}
+.bf-lev input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--bg-4); }
+.bf-lev input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 13px; height: 13px; margin-top: -5px;
+  border-radius: 50%; background: var(--accent); border: 0;
+}
+.bf-lev input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: var(--bg-4); }
+.bf-lev input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--accent); }
 
 /* segmentedos planos, con el activo en lima */
 .seg {

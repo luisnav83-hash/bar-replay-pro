@@ -548,6 +548,13 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       stats: (() => { const e = document.getElementById('bfStats'); return { w: Math.round(e.getBoundingClientRect().width), scrollea: e.scrollWidth > e.clientWidth + 2 }; })(),
       long: R('btnLong'), bottom: R('bottomPanel'),
       inputs: [...document.querySelectorAll('#orderCard input[type=number]')].map((i) => Math.round(i.getBoundingClientRect().height)),
+      // Área táctil: ningún control VISIBLE del panel de órdenes puede medir menos
+      // de 20px de alto. El deslizador de apalancamiento medía 3px (la barra fina
+      // por diseño), y en el móvil era imposible de agarrar con el dedo.
+      controles: [...document.querySelectorAll('#orderCard input, #orderCard select, #orderCard button')]
+        .filter((e) => e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden')
+        .map((e) => ({ id: e.id || (e.className || '?').toString().split(' ')[0], h: Math.round(e.getBoundingClientRect().height) }))
+        .filter((x) => x.h < 20),
       // Cada FILA del formulario (segmented de modo, tipo, unidad y % rápidos)
       // tiene que conservar su alto y recibir el puntero: con `max-height` en el
       // cuerpo y `flex-shrink` por defecto, en móvil se aplastaban a 2 px y el
@@ -575,6 +582,9 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est2.bottom && est2.bottom.y + est2.bottom.h <= 844 + 2, `el panel inferior cabe en el viewport (${est2.bottom.y}+${est2.bottom.h})`);
   ok(est2.inputs.length >= 3 && est2.inputs.every((h) => h >= 24), `los campos del panel de órdenes son táctiles (${est2.inputs.join(',')})`);
   ok(est2.totalOculto, 'a 390 px la columna «Total» del libro se oculta (menos ruido, como en la app)');
+  ok(est2.controles.length === 0,
+     est2.controles.length ? `controles del formulario demasiado bajos para el dedo: ${est2.controles.map((c) => `${c.id}=${c.h}px`).join(', ')}`
+                           : 'todos los controles visibles del panel de órdenes tienen ≥20px de alto (área táctil)');
   ok(est2.filas.every((f) => f.h >= 24 && f.dentro),
      `todas las filas del formulario mantienen su alto y se pueden pulsar (${est2.filas.map((f) => f.sel + ' ' + f.h).join(' · ')})`);
 
