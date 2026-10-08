@@ -17,6 +17,7 @@ let JSDOM;
 const candidates = [
   'jsdom',
   process.env.JSDOM_PATH,
+  '/home/user/.cache/node_modules/jsdom',   // entorno de desarrollo de esta sesión
   '/home/user/br-test/node_modules/jsdom',
 ].filter(Boolean);
 for (const c of candidates) {

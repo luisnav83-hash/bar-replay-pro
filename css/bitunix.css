@@ -1,0 +1,948 @@
+/* =========================================================================
+   bitunix.css — PIEL «terminal de futuros» (referencia: pantalla de
+   negociación de futuros de Bitunix) y layout de 5 zonas:
+
+     1. barra superior  : nav + FILA DE ESTADÍSTICAS del par (#bfStats)
+     2. centro          : gráfico + paneles + barra de replay
+     3. columna derecha : LIBRO DE ÓRDENES (#bookCard) + PANEL DE ÓRDENES
+     4. bajo el gráfico : pestañas Posiciones / Órdenes / Historial / Cuenta /
+                          Estadísticas / Log / Dibujos
+     5. todo plano      : sin sombras ni esquinas redondeadas grandes
+
+   Los colores NO están inventados: se han medido (percentil 90 de los píxeles
+   coloreados) sobre la captura oficial de la interfaz:
+     verde de subida  #25ca93   rojo de bajada #f65b55
+     fondo            #08080a   paneles #141418  elevados #1c1c22  bordes #242429
+     acento de marca  #b8f040 (lima)   aviso / funding #f0b90b
+   Este fichero se enlaza el último para poder reescribir los tokens y los
+   componentes definidos en main.css / panels.css / responsive.css.
+   ========================================================================= */
+
+:root {
+  /* ---- fondos: neutros casi negras, sin tinte azul (medido) ---- */
+  --bg-0: #08080a;
+  --bg-1: #0d0d10;
+  --bg-2: #141418;
+  --bg-3: #1c1c22;
+  --bg-4: #26262e;
+  --line: #242429;
+  --line-soft: #1b1b20;
+
+  /* ---- texto: grises neutros ---- */
+  --tx-1: #f2f3f5;
+  --tx-2: #c2c4ca;
+  --tx-3: #8b8e96;
+  --tx-4: #5f626b;
+
+  /* ---- acentos medidos ---- */
+  --up: #25ca93;
+  --up-dim: #10402f;
+  --down: #f65b55;
+  --down-dim: #4a1b19;
+  --accent: #b8f040;
+  --accent-ink: #101206;
+  --accent-2: #25ca93;
+  --warn: #f0b90b;
+
+  /* ---- métricas: radio mínimo y tipografía compacta ---- */
+  --r-sm: 2px;
+  --r: 4px;
+  --r-lg: 6px;
+  --topbar-h: 90px;
+  --stats-h: 42px;
+  --toolbar-h: 34px;
+  --right-w: 336px;
+  --row-h: 17px;
+}
+
+/* ============================ 1) base ============================ */
+
+body {
+  /* sin degradados: el terminal real es plano */
+  background: var(--bg-0);
+  font-size: 12px;
+  letter-spacing: .1px;
+}
+
+/* todos los números, en cifras tabulares: las columnas no «bailan» */
+.kv b, .bf-v, .bf-sub, .bf-row, td, th, .pane-val, .stat b,
+#sizeInput, #limitInput, #slInput, #tpInput, #avgSize, #trailPct, #trailAct,
+#tpLvlPrice, #tpLvlPct, .log-time, .rb-info, #bfLevVal {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: #2e2e36; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #3c3c46; }
+
+/* ======================= 2) barra superior ======================= */
+
+/* Fila de navegación + fila de estadísticas. Se usa flex (no grid) para que
+   los grupos se encojan antes de solaparse: la fila de iconos de la derecha
+   va con margin-left:auto y la de estadísticas ocupa el 100 % de la 2ª línea. */
+#topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  height: auto;
+  min-height: var(--topbar-h);
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+#topbar .brand {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  min-height: 48px;
+  border-right: 1px solid var(--line-soft);
+}
+#topbar .topbar-group { flex: 1 1 auto; min-width: 0; padding: 6px 12px; gap: 8px; }
+#topbar .topbar-right { flex: 0 0 auto; margin-left: auto; padding: 6px 10px 6px 0; }
+
+.brand-name { font-size: 13px; letter-spacing: .6px; }
+.brand-sub { color: var(--tx-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; }
+
+/* ---- fila de estadísticas ---- */
+.bf-stats {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: stretch;
+  height: var(--stats-h);
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.bf-stats::-webkit-scrollbar { height: 3px; }
+
+.bf-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  min-width: 104px;
+  max-width: 230px;
+  padding: 0 11px;
+  overflow: hidden;
+  border-right: 1px solid var(--line-soft);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.bf-stat .bf-k { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.bf-stat .bf-v { font-size: 13.5px; font-weight: 600; color: var(--tx-1); }
+.bf-stat .bf-sub { font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-stat.bf-last { min-width: 138px; }
+.bf-stat.bf-last .bf-v { font-size: 17px; font-weight: 700; }
+.bf-stat .bf-v.up, .bf-v.up { color: var(--up); }
+.bf-stat .bf-v.dn, .bf-v.dn { color: var(--down); }
+.bf-stat .bf-v.wn { color: var(--warn); }
+
+/* barra long/short dentro de la fila de estadísticas */
+.bf-stat.bf-frac { min-width: 176px; }
+.bf-frac .bf-bar {
+  position: relative;
+  height: 5px;
+  margin: 3px 0 2px;
+  border-radius: 3px;
+  background: var(--down);
+  overflow: hidden;
+}
+.bf-frac .bf-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  background: var(--up);
+  transition: width .25s ease;
+}
+
+/* origen de los datos: siempre visible, para no pasar un derivado por real */
+.bf-stat.bf-src {
+  margin-left: auto;
+  min-width: 0;
+  max-width: 320px;
+  flex: 0 1 260px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 0;
+  justify-content: center;
+  color: var(--tx-4);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  cursor: help;
+}
+.bf-stat.bf-src::before { content: 'ⓘ '; color: var(--warn); }
+
+/* ========================= 3) workspace ========================= */
+
+#workspace {
+  grid-template-columns: minmax(0, 1fr) var(--right-w);
+  grid-template-rows: minmax(0, 1fr);   /* nada de empujar al panel inferior */
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-0);
+}
+#chartArea { min-height: 0; }
+
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  padding: 0;
+  gap: 0;
+  background: var(--bg-2);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Las tarjetas del terminal son secciones planas separadas por un hilo.
+   `flex: 0 0 auto` es lo que impide que la columna las aplaste: con el valor por
+   defecto (`flex-shrink: 1`) `#bookCard` se reducía a ~157 px y su
+   `overflow: hidden` ocultaba el precio central y el bloque entero de compras.
+   Si no cabe todo, la barra lateral se desplaza (ya tiene overflow-y). */
+#sidebar .card,
+.tab-body .card {
+  flex: 0 0 auto;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 33px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-1);
+}
+.card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: var(--tx-2);
+  text-transform: uppercase;
+}
+.card-body { padding: 9px 10px 11px; }
+
+.tag, .tag-muted {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  color: var(--tx-3);
+  font-weight: 500;
+}
+
+/* ==================== 4) libro de órdenes ==================== */
+
+/* El libro se recorta (scroll interno) para que el panel de órdenes, que va
+   debajo igual que en el exchange, quede a la vista sin perder altura útil. */
+/* El libro no se desplaza nunca: si no cabe, se RECORTAN las filas lejanas y
+   siempre se ven las pegadas al precio (y el precio en el medio). Un `overflow
+   auto` aquí dejaría el centro del libro fuera de la vista. */
+.bf-book .card-body { padding: 0 0 7px; max-height: 322px; overflow: hidden; }
+.bf-book-cols {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr .9fr;
+  padding: 4px 10px 3px;
+  font-size: 9.5px;
+  color: var(--tx-4);
+  letter-spacing: .3px;
+}
+.bf-book-cols span:last-child { text-align: right; }
+.bf-asks, .bf-bids { display: flex; flex-direction: column; max-height: 118px; overflow: hidden; }
+/* Las filas mantienen su altura (17 px medidos) y se recortan las lejanas; sin
+   esto flex reparte 10 filas en 118 px y el libro sale apelmazado a ~12 px. */
+.bf-asks > .bf-row, .bf-bids > .bf-row { flex: 0 0 auto; }
+/* Monitor alto (≥980 px): aquí sí caben los 10+10 niveles completos. */
+@media (min-height: 980px) {
+  .bf-asks, .bf-bids { max-height: 170px; }
+  .bf-book .card-body { max-height: 404px; }
+}
+.bf-asks { flex-direction: column-reverse; }   /* la mejor venta, pegada al precio */
+
+.bf-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr .9fr;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 10px;
+  font-size: 11px;
+  cursor: pointer;
+  isolation: isolate;
+}
+.bf-row > span { position: relative; z-index: 1; }
+.bf-row .p { font-weight: 600; }
+.bf-row .q { color: var(--tx-2); }
+.bf-row .t { text-align: right; color: var(--tx-4); font-size: 10px; }
+/* profundidad: una banda del color del lado, con el ancho del acumulado */
+.bf-row .d { position: absolute; z-index: 0; top: 0; bottom: 0; right: 0; width: var(--w, 0%); opacity: .13; }
+
+.bf-asks .bf-row .p, .bf-asks .bf-row .d { color: var(--down); }
+.bf-asks .bf-row .d { background: var(--down); }
+.bf-bids .bf-row .p, .bf-bids .bf-row .d { color: var(--up); }
+.bf-bids .bf-row .d { background: var(--up); }
+.bf-row:hover { background: var(--bg-3); }
+.bf-row.bf-mine { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+.bf-book-last {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0;
+  padding: 4px 10px;
+  background: var(--bg-3);
+  border-block: 1px solid var(--line-soft);
+}
+.bf-book-last .v { font-size: 15px; font-weight: 700; }
+.bf-book-last .a { font-size: 13px; line-height: 1; }
+.bf-book-last.up .v, .bf-book-last.up .a { color: var(--up); }
+.bf-book-last.dn .v, .bf-book-last.dn .a { color: var(--down); }
+
+.bf-book-frac { padding: 6px 10px 0; }
+.bf-frac-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--down); }
+.bf-frac-bar i { display: block; height: 100%; }
+.bf-frac-bar .up { background: var(--up); width: 50%; transition: width .3s ease; }
+.bf-frac-lab { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9.5px; }
+.bf-frac-lab .up { color: var(--up); }
+.bf-frac-lab .dn { color: var(--down); }
+
+/* ===================== 5) panel de órdenes ===================== */
+
+.bf-margin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.bf-lev {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.bf-lev b { min-width: 26px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.bf-lev input[type="range"] { width: 86px; height: 3px; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
+
+/* segmentedos planos, con el activo en lima */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  height: 28px;
+  gap: 0;
+  padding: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.seg.seg-sm { height: 26px; }
+.seg-btn {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .2px;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover { color: var(--tx-1); background: var(--bg-4); }
+.seg-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+.field { margin-bottom: 7px; }
+.field-label { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+input[type="number"], input[type="text"], input[type="datetime-local"], select {
+  height: 30px;
+  font-size: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--tx-1);
+}
+input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(184, 240, 64, .22); }
+.input-row .suffix { font-size: 10px; color: var(--tx-4); }
+
+/* 0 / 25 / 50 / 75 / 100, como el deslizador de fracción del original */
+.bf-slide-quick {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 2px 0 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.bf-slide-quick button {
+  position: relative;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+.bf-slide-quick button + button { border-left: 1px solid var(--line); }
+.bf-slide-quick button:hover { color: var(--tx-1); }
+.bf-slide-quick button.active { color: var(--accent); background: rgba(184, 240, 64, .12); }
+.bf-slide-quick button.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.quick-row { gap: 4px; margin: 4px 0 8px; }
+.chip {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.chip:hover { color: var(--tx-1); border-color: #3a3a44; }
+.chip.active { background: rgba(184, 240, 64, .14); border-color: var(--accent); color: var(--accent); }
+
+.hint { font-size: 10.5px; color: var(--tx-4); line-height: 1.5; }
+.hint b { color: var(--tx-2); }
+
+.btn {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-3);
+  color: var(--tx-2);
+}
+.btn:hover { background: var(--bg-4); color: var(--tx-1); }
+.btn-icon { width: 28px; height: 26px; border-radius: var(--r); }
+.btn-primary { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
+.btn-primary:hover { background: #33333d; }
+#btnQuick { color: var(--accent); border-color: rgba(184, 240, 64, .35); }
+
+/* Long / Short a sangre completa: el par de botones del original */
+.order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
+.order-actions .btn { height: 38px; font-size: 13px; font-weight: 700; border: 0; border-radius: var(--r); }
+.btn-long { background: var(--up); color: #04241a; }
+.btn-long:hover { background: #2fd9a0; }
+.btn-short { background: var(--down); color: #2b0a09; }
+.btn-short:hover { background: #ff6d67; }
+.btn-long:disabled, .btn-short:disabled { opacity: .45; cursor: not-allowed; }
+
+/* fila inferior: coste, margen y cierre total */
+/* El campo heredado del apalancamiento no debe reservar columna en la fila
+   de comisión: se saca del flujo y el campo de comisión ocupa la fila entera. */
+.bf-fee-row > .visually-hidden { display: none; }
+.bf-fee-row { grid-template-columns: minmax(0, 1fr); }
+.bf-cost {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10.5px;
+  color: var(--tx-4);
+}
+.bf-cost b { color: var(--tx-2); font-weight: 600; }
+.bf-flat {
+  margin-left: auto;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--tx-3);
+}
+.bf-flat:hover { color: var(--down); border-color: var(--down); }
+
+/* ============ 6) pestañas inferiores (Posiciones, Órdenes, …) ============ */
+
+#bottomPanel {
+  background: var(--bg-1);
+  border-top: 1px solid var(--line);
+  height: 198px;
+}
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 33px;
+  padding: 0 6px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  position: relative;
+  height: 100%;
+  padding: 0 13px;
+  border: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--tx-1); background: var(--bg-3); }
+.tab.active { color: var(--tx-1); font-weight: 600; }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px; right: 10px; bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.tab .count, .tab span[id] { color: var(--tx-4); font-variant-numeric: tabular-nums; }
+.tabs-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+
+.tab-body { padding: 0; min-height: 0; }
+.tab-body.active { display: block; overflow: auto; }   /* si el contenido no cabe, scrollea él, no desborda el panel */
+#bottomPanel { overflow: hidden; }
+.bf-tabrow { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; }
+.bf-tabrow > .card { flex: 1 1 440px; border-right: 1px solid var(--line); }
+.bf-tabnote { padding: 12px; color: var(--tx-4); font-size: 11px; }
+
+/* las tarjetas metidas en pestañas pasan a lectura horizontal */
+#tab-positions .card-body,
+#tab-account .card-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 0 18px;
+  align-items: start;
+  padding: 8px 10px 10px;
+}
+#tab-positions .card-body > .pos-mgmt {
+  grid-column: 1 / -1;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+.pos-mgmt { gap: 5px; }
+.pm-row { gap: 5px; }
+.pm-label { font-size: 10.5px; color: var(--tx-3); letter-spacing: .2px; }
+.pm-row input { height: 26px; }
+.mini-btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10.5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.mini-btn:hover { color: var(--tx-1); background: var(--bg-4); }
+.mini-btn:disabled { opacity: .4; }
+
+/* lista de órdenes pendientes: una fila por orden, como en el original */
+.pending-list { display: flex; flex-direction: column; gap: 0; }
+.limit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  border-radius: 0;
+}
+.limit-row:hover { background: var(--bg-2); }
+.limit-row .lr-price { font-size: 12px; font-weight: 700; }
+
+/* ========================= 7) gráfico y barras ========================= */
+
+#chartArea { background: var(--bg-0); }
+
+#drawToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--toolbar-h);
+  padding: 0 8px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+.tool-cluster { gap: 2px; padding: 0; }
+.tool {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 5px;
+  font-size: 11.5px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.tool:hover { background: var(--bg-3); color: var(--tx-1); }
+.tool.active { background: rgba(184, 240, 64, .16); color: var(--accent); }
+.mini-select { height: 24px; font-size: 10.5px; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--tx-2); }
+.color-pick input[type="color"] { width: 22px; height: 22px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-3); }
+
+#ohlcLegend {
+  gap: 10px;
+  padding: 4px 9px;
+  background: rgba(13, 13, 16, .82);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  font-size: 11px;
+}
+#ohlcLegend .lg-pair { font-size: 11.5px; }
+#ohlcLegend b { color: var(--tx-1); }
+#ohlcLegend .lg-src { color: var(--tx-4); }
+#tvCredit { color: var(--tx-4); font-size: 9.5px; }
+#hiddenNotice { background: rgba(240, 185, 11, .14); border: 1px solid rgba(240, 185, 11, .4); color: var(--warn); border-radius: var(--r); }
+
+.indPane { border-top: 1px solid var(--line); background: var(--bg-1); }
+.pane-head { height: 24px; padding: 0 8px; background: var(--bg-2); }
+.pane-title { font-size: 10.5px; color: var(--tx-3); }
+.pane-val { font-size: 10.5px; }
+
+#replayBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+}
+.rb-buttons { gap: 3px; }
+.rb-btn {
+  width: 30px;
+  height: 26px;
+  font-size: 11px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-2);
+}
+.rb-btn:hover { background: var(--bg-4); color: var(--tx-1); }
+.rb-play { width: 40px; background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 700; }
+.rb-play:hover { background: #c6ff5c; color: var(--accent-ink); }
+.speed-btn {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.speed-btn.active { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
+.rb-info { font-size: 10.5px; color: var(--tx-3); }
+.rb-clock-val { font-size: 11.5px; color: var(--tx-1); }
+.rb-status { font-size: 9px; padding: 1px 6px; border-radius: var(--r-sm); letter-spacing: .6px; }
+.rb-status.playing { background: rgba(37, 202, 147, .16); color: var(--up); }
+.rb-status.paused { background: var(--bg-4); color: var(--tx-3); }
+#progressRange { accent-color: var(--accent); }
+
+/* ========================= 8) tablas y listas ========================= */
+
+table { font-size: 11px; }
+thead th {
+  position: sticky;
+  top: 0;
+  padding: 5px 8px;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--tx-4);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+tbody td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); }
+tbody tr:hover td { background: var(--bg-2); }
+.pnl.up, .up { color: var(--up); }
+.pnl.dn, .dn { color: var(--down); }
+.empty { color: var(--tx-4); font-size: 11px; padding: 14px; }
+
+.log-list { padding: 6px 8px; }
+.log-line { font-size: 10.5px; padding: 2px 0; border-bottom: 0; }
+.log-time { color: var(--tx-4); }
+.draw-list { padding: 6px 8px; }
+.draw-row { padding: 4px 6px; border-radius: var(--r-sm); font-size: 11px; }
+.draw-row:hover { background: var(--bg-2); }
+
+.stat-grid { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 1px; }
+.stat {
+  padding: 6px 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+}
+.stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--tx-4); }
+.stat b { font-size: 13px; }
+
+.kv { padding: 3px 0; font-size: 11.5px; border-bottom: 1px dashed var(--line-soft); }
+.kv span { color: var(--tx-3); }
+.kv b { color: var(--tx-1); font-weight: 600; }
+.kv.big b { font-size: 15px; }
+.kv.small { font-size: 10px; color: var(--tx-4); }
+.meter { height: 4px; background: var(--bg-4); border-radius: 2px; }
+.meter-fill { background: var(--warn); }
+
+.panels-list { gap: 0; }
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.panel-row:hover { background: var(--bg-3); }
+
+/* ==================== 9) modales, toasts, varios ==================== */
+
+.modal-box, .modal { }
+.modal-box {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-2);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .66);
+}
+.modal-head { border-bottom: 1px solid var(--line); }
+.modal-head h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--tx-2); }
+.modal-body { font-size: 12px; }
+.toast {
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: var(--r);
+  background: var(--bg-3);
+  font-size: 11.5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+}
+.toast.ok { border-left-color: var(--up); }
+.toast.err { border-left-color: var(--down); }
+.toast.warn { border-left-color: var(--warn); }
+kbd {
+  padding: 1px 5px;
+  font-size: 10.5px;
+  background: var(--bg-4);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  color: var(--tx-2);
+}
+.symbol-btn { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); }
+.symbol-btn:hover { border-color: #3a3a44; }
+.tf-quick { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); padding: 0; height: 28px; }
+.tf-btn { height: 26px; min-width: 32px; font-size: 11px; border-radius: var(--r-sm); }
+.tf-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+/* botón «live» del libro: apagado = derivado del replay, encendido = red */
+#btnBookLive { letter-spacing: .3px; }
+#btnBookLive.on { color: var(--up); border-color: rgba(37, 202, 147, .45); }
+#btnBookLive.off { color: var(--tx-4); }
+
+/* ===================== 10) adaptive del nuevo armazón ===================== */
+
+/* En estrecho el terminal apila: gráfico arriba, libro+órdenes debajo, y la
+   fila de estadísticas pasa a desplazarse en horizontal (ya lo hace). */
+@media (max-width: 1000px) {
+  /* En estrecho la franja del terminal se come ALTURA (es una fila debajo del
+     gráfico), así que el andamio se compacta aquí siempre: sin esto, en
+     1000×780 o 900×700 el gráfico se quedaba en ~140 px. */
+  :root { --stats-h: 34px; --toolbar-h: 30px; }
+  #topbar { min-height: 0; }
+  #topbar .brand { border-right: 0; min-height: 0; padding: 7px 10px; }
+  #topbar .topbar-group { padding: 6px 10px; }
+  .bf-stats { width: 100%; }
+  /* El workspace pasa a dos filas: gráfico (elige su altura) y la franja del
+     terminal, que en estrecho es una FILA desplazable (no una pila: si no, el
+     panel de órdenes quedaría fuera del recorte y sería inalcanzable). */
+  #workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  /* En la franja el libro va tumbado: sin cabecera de columnas y con tres
+     filas por lado, para que el precio central quepa siempre. */
+  .bf-book-cols { display: none; }
+  .bf-asks, .bf-bids { max-height: 51px; }
+  #sidebar {
+    flex-direction: row;
+    align-items: stretch;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 190px;
+    min-height: 0;
+  }
+  #sidebar > .card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 300px;
+    max-width: 380px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  #bookCard { min-width: 268px; max-width: 300px; }
+  #bookCard .card-body { max-height: 118px; }
+  /* En estrecho lo importante es poder operar: el panel de órdenes pasa el
+     primero y el libro detrás (en el exchange, en móvil, ocurre igual). Se
+     sube la especificidad (id + hijo directo) para ganar a #sidebar > .card. */
+  #sidebar > .card { order: 3; }
+  #sidebar > #orderCard { order: 1; }
+  #sidebar > #bookCard { order: 2; }
+  #bottomPanel { height: 158px; }
+  #replayBar { height: 38px; }
+}
+
+@media (max-width: 700px) {
+  #bottomPanel { height: 236px; }
+  .bf-stat { min-width: 104px; padding: 0 10px; }
+  .bf-stat.bf-last { min-width: 118px; }
+  .bf-stat.bf-last .bf-v { font-size: 15px; }
+  #bottomPanel { height: 190px; }
+  #tab-positions .card-body,
+  #tab-account .card-body { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .bf-book-cols, .bf-row { grid-template-columns: 1fr 1fr; }
+  .bf-row .t, .bf-book-cols span:last-child { display: none; }   /* sin «Total» en móvil */
+}
+
+/* Respeto por quien prefiere menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ═════════════════ VENTANAS BAJAS (previews embebidos, portátiles) ═════════════════
+   El terminal tiene más filas que el tema anterior (nav + estadísticas +
+   toolbar + replay + pestañas), así que en altura hay que recuperar milímetros
+   por todas partes. Las pruebas `responsive` y `browser.capture` exigen entre
+   150 y 240 px útiles de gráfico: aquí se consiguen encogiendo el ANDAMIO,
+   nunca el gráfico.
+
+   Regla que se aprendió a golpes: NINGÚN tope de altura sin su `overflow`.
+   Un `max-height` con `overflow:visible` recorta la pintura y deja controles
+   fuera de la caja: el botón de «⏳ Límite» quedaba inservible a 1280×820.
+   Por eso, en el reparto en COLUMNA (ancho > 1000) la barra lateral se
+   desplaza entera y el formulario de órdenes no se recorta jamás; solo el
+   libro, que es una lista larga, lleva su propio scroll. */
+@media (max-height:860px) {
+  :root { --stats-h: 36px; }
+  #bottomPanel { height: 176px; }
+  .indPane { height: 84px; }
+  .bf-asks, .bf-bids { max-height: 118px; overflow: hidden; }
+}
+
+@media (max-height:820px) {
+  :root { --stats-h: 34px; --toolbar-h: 30px; }
+  #topbar .brand { min-height: 42px; }
+  #topbar .topbar-group { padding: 4px 10px; }
+  #bottomPanel { height: 156px; }
+  #replayBar { height: 38px; }
+  #drawToolbar { height: 30px; }
+  .bf-stat { min-width: 100px; padding: 0 10px; }
+  .bf-stat .bf-v { font-size: 12.5px; }
+  .bf-stat.bf-last .bf-v { font-size: 15px; }
+  .indPane { height: 64px; }
+  #sidebar { overflow-y: auto; }                       /* columna: se desplaza, no se recorta */
+  #sidebar > .card > .card-body { max-height: none; }  /* y el formulario, intacto */
+  /* El libro NO se desplaza: se recortan las filas LEJANAS y se ven siempre las
+     pegadas al precio (que son las que importan). `.bf-asks` es column-reverse,
+     así que ya está anclado abajo; los bids, arriba. */
+  .bf-asks, .bf-bids { max-height: 102px; overflow: hidden; }
+}
+
+/* Tier 700: coincide con el «modo apurado» histórico del tema (responsive.css
+   §7): panel inferior a 104 px y paneles de indicadores apretados. */
+@media (max-height:700px) {
+  :root { --stats-h: 30px; }
+  #topbar .brand { min-height: 36px; padding: 0 8px; }
+  #bottomPanel { height: 104px; }
+  #replayBar { height: 34px; }
+  #drawToolbar { height: 28px; }
+  .tabs { height: 28px; }
+  .tab { padding: 0 10px; font-size: 10.5px; }
+  .rb-btn { width: 27px; height: 24px; }
+  .rb-play { width: 34px; }
+  .indPane { height: 56px; }
+  .bf-asks, .bf-bids { max-height: 68px; overflow: hidden; }
+  .bf-stat { min-width: 92px; }
+  .bf-stat .bf-sub { display: none; }
+  .ob-row { height: 15px; }
+  #chartWrap { min-height: 150px; }
+  /* Y lo que más recupera: la barra superior deja de envolver en tres filas.
+     A 900 px de ancho el grupo de símbolo+temporalidades partía en dos y, con
+     la fila de estadísticas, el andamio medía 164 px; aquí pasa a dos filas con
+     desplazamiento horizontal dentro del grupo (como en el tema base). */
+  #topbar .topbar-group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  #topbar .topbar-group::-webkit-scrollbar { height: 0; }
+  #tfQuick { flex-wrap: nowrap; }
+}
+
+/* Tier 560: panel casi plano. La fila de estadísticas se reduce a su mínima
+   expresión (el gráfico manda) y el panel inferior queda en dos líneas. */
+@media (max-height:560px) {
+  .bf-stats { height: 24px; }
+  .bf-stat { min-width: 84px; gap: 0; }
+  .bf-stat .bf-k { font-size: 8.5px; }
+  .bf-stat .bf-v { font-size: 11px; }
+  .bf-stat.bf-last .bf-v { font-size: 12.5px; }
+  #bottomPanel { height: 88px; }
+  .tab-body .card-body, #tab-positions .card-body { padding: 4px 8px; }
+  .indPane { height: 44px; }
+}
+
+/* ── Y lo mismo, pero cuando la franja del terminal va DEBAJO del gráfico ──
+   (ancho ≤ 1000): ahí la franja sí consume altura, así que cada tarjeta se
+   desplaza por dentro — con su `overflow`, nunca a recorte limpio. */
+@media (max-width:1000px) and (max-height:820px) {
+  #sidebar { max-height: 176px; }
+  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; }
+  #bookCard .card-body { max-height: 110px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 51px; overflow: hidden; }
+}
+@media (max-width:1000px) and (max-height:700px) {
+  /* Aquí el que se aprieta de verdad es el panel inferior: la franja del
+     terminal necesita sitio para mostrar precio central + 2 filas por lado. */
+  #bottomPanel { height: 86px; }
+  #sidebar { max-height: 170px; }
+  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; }
+  #bookCard .card-body { max-height: 130px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 44px; overflow: hidden; }
+}
+@media (max-width:1000px) and (max-height:640px) {
+  #sidebar { max-height: 122px; }
+  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 24px; }
+  .indPane { height: 48px; }
+}
+
+/* Móvil angosto: los dos paneles de indicadores no caben a su altura normal. */
+@media (max-width:640px) {
+  .indPane { height: 52px; }
+  #bottomPanel { height: 150px; }
+  #sidebar { max-height: 132px; }
+  #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
+}

@@ -34,7 +34,8 @@
     "test:entradas": "node tests/entradas.test.js",
     "test:arrastrar": "node tests/limite-arrastrar.test.js",
     "test:promediar": "node tests/promediar.test.js",
-    "test:trailing": "node tests/trailing.test.js"
+    "test:trailing": "node tests/trailing.test.js",
+    "test:bitunix": "node tests/bitunix.test.js"
   },
   "keywords": [
     "backtesting",

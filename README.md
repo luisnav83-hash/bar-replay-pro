@@ -66,8 +66,16 @@ mirar el indicador nunca revela el futuro.
 
 ### 5. Trading simulado
 - **BUY/LONG** y **SELL/SHORT** con tamaño en **% del equity**, **USD de exposición** o **cantidad**.
-- **Capital inicial** configurable (por defecto 10.000 $) y **apalancamiento** 1x…50x
-  con **precio de liquidación estimado**.
+- **Capital inicial** configurable (por defecto 10.000 $) y **apalancamiento** 1x…100x
+  (deslizador `#levRange`, como en el panel de futuros) con **precio de liquidación estimado**.
+- **Modo de margen Cruzado / Aislado** (el seg de arriba del panel de órdenes). Cambia la
+  liquidación, no es un adorno: en **Aislado** vuelve la fórmula clásica
+  `entrada · (1 ∓ 1/apalancamiento)` y en **Cruzado** respalda también el **margen libre**
+  de la cuenta → `entrada − lado · (margen + margen libre) / cantidad`, que la aleja
+  (`js/tradingEngine.js`: `liquidationPrice`, `marginOf`, `freeMargin`). El modo elegido
+  se guarda con la sesión.
+- **Comisión** por operación (0,10 % por defecto) aplicada en apertura y cierre; con
+  promediado, el break-even mostrado **no** es el precio medio: incluye lo pagado en comisiones.
 - **Stop Loss** y **Take Profit**: por precio, con atajos por % o **arrastrando las
   etiquetas SL/TP sobre el gráfico**.
 - Ejecución automática de SL/TP durante el replay, con **modelo realista**:
@@ -131,6 +139,69 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 - **⚙️ Ajustes abre de verdad**: el botón rellena y abre el modal (`UI.openModal('modalSettings')`,
   que es quien llama a `UI.openSettings`); al reabrir, los interruptores reflejan el estado real
   del motor —no el valor con el que nació la página—, incluido «➕ Promediar entradas».
+
+---
+
+## 🖥 Interfaz: terminal de futuros (piel Bitunix)
+
+La interfaz es una **reproducción de la pantalla de futuros de Bitunix**: misma
+organización, misma jerarquía visual y mismas interacciones, escrita desde cero
+aquí. **No** se usa el logo, el nombre ni ningún recurso del exchange: es un
+*look & feel*, no una suplantación.
+
+**Las cinco zonas, como en el original**
+
+| Zona | Qué hay | Dónde |
+| --- | --- | --- |
+| 1 · Barra superior | par + temporalidades rápidas y **fila de estadísticas de 24 h** (último con flecha, %, máx/mín, volumen, mark & index, **funding con su cuenta atrás** y OI) | `#topbar` → `#bfStats` |
+| 2 · Gráfico | velas + toolbar de dibujo + paneles de indicadores + barra de replay | `#chartArea` |
+| 3 · Libro de órdenes | ventas en rojo leídas **de mayor a menor hacia el precio** (la mejor venta, justo encima del último), precio último centrado con flecha, compras en verde **de menor a mayor hacia abajo**, columna **Total** acumulada (máxima en la fila lejana) y **ratio B % / S %** al pie | `#bookCard` (`js/orderBook.js`) |
+| 4 · Panel de órdenes | modo de margen, apalancamiento, tipo (⚡ Mercado / ⏳ Límite), unidad (% equity / USD / Qty), **0 · 25 · 50 · 75 · 100**, TP/SL rápidos, **Coste** y **Margen** calculados en vivo y `Abrir Long` / `Abrir Short` | `#orderCard` |
+| 5 · Pestañas | Posiciones · Órdenes · Operaciones · Cuenta · Estadísticas · Registro · Dibujos, con contadores en las cabeceras | `#bottomPanel` |
+
+**Interacciones copiadas (y probadas)**
+
+* **Pulsar un precio del libro** rellena el campo de precio límite y salta al modo
+  «⏳ Límite», igual que en el exchange.
+* El botón **fijar** del libro ancla los niveles al precio de la vela del cursor:
+  en un replay el libro no puede «seguir» al reloj.
+* **0/25/50/75/100** convierte según la unidad elegida: el 50 % significa 50 % del
+  disponible en `% equity`, 50 % del notional en `USD` y media cantidad en `Qty`.
+* Con tamaño 0 los botones de compra/venta se **deshabilitan** (no hay orden posible),
+  y `#bfCostVal` / `#bfMarginVal` siempre dicen lo que el motor va a hacer.
+* Cambiar **Cruzado ↔ Aislado** con posición abierta **mueve la liquidación** visible
+  de la tarjeta `Posición abierta`.
+
+**Paleta medida de la captura de referencia** (no inventada): fondo `#0a0a0b`,
+sube `#25ca93`, baja `#f65b55`, acento lima `#b8f040`, ámbar para funding y
+liquidación `#f0b90b`, texto `#e6e7ea` / `#8b8e96`, **radio 0** en las tarjetas,
+cuerpo 12 px, precio 17 px, botones Long/Short de 38 px, fila de libro de 17 px.
+Todo vive en `css/bitunix.css`, que se carga **la última** para poder reescribir
+al tema anterior sin tocarlo.
+
+**De dónde sale cada dato (y qué no es real)**
+
+| Dato | Origen auténtico | Cómo se etiqueta |
+| --- | --- | --- |
+| Velas OHLCV | Binance **spot** por `server.js` (espejo `data-api.binance.vision`); en el archivo único, la instantánea de velas reales incrustada | leyenda del gráfico |
+| 24 h (%, máx/mín, volumen) | `GET /api/v3/ticker/24hr` por el **mismo origen** (proxy de `server.js`); sin red, `—` | `title` de `#bfChg24`: «Variación de 24 h REAL (espejo spot de Binance)» |
+| Niveles del libro | **DERIVADOS** de la vela del cursor de forma determinista (`OB.derivedBook`): no existe un libro histórico por vela y fingirlo sería mentira. Se piden 10+10 y se pintan con las lejanas recortadas (`.bf-asks`/`.bf-bids` con `max-height` y `overflow:hidden`), de modo que el precio central y las filas pegadas a él **siempre** se ven | `#bookSrc` = `derivado`; `#bfSource` = «libro: derivado del replay» |
+| Mark & Index | mark = cierre de la vela actual; index = media corta de cierres | etiqueta «derivado» en el `title` |
+| Funding, cuenta atrás, OI | **Bitget USDT-FUTURES** (`current-fund-rate` y `ticker`) vía `/api/market/*` de `server.js`; en Pages, CORS directo con la API pública | `#bfSource` añade «mark/OI/funding: Bitget» |
+| Ratio long/short | Bitget `account-long-short` (nº de cuentas, 1 h) | pie del libro `B % / S %` |
+| Comisión, margen, PnL | locales del motor de práctica | — |
+
+Regla: **un dato derivado jamás se presenta como real**. Si no hay red, funding, OI y
+long/short pasan a `—` y el libro sigue siendo utilizable porque nunca prometió ser real.
+
+**En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
+los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
+barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
+`tests/responsive.test.js` (50 comprobaciones) y `tests/browser.capture.js`:
+el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
+altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
+el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
+regresivo que cazó `tests/limites.test.js`).
 
 ---
 
@@ -219,7 +290,10 @@ soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
 
 ![Dibujos](docs/captura-23-dibujos-flecha-camino.png)
 
-*(Generadas automáticamente por `tests/browser.capture.js` en Chromium headless.)*
+| 37 | **Terminal de futuros (piel Bitunix)**, escritorio 1440×900 |
+| 38 | El mismo terminal en **390 px**: gráfico arriba y libro + panel de órdenes en franja |
+
+*(37 y 38 las escribe `tests/bitunix.test.js`; el resto, `tests/browser.capture.js` en Chromium headless.)*
 
 ---
 
@@ -270,7 +344,7 @@ npm test                    # lógica + DOM simulado
 npm run test:net            # carga de velas reales (requiere red / server.js en marcha)
 npm run test:browser        # navegador real + capturas en docs/ (requiere puppeteer)
 
-node tests/logic.test.js      # 151 pruebas: indicadores, datos, trading, estadísticas y replay
+node tests/logic.test.js      # 153 pruebas: indicadores, datos, trading, estadísticas y replay
 node tests/dom.smoke.js       #  51 comprobaciones en navegador simulado (requiere jsdom)
 node tests/boot.test.js       #  13 comprobaciones de arranque con red bloqueada
 node tests/network.test.js    #  10 comprobaciones de paginación y datos reales de Binance
@@ -279,7 +353,7 @@ node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
 node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin recortes
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
-node tests/limites.test.js    #  13 comprobaciones de las órdenes límite (ciclo completo)
+node tests/limites.test.js    #  14 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
 node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
@@ -291,14 +365,22 @@ node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto herman
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)
-node tests/promediar.test.js    #  76 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+node tests/promediar.test.js    #  78 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
+node tests/bitunix.test.js      # 124 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+                                #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
+                                #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
+node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
+                                #   botones y deslizadores reales, y verifica libro, quick sizes, coste/
+                                #   margen, liquidación por modo, pestañas y lo que se ve en móvil
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
 ```
-Resultado actual (`npm run test:all`): **770 comprobaciones, 0 fallos** ✅ · **21 suites**
+Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
+**898 comprobaciones, 0 fallos** ✅ · **22 suites** · 1 sin contador (`single.test.js`,
+que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las cuatro que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **892 comprobaciones, 0 fallos** ✅ · **25 suites** · 1 sin contador (`single.test.js`)
 
@@ -371,7 +453,10 @@ bar-replay-app/
 ├── bar-replay-pro-unico.html # Build de un solo archivo (generado)
 ├── server.js                 # Backend opcional: estáticos + proxy de klines
 ├── package.json
-├── css/responsive.css      ← TODAS las reglas de tamaño (se carga la última)
+├── css/responsive.css      ← reglas de tamaño del tema base
+├── css/bitunix.css         ← PIEL Bitunix: tokens medidos, topbar de 2 filas, libro,
+│                             panel de órdenes, pestañas y los escalones de altura
+│                             (se carga LA ÚLTIMA: puede reescribir al tema anterior)
 ├── snapshot/velas-reales.json ← velas reales incrustadas (tools/snapshot.js)
 ├── css/
 │   ├── main.css              # Variables del tema, layout, botones, tablas
@@ -387,6 +472,8 @@ bar-replay-app/
 │   ├── tradingEngine.js      # Cuenta, órdenes, SL/TP, liquidación, checkpoints
 │   ├── barReplay.js          # Motor del replay (play/pausa/velocidad/seek)
 │   ├── chart.js              # Gráfico principal, paneles y equity (Lightweight Charts)
+│   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
+│   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
 │   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
 │   ├── uiController.js       # Cableado de la interfaz, modales y atajos
 │   └── app.js                # Inicialización y orquestación
@@ -398,7 +485,7 @@ bar-replay-app/
 │   ├── icons/                # favicon.svg
 │   └── sounds/               # (sonidos sintetizados con WebAudio)
 └── tests/
-    ├── logic.test.js         # Pruebas de lógica en Node (151)
+    ├── logic.test.js         # Pruebas de lógica en Node (153)
     ├── dom.smoke.js          # Prueba de humo con jsdom (51)
     ├── network.test.js       # Carga de velas reales / paginación (10)
     ├── browser.capture.js    # Navegador real (Chromium) + capturas (43)

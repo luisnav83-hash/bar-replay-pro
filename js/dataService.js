@@ -466,5 +466,125 @@
 
   DS.cacheKey = (symbol, interval) => `brp_kl_${symbol}_${interval}`;
 
+  /* =========================================================================
+   * DATOS DE MERCADO DEL TERMINAL (fila de estadísticas + libro de órdenes)
+   * -------------------------------------------------------------------------
+   * Dos procedencias y CADA VALOR lleva la suya, para no vender como de
+   * futuros lo que es de spot:
+   *   · «spot»    → espejo público de Binance (mismo mercado que las velas
+   *                 que usa la app): libro de órdenes y estadísticas de 24 h.
+   *   · «futuros» → API pública de Bitget (USDT-FUTURES, sin clave, CORS *):
+   *                 mark, índice, funding, interés abierto y reparto de
+   *                 cuentas long/short.
+   * Todo es opcional: si un endpoint no responde, js/orderBook.js deriva el
+   * valor de las velas cargadas y lo ETIQUETA como derivado.
+   * ======================================================================= */
+  DS.MARKET = {
+    TIMEOUT: 4200,
+    BITGET: 'https://api.bitget.com',
+    PRODUCT: 'USDT-FUTURES',
+    _cache: new Map(),
+
+    /** GET JSON con timeout y caché (ttl en ms; 0 = no cachear). */
+    async json(key, url, ttl) {
+      const now = Date.now();
+      const hit = DS.MARKET._cache.get(key);
+      if (ttl > 0 && hit && now - hit.t < ttl) return hit.d;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), DS.MARKET.TIMEOUT);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        if (ttl > 0) DS.MARKET._cache.set(key, { t: now, d });
+        return d;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
+    /**
+     * URL a través del proxy del mismo origen (server.js), si lo hay. Así, en
+     * la sandbox y en local, NINGUNA petición del terminal sale a internet
+     * directo: es la invariante que vigila tests/preview-live.test.js.
+     */
+    async proxied(pathAndQuery, directo, ttl) {
+      if (DS.MISMO_ORIGEN_UTIL) {
+        try { return await DS.MARKET.json('px|' + pathAndQuery, pathAndQuery, ttl); }
+        catch (e) { /* el proxy no está: se prueba la fuente directa */ }
+      }
+      return await DS.MARKET.json('dx|' + directo, directo, ttl);
+    },
+
+    /** Prueba los hosts de Binance (primero el proxy del mismo origen, si lo hay). */
+    async binance(pathAndQuery, ttl) {
+      let last = null;
+      for (const host of DS.BINANCE_HOSTS) {
+        try { return await DS.MARKET.json('bk|' + host + pathAndQuery, host + pathAndQuery, ttl); }
+        catch (e) { last = e; }
+      }
+      throw last || new Error('sin hosts que probar');
+    },
+
+    /** Libro real (bid/ask) del espejo spot: [[precio, cantidad], …]. */
+    async depth(symbol, limit = 30) {
+      const r = await DS.MARKET.binance(`/api/v3/depth?symbol=${symbol}&limit=${limit}`, 2500);
+      const f = (a) => (a || []).map((x) => [+x[0], +x[1]]);
+      if (!r || (!r.asks && !r.bids)) throw new Error('libro vacío');
+      return { asks: f(r.asks), bids: f(r.bids), id: +r.lastUpdateId || 0 };
+    },
+
+    /** Estadísticas de 24 h del espejo spot. */
+    async ticker24(symbol) {
+      const r = await DS.MARKET.binance(`/api/v3/ticker/24hr?symbol=${symbol}`, 15000);
+      return {
+        last: +r.lastPrice, chgPct: +r.priceChangePercent, open: +r.openPrice,
+        high: +r.highPrice, low: +r.lowPrice,
+        vol: +r.volume, quote: +r.quoteVolume, trades: +r.count || 0,
+      };
+    },
+
+    /** Mark, índice, funding, OI y long/short del perpetuo (Bitget). */
+    async futuresMeta(symbol) {
+      const B = DS.MARKET.BITGET;
+      const P = DS.MARKET.PRODUCT;
+      const q = `symbol=${symbol}&productType=${P}`;
+      // Cada dato intenta primero el proxy del mismo origen y si no, la API
+      // pública de Bitget (admite CORS, así que en Pages funciona igual).
+      const [tk, fr, ls] = await Promise.allSettled([
+        DS.MARKET.proxied(`/api/market/futures-ticker?${q}`, `${B}/api/v2/mix/market/ticker?${q}`, 15000),
+        DS.MARKET.proxied(`/api/market/funding?${q}`, `${B}/api/v2/mix/market/current-fund-rate?${q}`, 60000),
+        DS.MARKET.proxied(`/api/market/long-short?${q}&period=1h`, `${B}/api/v2/mix/market/account-long-short?${q}&period=1h`, 300000),
+      ]);
+      const pick = (r) => (r && r.status === 'fulfilled' && r.value && r.value.data ? r.value.data[0] : null);
+      const d = pick(tk);
+      const f = pick(fr);
+      const l = pick(ls);
+      if (!d && !f && !l) throw new Error('Bitget sin datos');
+      const out = { venues: [] };
+      if (d) {
+        out.mark = +d.markPrice;
+        out.index = +d.indexPrice;
+        out.oi = +d.holdingAmount;                 // unidades declaradas por el exchange
+        out.oiUsd = d.usdtVolume ? +d.usdtVolume : null;
+        out.high24 = +d.high24h;
+        out.low24 = +d.low24h;
+        out.venues.push('Bitget USDT-FUTURES');
+      }
+      if (f) {
+        out.funding = +f.fundingRate;
+        out.fundingEvery = +f.fundingRateInterval || 8;
+        out.nextFunding = +f.nextUpdate;
+        out.venues.push('funding Bitget');
+      }
+      if (l) {
+        out.longPct = +l.longAccountRatio * 100;
+        out.shortPct = +l.shortAccountRatio * 100;
+        out.lsTs = +l.ts;
+      }
+      return out;
+    },
+  };
+
   global.DS = DS;
 })(window);

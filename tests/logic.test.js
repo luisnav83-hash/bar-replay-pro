@@ -262,7 +262,20 @@ pos = TE.openPosition('short', { mode: 'pct', size: 50, entryPrice: 100, sl: 105
 near(pos.notional, 10000, 1e-9, 'SHORT al 50% con 2x → notional = capital');
 near(pos.qty, 100, 1e-9, 'cantidad del SHORT');
 near(TE.marginUsed(), 5000, 1e-9, 'margen bloqueado = notional / apalancamiento');
-near(TE.liquidationPrice(pos), 150, 1e-9, 'precio de liquidación aproximado (2x short)');
+// La liquidación depende ahora del MODO DE MARGEN (Cruzado/Aislado, como en el
+// panel de futuros): en aislado solo respalda el margen de la posición y se
+// recupera la fórmula clásica entrada·(1 + 1/lev); en cruzado entra además el
+// margen libre, así que el precio de liquidación queda MÁS lejos.
+TE.state.marginMode = 'isolated';
+near(TE.liquidationPrice(pos), 150, 1e-9, 'liquidación AISLADA (2x short) = entrada·(1 + 1/lev)');
+TE.state.marginMode = 'cross';
+{
+  const liqCruzada = TE.liquidationPrice(pos);
+  const esperadoCruzada = 100 + (5000 + (TE.state.balance - 5000)) / 100;
+  near(liqCruzada, esperadoCruzada, 1e-6, 'liquidación CRUZADA (2x short) = entrada + (margen + libre)/qty');
+  ok(liqCruzada > 150, `el cruzado aleja la liquidación del short (${liqCruzada.toFixed(2)} > 150)`);
+}
+TE.state.marginMode = 'cross';
 closed = TE.onCandle({ time: 2000, open: 100, high: 101, low: 89, close: 91, volume: 1 });
 ok(closed && closed.reason === 'tp', 'SHORT cierra en TP al bajar el precio');
 near(closed.pnl, (100 - 90) * 100 - 10 - 9, 1e-9, 'PnL del SHORT en TP (con comisiones)');

@@ -27,6 +27,7 @@
     balance: 10000,          // capital realizado (sin PnL abierto)
     equity: 10000,           // balance + PnL no realizado
     leverage: 1,
+    marginMode: 'cross',     // 'cross' (toda la cuenta) | 'isolated' (solo el margen)
     feePct: 0.1,             // % por lado (apertura y cierre)
     fundingPct: 0,           // % por vela sobre el notional (opcional)
     slFirst: 'worst',        // 'worst' | 'best'
@@ -82,12 +83,51 @@
     return p ? p.notional / p.leverage : 0;
   };
 
-  /** Precio de liquidación aproximado (aislado, sin mantenimiento). */
+  /** Margen libre: balance realizado menos lo inmovilizado (respaldo del cruzado). */
+  TE.freeMargin = function () {
+    return Math.max(0, TE.state.balance - TE.marginUsed());
+  };
+
+  /**
+   * Precio de liquidación aproximado, según el MODO DE MARGEN elegido en el
+   * panel de órdenes (Cruzado / Aislado, como en Bitunix):
+   *
+   *   · aislado  → solo respalda la posición el margen asignado:
+   *                  liq = entrada ∓ margen/cantidad
+   *   · cruzado  → respalda también el margen libre de la cuenta:
+   *                  liq = entrada ∓ (margen + libre)/cantidad
+   *
+   * Se desprecia el margen de mantenimiento (el modelo de comisiones de la app
+   * tampoco lo tiene), por eso con 1x y cuenta holgada el precio sale 0: en
+   * cruzado real la posición no liquida antes de tocar suelo. Con margen de
+   * mantenimiento 0 la fórmula aislada coincide exactamente con la anterior.
+   */
   TE.liquidationPrice = function (position) {
     if (!position) return null;
     const p = position;
     const side = p.side === 'long' ? 1 : -1;
-    return p.entryPrice * (1 - side / p.leverage);
+    if (!p.qty) return p.entryPrice * (1 - side / p.leverage);
+    const margen = TE.marginOf(p);
+    const libre = (TE.state.marginMode || 'cross') === 'cross'
+      ? Math.max(0, TE.freeMargin()) : 0;
+    const liq = p.entryPrice - side * (margen + libre) / p.qty;
+    return Math.max(0, +liq.toFixed(6));
+  };
+
+  /** Margen inmovilizado por UNA posición (incluye el añadido al promediar). */
+  TE.marginOf = function (position) {
+    const p = position;
+    if (!p) return 0;
+    return Number.isFinite(p.margin) && p.margin > 0 ? p.margin : (p.notional / p.leverage);
+  };
+
+  /** Cambia el modo de margen y reescribe la liquidación de lo abierto. */
+  TE.setMarginMode = function (mode) {
+    const m = mode === 'isolated' ? 'isolated' : 'cross';
+    TE.state.marginMode = m;
+    // La liquidación no se guarda: se recalcula al pintar (UI, carta y
+    // comercial), así cambiar el modo no deja valores viejos.
+    return m;
   };
 
   TE._pushEquity = function (time, value) {
@@ -1183,6 +1223,7 @@
         balance: TE.state.balance,
         equity: TE.state.equity,
         leverage: TE.state.leverage,
+        marginMode: TE.state.marginMode,
         feePct: TE.state.feePct,
         fundingPct: TE.state.fundingPct,
         slFirst: TE.state.slFirst,

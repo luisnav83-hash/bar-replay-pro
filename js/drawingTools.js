@@ -1240,7 +1240,7 @@
       d.points.forEach((p) => {
         const s = DT._screenPoint(p);
         if (!s) return;
-        ctx.fillStyle = '#0b0c16'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
+        ctx.fillStyle = '#0a0a0b'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.rect(s.x - 4, s.y - 4, 8, 8); ctx.fill(); ctx.stroke();
       });
       ctx.restore();
@@ -1291,7 +1291,7 @@
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 3) : ctx.rect(bx, by, bw, bh);
       ctx.fill();
-      ctx.fillStyle = '#0b0c16';
+      ctx.fillStyle = '#0a0a0b';
       ctx.font = 'bold 10px ui-monospace, monospace';
       ctx.fillText(txt, bx + 5, y + 3.5);
       ctx.restore();

@@ -84,6 +84,8 @@
 
     // 5) UI
     UI.init();
+    // Libro de órdenes y fila de estadísticas del terminal (js/orderBook.js)
+    if (global.OB && OB.init) OB.init();
     UI.setPairLabels(App.pair, App.interval);
     UI.updateSymbolButton && UI.updateSymbolButton();   // botón-buscador de la barra
     UI.syncTfButtons && UI.syncTfButtons();             // temporalidades rápidas

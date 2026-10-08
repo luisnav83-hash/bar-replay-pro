@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/modals.css">
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/bitunix.css">
 
 <!-- ============ LIBRERÍA DE GRÁFICOS (TradingView Lightweight Charts v4) ============ -->
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
@@ -169,8 +170,23 @@
       <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6v.3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="12" cy="17" r="1.15" fill="currentColor"/></svg>
     </button>
   </div>
+  <!-- =====================================================================
+       FILA DE ESTADÍSTICAS (Bitunix): último precio, 24 h, mark/index,
+       financiación, interés abierto, volumen y reparto long/short.
+       Cada valor lleva su procedencia en el title (dato real o del replay).
+       ===================================================================== -->
+  <div class="bf-stats" id="bfStats">
+    <div class="bf-stat bf-last"><span class="bf-k">Último</span><b class="bf-v" id="bfLast">—</b></div>
+    <div class="bf-stat"><span class="bf-k">24 h</span><b class="bf-v" id="bfChg24">—</b><span class="bf-sub" id="bfHighLow">máx — · mín —</span></div>
+    <div class="bf-stat"><span class="bf-k">Mark</span><b class="bf-v" id="bfMark">—</b><span class="bf-sub" id="bfIndex">índice —</span></div>
+    <div class="bf-stat"><span class="bf-k">Funding</span><b class="bf-v" id="bfFunding">—</b><span class="bf-sub" id="bfFundingNext">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Interés abierto</span><b class="bf-v" id="bfOi">—</b><span class="bf-sub" id="bfOiVal">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Vol. 24 h</span><b class="bf-v" id="bfVol">—</b><span class="bf-sub" id="bfVolQuote">—</span></div>
+    <div class="bf-stat bf-frac"><span class="bf-k">Long / Short</span><span class="bf-bar"><i id="bfLsLong"></i></span><span class="bf-sub" id="bfLs">—</span></div>
+    <div class="bf-stat bf-acct"><span class="bf-k">Disponible</span><b class="bf-v" id="bfAvail">—</b><span class="bf-sub" id="bfEquity">—</span></div>
+    <div class="bf-stat bf-src" id="bfSource" title="De dónde sale cada número">—</div>
+  </div>
 </header>
-
 <!-- =====================================================================
      ÁREA PRINCIPAL
      ===================================================================== -->
@@ -182,7 +198,7 @@
     <!-- Barra de herramientas de dibujo -->
     <div id="drawToolbar">
       <div class="tool-cluster" role="group" aria-label="Herramientas de dibujo">
-        <button class="tool active" data-tool="cursor" title="Cursor / seleccionar y mover dibujos">🖱️</button>
+        <button class="tool active" data-tool="cursor" title="Cursor: seleccionar y mover dibujos">↖</button>
         <button class="tool" data-tool="trend" title="Línea de tendencia">╱</button>
         <button class="tool" data-tool="ray" title="Línea de tendencia extendida (rayo)">➚</button>
         <button class="tool" data-tool="hline" title="Línea horizontal de soporte / resistencia">─</button>
@@ -211,9 +227,9 @@
       </div>
 
       <div class="tool-cluster">
-        <button class="tool" id="btnDeleteDrawing" title="Borrar el dibujo seleccionado (o Supr)">🧽</button>
-        <button class="tool" id="btnClearDrawings" title="Borrar todos los dibujos">🗑️</button>
-        <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">🧲</button>
+        <button class="tool" id="btnDeleteDrawing" title="Borrar el dibujo seleccionado (o Supr)">⌫</button>
+        <button class="tool" id="btnClearDrawings" title="Borrar todos los dibujos">✕</button>
+        <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">◎</button>
       </div>
 
       <div class="tool-cluster tool-cluster-right">
@@ -221,7 +237,7 @@
         <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
         <label class="switch" title="Bloquear desplazamiento del chart al arrastrar en él">
           <input type="checkbox" id="chkLockScroll">
-          <span>🔒 scroll</span>
+          <span>⊘ scroll</span>
         </label>
       </div>
     </div>
@@ -319,44 +335,57 @@
 
   <!-- ---------- BARRA LATERAL ---------- -->
   <aside id="sidebar">
+    <!-- =============================================================
+         LIBRO DE ÓRDENES (esquilo Bitunix)
+         Ventas en rojo de mayor a menor, precio último en el centro con su
+         flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
+         salen del espejo público de Binance cuando hay red y, si no, se
+         derivan de las velas del replay (js/orderBook.js lo etiqueta).
+         ============================================================= -->
+    <div class="card bf-book" id="bookCard">
+      <div class="card-head">
+        <span class="card-title">Libro de órdenes</span>
+        <span class="tag tag-muted" id="bookSrc">—</span>
+        <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
+      </div>
+      <div class="card-body">
+        <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+        <div class="bf-asks" id="bookAsks"></div>
+        <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
+        <div class="bf-bids" id="bookBids"></div>
+        <div class="bf-book-frac">
+          <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
+          <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
+        </div>
+      </div>
+    </div>
+
 
     <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
          actuales de cada indicador, que se refrescan en cada vela del replay.
          El botón 👁 muestra u oculta la serie; clic en la fila configura. -->
-    <div class="card" id="panelsCard">
-      <div class="card-head">
-        <span class="card-title">📈 Paneles</span>
-        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
-        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
-      </div>
-      <div class="card-body">
-        <div id="panelsList" class="panels-list"></div>
-      </div>
-    </div>
 
     <!-- CUENTA -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">💼 Cuenta</span>
-        <span class="tag" id="tagLeverage">1x</span>
-      </div>
-      <div class="card-body">
-        <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
-        <div class="kv"><span>Equity</span><b id="acEquity">$10,000.00</b></div>
-        <div class="kv"><span>PnL total</span><b id="acTotalPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>PnL abierto</span><b id="acOpenPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>Margen usado</span><b id="acMargin">$0.00</b></div>
-        <div class="kv"><span>Balance libre</span><b id="acFree">$10,000.00</b></div>
-        <div class="meter"><div class="meter-fill" id="marginMeter"></div></div>
-        <div class="kv small"><span id="acExposure">Exposición 0%</span><span id="acFees">Comisiones $0.00</span></div>
-      </div>
-    </div>
 
     <!-- NUEVA ORDEN -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">⚡ Nueva orden</span>
+    <div class="card bf-order" id="orderCard">
+      <div class="card-head"><span class="card-title">Nueva orden</span>
         <span class="tag tag-muted" id="tagPrice">—</span>
       </div>
       <div class="card-body">
+        <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
+             apalancamiento y unidad. El modo cambia el cálculo de liquidación
+             (js/tradingEngine.js: `marginMode`). -->
+        <div class="bf-margin-row">
+          <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
+            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzado</button>
+            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislado</button>
+          </div>
+          <div class="bf-lev" title="Apalancamiento actual">
+            <b id="bfLevVal">1x</b>
+            <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
+          </div>
+        </div>
         <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
           <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
           <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
@@ -397,28 +426,31 @@
           </span>
         </label>
 
-        <div class="quick-row" id="quickSize">
-          <button class="chip" data-pct="5">5%</button>
-          <button class="chip" data-pct="10">10%</button>
-          <button class="chip" data-pct="25">25%</button>
-          <button class="chip" data-pct="50">50%</button>
-          <button class="chip active" data-pct="100">100%</button>
+        <div class="bf-slide-quick" id="quickSize" role="group" aria-label="Fracción del disponible">
+          <button class="q0" data-pct="0">0</button><button class="q1" data-pct="25">25</button><button class="q2" data-pct="50">50</button><button class="q3" data-pct="75">75</button><button class="q4 active" data-pct="100">100</button>
         </div>
 
-        <div class="grid-2">
-          <label class="field">
-            <span class="field-label">Apalancamiento</span>
-            <select id="leverageSelect">
+        <div class="grid-2 bf-fee-row">
+          <!-- Control HEREDADO del tema anterior: sigue existiendo porque
+               `UI.syncLeverage` y varias pruebas lo usan como fuente de verdad
+               del apalancamiento, pero no se pinta (lo visible es el deslizador
+               de arriba). La etiqueta también se oculta: decía «Comisión
+               taker (%)» y no correspondía a ningún campo. -->
+          <label class="field visually-hidden" aria-hidden="true">
+            <span class="field-label">Apalancamiento (control heredado)</span>
+            <select id="leverageSelect" tabindex="-1">
               <option value="1" selected>1x</option>
               <option value="2">2x</option>
               <option value="5">5x</option>
               <option value="10">10x</option>
               <option value="25">25x</option>
               <option value="50">50x</option>
+              <option value="75">75x</option>
+              <option value="100">100x</option>
             </select>
           </label>
           <label class="field">
-            <span class="field-label">Comisión (%)</span>
+            <span class="field-label">Comisión por operación (%)</span>
             <input type="number" id="feeInput" value="0.1" min="0" max="1" step="0.01">
           </label>
         </div>
@@ -444,105 +476,34 @@
         </div>
 
         <div class="order-actions">
-          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">▲ COMPRAR / LONG</button>
-          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">▼ VENDER / SHORT</button>
+          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Long</button>
+          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Short</button>
         </div>
-        <button class="btn btn-ghost full" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">✖ CERRAR POSICIÓN (Esc)</button>
+        <div class="bf-cost" id="bfCost">
+          <span class="c">Coste <b id="bfCostVal">—</b></span>
+          <span class="m">Margen <b id="bfMarginVal">—</b></span>
+          <button class="bf-flat" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">Cerrar todo</button>
+        </div>
 
         <div class="hint" id="orderHint">Sin posición abierta.</div>
       </div>
     </div>
 
     <!-- ÓRDENES LÍMITE PENDIENTES -->
-    <div class="card" id="pendingCard">
-      <div class="card-head"><span class="card-title">⏳ Órdenes pendientes</span>
-        <span class="tag" id="pendingCount">0</span>
-        <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
-      </div>
-      <div class="card-body">
-        <div id="pendingList" class="pending-list">
-          <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
-        </div>
-      </div>
-    </div>
 
     <!-- POSICIÓN ABIERTA -->
-    <div class="card" id="positionCard">
-      <div class="card-head"><span class="card-title">📈 Posición abierta</span>
-        <span class="tag" id="posSide">FLAT</span>
-      </div>
-      <div class="card-body">
-        <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
-        <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
-        <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
-        <div class="kv"><span>Precio actual</span><b id="posMark">—</b></div>
-        <div class="kv"><span>Distancia SL</span><b id="posSlDist">—</b></div>
-        <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
-        <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
-        <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
-        <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
-        <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
-        <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
-        <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
-
-        <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
-        <div class="pos-mgmt" id="posMgmt">
-          <div class="pm-row">
-            <span class="pm-label">➕ Promediar</span>
-            <input type="number" id="avgSize" value="25" min="1" step="1"
-                   title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
-            <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
-            <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
-              <input type="checkbox" id="avgReaim"> re-aim</label>
-          </div>
-          <div class="pm-row">
-            <span class="pm-label">➗ Cerrar parcial</span>
-            <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
-            <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
-            <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
-            <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
-          </div>
-          <div class="pm-row">
-            <span class="pm-label">🎯 TP escalonado</span>
-            <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
-            <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
-            <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
-          </div>
-          <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
-            <span class="pm-label">🌀 Trailing</span>
-            <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
-                   title="Retracement (%) desde el pico que dispara el cierre">
-            <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
-                   title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
-            <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
-            <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
-          </div>
-          <div id="tpLevelsList" class="tp-levels"></div>
-        </div>
-      </div>
-    </div>
 
     <!-- ESTADÍSTICAS -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">📊 Estadísticas</span>
-        <button class="mini-btn" id="btnResetStats" title="Reiniciar estadísticas y trades">↺</button>
+    
+
+<div class="card" id="panelsCard">
+      <div class="card-head">
+        <span class="card-title">Paneles</span>
+        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
+        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
       </div>
       <div class="card-body">
-        <div class="stat-grid">
-          <div class="stat"><span class="stat-label">Trades</span><b id="stTrades">0</b></div>
-          <div class="stat"><span class="stat-label">Win Rate</span><b id="stWinRate">—</b></div>
-          <div class="stat"><span class="stat-label">Profit Factor</span><b id="stPf">—</b></div>
-          <div class="stat"><span class="stat-label">Máx. Drawdown</span><b id="stDd">—</b></div>
-          <div class="stat"><span class="stat-label">R:R medio</span><b id="stRr">—</b></div>
-          <div class="stat"><span class="stat-label">W / L</span><b id="stWl">0 / 0</b></div>
-          <div class="stat"><span class="stat-label">Mejor trade</span><b id="stBest" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Peor trade</span><b id="stWorst" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Expectancy</span><b id="stExp" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Racha actual</span><b id="stStreak">—</b></div>
-        </div>
-        <div class="equity-head"><span>Curva de capital</span><b id="eqValue">$10,000.00</b></div>
-        <div id="equityChart"></div>
+        <div id="panelsList" class="panels-list"></div>
       </div>
     </div>
   </aside>
@@ -553,16 +514,93 @@
      ===================================================================== -->
 <section id="bottomPanel">
   <div class="tabs">
-    <button class="tab active" data-tab="trades">📋 Historial de trades (<span id="tabTradeCount">0</span>)</button>
-    <button class="tab" data-tab="log">🖥️ Log de eventos</button>
-    <button class="tab" data-tab="drawings">✏️ Dibujos (<span id="tabDrawCount">0</span>)</button>
+    <button class="tab active" data-tab="positions">Posiciones <span id="tabPosCount">0</span></button>
+    <button class="tab" data-tab="openorders">Órdenes abiertas <span id="tabPendCount">0</span></button>
+    <button class="tab" data-tab="trades">Historial de trades (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab" data-tab="account">Cuenta</button>
+    <button class="tab" data-tab="stats">Estadísticas</button>
+    <button class="tab" data-tab="log">Log</button>
+    <button class="tab" data-tab="drawings">Dibujos (<span id="tabDrawCount">0</span>)</button>
     <div class="tabs-right">
       <button class="mini-btn" id="btnClearLog" title="Vaciar el log">limpiar log</button>
       <button class="mini-btn" id="btnBottomToggle" title="Plegar / desplegar panel inferior">⌄</button>
     </div>
   </div>
 
-  <div class="tab-body active" id="tab-trades">
+  <div class="tab-body active" id="tab-positions">
+    <div class="bf-tabrow">
+
+    <div class="card" id="positionCard">
+          <div class="card-head"><span class="card-title">Posición abierta</span>
+            <span class="tag" id="posSide">FLAT</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
+            <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
+            <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
+            <div class="kv"><span>Precio actual</span><b id="posMark">—</b></div>
+            <div class="kv"><span>Distancia SL</span><b id="posSlDist">—</b></div>
+            <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
+            <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
+            <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
+            <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
+            <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
+            <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
+            <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
+    
+            <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
+            <div class="pos-mgmt" id="posMgmt">
+              <div class="pm-row">
+                <span class="pm-label">Promediar</span>
+                <input type="number" id="avgSize" value="25" min="1" step="1"
+                       title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
+                <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
+                <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
+                  <input type="checkbox" id="avgReaim"> re-aim</label>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">Cerrar parcial</span>
+                <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
+                <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
+                <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
+                <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">TP escalonado</span>
+                <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
+                <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
+                <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+              </div>
+              <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
+                <span class="pm-label">Trailing</span>
+                <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
+                       title="Retracement (%) desde el pico que dispara el cierre">
+                <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
+                       title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
+                <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
+                <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
+              </div>
+              <div id="tpLevelsList" class="tp-levels"></div>
+            </div>
+          </div>
+        </div>
+
+    <div class="card" id="pendingCard">
+          <div class="card-head"><span class="card-title">Órdenes pendientes</span>
+            <span class="tag" id="pendingCount">0</span>
+            <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
+          </div>
+          <div class="card-body">
+            <div id="pendingList" class="pending-list">
+              <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="tab-trades">
     <table id="tradesTable">
       <thead>
         <tr>
@@ -576,6 +614,55 @@
     </table>
     <div class="empty" id="tradesEmpty">Todavía no hay trades cerrados. Abre una posición con los botones LONG / SHORT y avanza el replay.</div>
   </div>
+
+  <!-- PESTAÑA «ÓRDENES»: en Bitunix las órdenes en espera tienen pestaña propia.
+       La lista VIVA (con botón de cancelar) vive en la tarjeta de Posiciones para
+       que los atajos y las pruebas la alcancen sin cambiar de pestaña; aquí se
+       pinta una copia de solo lectura, actualizada por `UI.renderPending`. -->
+  <div class="tab-body" id="tab-openorders">
+    <div class="bf-tabnote">Las órdenes en espera se gestionan en la pestaña Posiciones (✖ cancela). Esta es su lista de solo lectura.</div>
+    <div class="pending-list" id="pendingListTab"></div>
+  </div>
+
+  <div class="tab-body" id="tab-account"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Cuenta</span>
+            <span class="tag" id="tagLeverage">1x</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
+            <div class="kv"><span>Equity</span><b id="acEquity">$10,000.00</b></div>
+            <div class="kv"><span>PnL total</span><b id="acTotalPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>PnL abierto</span><b id="acOpenPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Margen usado</span><b id="acMargin">$0.00</b></div>
+            <div class="kv"><span>Balance libre</span><b id="acFree">$10,000.00</b></div>
+            <div class="meter"><div class="meter-fill" id="marginMeter"></div></div>
+            <div class="kv small"><span id="acExposure">Exposición 0%</span><span id="acFees">Comisiones $0.00</span></div>
+          </div>
+        </div></div></div>
+
+  <div class="tab-body" id="tab-stats"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Estadísticas</span>
+            <button class="mini-btn" id="btnResetStats" title="Reiniciar estadísticas y trades">↺</button>
+          </div>
+          <div class="card-body">
+            <div class="stat-grid">
+              <div class="stat"><span class="stat-label">Trades</span><b id="stTrades">0</b></div>
+              <div class="stat"><span class="stat-label">Win Rate</span><b id="stWinRate">—</b></div>
+              <div class="stat"><span class="stat-label">Profit Factor</span><b id="stPf">—</b></div>
+              <div class="stat"><span class="stat-label">Máx. Drawdown</span><b id="stDd">—</b></div>
+              <div class="stat"><span class="stat-label">R:R medio</span><b id="stRr">—</b></div>
+              <div class="stat"><span class="stat-label">W / L</span><b id="stWl">0 / 0</b></div>
+              <div class="stat"><span class="stat-label">Mejor trade</span><b id="stBest" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Peor trade</span><b id="stWorst" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Expectancy</span><b id="stExp" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Racha actual</span><b id="stStreak">—</b></div>
+            </div>
+            <div class="equity-head"><span>Curva de capital</span><b id="eqValue">$10,000.00</b></div>
+            <div id="equityChart"></div>
+          </div>
+        </div></div></div>
 
   <div class="tab-body" id="tab-log">
     <div id="logList" class="log-list"></div>
@@ -853,6 +940,7 @@
 <script src="js/barReplay.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/drawingTools.js"></script>
+<script src="js/orderBook.js"></script>
 <script src="js/uiController.js"></script>
 <script src="js/app.js"></script>
 </body>

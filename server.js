@@ -120,6 +120,106 @@ function proxyKlines(query, res) {
 }
 
 /**
+ * Proxy genérico de datos de mercado de Binance (libro de órdenes y 24 h) para
+ * la fila de estadísticas y el libro del terminal. Misma política que las
+ * velas: se prueban los hosts en orden y se devuelve el JSON tal cual.
+ */
+function proxyMarket(pathname, query, res, allowed) {
+  const qs = new URLSearchParams();
+  qs.set('symbol', (query.symbol || 'BTCUSDT').toUpperCase());
+  allowed.forEach((k) => {
+    if (query[k]) qs.set(k, String(Math.min(parseInt(query[k], 10) || 0, k === 'limit' ? 100 : 1e9)));
+  });
+  const qstr = qs.toString();
+  let i = 0;
+  const tried = [];
+  const next = () => {
+    if (i >= BINANCE_HOSTS.length) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Ningún host de Binance respondió', hosts: tried }));
+      return;
+    }
+    const host = BINANCE_HOSTS[i++];
+    const req = https.get(`https://${host}${pathname}?${qstr}`,
+      { timeout: 8000, headers: { 'User-Agent': 'bar-replay-pro/1.0', 'Accept': 'application/json' } },
+      (up) => {
+        let body = '';
+        up.on('data', (c) => { body += c; });
+        up.on('end', () => {
+          tried.push({ host, status: up.statusCode });
+          if (up.statusCode !== 200) { next(); return; }
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=5',
+            'Access-Control-Allow-Origin': '*',
+            'X-Binance-Host': host,
+          });
+          res.end(body);
+        });
+      });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => { tried.push({ host, error: 'sin respuesta' }); next(); });
+  };
+  next();
+}
+
+/**
+ * Proxy del ticker de futuros (Bitget, público y sin clave): mark, índice,
+ * interés abierto y 24 h del perpetuo. Se sirve por el mismo origen para los
+ * entornos que bloquean el dominio desde el navegador.
+ */
+function proxyFuturesTicker(query, res) {
+  const symbol = (query.symbol || 'BTCUSDT').toUpperCase();
+  const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${symbol}&productType=USDT-FUTURES`;
+  const req = https.get(url, { timeout: 8000, headers: { Accept: 'application/json' } }, (up) => {
+    let body = '';
+    up.on('data', (c) => { body += c; });
+    up.on('end', () => {
+      res.writeHead(up.statusCode === 200 ? 200 : 502, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'public, max-age=10',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(up.statusCode === 200 ? body : JSON.stringify({ error: 'HTTP ' + up.statusCode }));
+    });
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', (err) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  });
+}
+
+/**
+ * Proxy genérico de los dos endpoints públicos de Bitget que faltaban por el
+ * mismo origen: la tasa de funding (con su cuenta atrás) y el ratio
+ * long/short de cuentas. `server.js` es el único sitio con red del proyecto,
+ * así que en local y en la sandbox el navegador NO llama a ningún dominio.
+ */
+function proxyBitget(path, query, res) {
+  const symbol = (query.symbol || 'BTCUSDT').toUpperCase();
+  const pt = (query.productType || 'USDT-FUTURES').toUpperCase();
+  const periodo = query.period ? '&period=' + encodeURIComponent(query.period) : '';
+  const url = `https://api.bitget.com${path}?symbol=${symbol}&productType=${pt}${periodo}`;
+  const req = https.get(url, { timeout: 8000, headers: { Accept: 'application/json' } }, (up) => {
+    let body = '';
+    up.on('data', (c) => { body += c; });
+    up.on('end', () => {
+      res.writeHead(up.statusCode === 200 ? 200 : 502, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'public, max-age=10',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(up.statusCode === 200 ? body : JSON.stringify({ error: 'HTTP ' + up.statusCode }));
+    });
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', (err) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  });
+}
+/**
  * Proxy del catálogo de símbolos de Binance (/api/v3/exchangeInfo).
  * El buscador de símbolos lo usa para listar TODOS los pares disponibles, no
  * solo los 40 de referencia. Igual que con las velas, se prueban los hosts en
@@ -217,6 +317,27 @@ const handler = (req, res) => {
     res.end(JSON.stringify({ serverTime: Date.now() }));
     return;
   }
+  // Datos del terminal (fila de estadísticas y libro de órdenes)
+  if (pathname === '/api/v3/depth') {
+    proxyMarket(pathname, parsed.query, res, ['limit']);
+    return;
+  }
+  if (pathname === '/api/v3/ticker/24hr') {
+    proxyMarket(pathname, parsed.query, res, []);
+    return;
+  }
+  if (pathname === '/api/market/futures-ticker') {
+    proxyFuturesTicker(parsed.query, res);
+    return;
+  }
+  if (pathname === '/api/market/funding') {
+    proxyBitget('/api/v2/mix/market/current-fund-rate', parsed.query, res);
+    return;
+  }
+  if (pathname === '/api/market/long-short') {
+    proxyBitget('/api/v2/mix/market/account-long-short', parsed.query, res);
+    return;
+  }
 
   serveStatic(pathname, res);
 };
@@ -232,6 +353,11 @@ try {
   app.get('/api/v3/klines', (req, res) => proxyKlines(req.query, res));
   app.get('/api/v3/exchangeInfo', (req, res) => proxyExchangeInfo(res));
   app.get('/api/v3/time', (req, res) => res.json({ serverTime: Date.now() }));
+  app.get('/api/v3/depth', (req, res) => proxyMarket('/api/v3/depth', req.query, res, ['limit']));
+  app.get('/api/v3/ticker/24hr', (req, res) => proxyMarket('/api/v3/ticker/24hr', req.query, res, []));
+  app.get('/api/market/futures-ticker', (req, res) => proxyFuturesTicker(req.query, res));
+  app.get('/api/market/funding', (req, res) => proxyBitget('/api/v2/mix/market/current-fund-rate', req.query, res));
+  app.get('/api/market/long-short', (req, res) => proxyBitget('/api/v2/mix/market/account-long-short', req.query, res));
   server = http.createServer(app);
   engine = 'express';
 } catch (e) {

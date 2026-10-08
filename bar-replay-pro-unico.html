@@ -691,6 +691,780 @@ kbd{
   body{overflow-y:auto;}
   #workspace{flex:0 0 auto;height:420px;min-height:420px;}
 }
+/* ==== css/bitunix.css ==== */
+:root {
+  --bg-0: #08080a;
+  --bg-1: #0d0d10;
+  --bg-2: #141418;
+  --bg-3: #1c1c22;
+  --bg-4: #26262e;
+  --line: #242429;
+  --line-soft: #1b1b20;
+  --tx-1: #f2f3f5;
+  --tx-2: #c2c4ca;
+  --tx-3: #8b8e96;
+  --tx-4: #5f626b;
+  --up: #25ca93;
+  --up-dim: #10402f;
+  --down: #f65b55;
+  --down-dim: #4a1b19;
+  --accent: #b8f040;
+  --accent-ink: #101206;
+  --accent-2: #25ca93;
+  --warn: #f0b90b;
+  --r-sm: 2px;
+  --r: 4px;
+  --r-lg: 6px;
+  --topbar-h: 90px;
+  --stats-h: 42px;
+  --toolbar-h: 34px;
+  --right-w: 336px;
+  --row-h: 17px;
+}
+body {
+  background: var(--bg-0);
+  font-size: 12px;
+  letter-spacing: .1px;
+}
+.kv b, .bf-v, .bf-sub, .bf-row, td, th, .pane-val, .stat b,
+#sizeInput, #limitInput, #slInput, #tpInput, #avgSize, #trailPct, #trailAct,
+#tpLvlPrice, #tpLvlPct, .log-time, .rb-info, #bfLevVal {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: #2e2e36; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #3c3c46; }
+#topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  height: auto;
+  min-height: var(--topbar-h);
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+#topbar .brand {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  min-height: 48px;
+  border-right: 1px solid var(--line-soft);
+}
+#topbar .topbar-group { flex: 1 1 auto; min-width: 0; padding: 6px 12px; gap: 8px; }
+#topbar .topbar-right { flex: 0 0 auto; margin-left: auto; padding: 6px 10px 6px 0; }
+.brand-name { font-size: 13px; letter-spacing: .6px; }
+.brand-sub { color: var(--tx-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; }
+.bf-stats {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: stretch;
+  height: var(--stats-h);
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.bf-stats::-webkit-scrollbar { height: 3px; }
+.bf-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  min-width: 104px;
+  max-width: 230px;
+  padding: 0 11px;
+  overflow: hidden;
+  border-right: 1px solid var(--line-soft);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.bf-stat .bf-k { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.bf-stat .bf-v { font-size: 13.5px; font-weight: 600; color: var(--tx-1); }
+.bf-stat .bf-sub { font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-stat.bf-last { min-width: 138px; }
+.bf-stat.bf-last .bf-v { font-size: 17px; font-weight: 700; }
+.bf-stat .bf-v.up, .bf-v.up { color: var(--up); }
+.bf-stat .bf-v.dn, .bf-v.dn { color: var(--down); }
+.bf-stat .bf-v.wn { color: var(--warn); }
+.bf-stat.bf-frac { min-width: 176px; }
+.bf-frac .bf-bar {
+  position: relative;
+  height: 5px;
+  margin: 3px 0 2px;
+  border-radius: 3px;
+  background: var(--down);
+  overflow: hidden;
+}
+.bf-frac .bf-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  background: var(--up);
+  transition: width .25s ease;
+}
+.bf-stat.bf-src {
+  margin-left: auto;
+  min-width: 0;
+  max-width: 320px;
+  flex: 0 1 260px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 0;
+  justify-content: center;
+  color: var(--tx-4);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  cursor: help;
+}
+.bf-stat.bf-src::before { content: 'ⓘ '; color: var(--warn); }
+#workspace {
+  grid-template-columns: minmax(0, 1fr) var(--right-w);
+  grid-template-rows: minmax(0, 1fr);   
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-0);
+}
+#chartArea { min-height: 0; }
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  padding: 0;
+  gap: 0;
+  background: var(--bg-2);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#sidebar .card,
+.tab-body .card {
+  flex: 0 0 auto;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 33px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-1);
+}
+.card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: var(--tx-2);
+  text-transform: uppercase;
+}
+.card-body { padding: 9px 10px 11px; }
+.tag, .tag-muted {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  color: var(--tx-3);
+  font-weight: 500;
+}
+.bf-book .card-body { padding: 0 0 7px; max-height: 322px; overflow: hidden; }
+.bf-book-cols {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr .9fr;
+  padding: 4px 10px 3px;
+  font-size: 9.5px;
+  color: var(--tx-4);
+  letter-spacing: .3px;
+}
+.bf-book-cols span:last-child { text-align: right; }
+.bf-asks, .bf-bids { display: flex; flex-direction: column; max-height: 118px; overflow: hidden; }
+.bf-asks > .bf-row, .bf-bids > .bf-row { flex: 0 0 auto; }
+@media (min-height: 980px) {
+  .bf-asks, .bf-bids { max-height: 170px; }
+  .bf-book .card-body { max-height: 404px; }
+}
+.bf-asks { flex-direction: column-reverse; }   
+.bf-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr .9fr;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 10px;
+  font-size: 11px;
+  cursor: pointer;
+  isolation: isolate;
+}
+.bf-row > span { position: relative; z-index: 1; }
+.bf-row .p { font-weight: 600; }
+.bf-row .q { color: var(--tx-2); }
+.bf-row .t { text-align: right; color: var(--tx-4); font-size: 10px; }
+.bf-row .d { position: absolute; z-index: 0; top: 0; bottom: 0; right: 0; width: var(--w, 0%); opacity: .13; }
+.bf-asks .bf-row .p, .bf-asks .bf-row .d { color: var(--down); }
+.bf-asks .bf-row .d { background: var(--down); }
+.bf-bids .bf-row .p, .bf-bids .bf-row .d { color: var(--up); }
+.bf-bids .bf-row .d { background: var(--up); }
+.bf-row:hover { background: var(--bg-3); }
+.bf-row.bf-mine { outline: 1px solid var(--accent); outline-offset: -1px; }
+.bf-book-last {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0;
+  padding: 4px 10px;
+  background: var(--bg-3);
+  border-block: 1px solid var(--line-soft);
+}
+.bf-book-last .v { font-size: 15px; font-weight: 700; }
+.bf-book-last .a { font-size: 13px; line-height: 1; }
+.bf-book-last.up .v, .bf-book-last.up .a { color: var(--up); }
+.bf-book-last.dn .v, .bf-book-last.dn .a { color: var(--down); }
+.bf-book-frac { padding: 6px 10px 0; }
+.bf-frac-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--down); }
+.bf-frac-bar i { display: block; height: 100%; }
+.bf-frac-bar .up { background: var(--up); width: 50%; transition: width .3s ease; }
+.bf-frac-lab { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9.5px; }
+.bf-frac-lab .up { color: var(--up); }
+.bf-frac-lab .dn { color: var(--down); }
+.bf-margin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.bf-lev {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.bf-lev b { min-width: 26px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.bf-lev input[type="range"] { width: 86px; height: 3px; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  height: 28px;
+  gap: 0;
+  padding: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.seg.seg-sm { height: 26px; }
+.seg-btn {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .2px;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover { color: var(--tx-1); background: var(--bg-4); }
+.seg-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.field { margin-bottom: 7px; }
+.field-label { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+input[type="number"], input[type="text"], input[type="datetime-local"], select {
+  height: 30px;
+  font-size: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--tx-1);
+}
+input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(184, 240, 64, .22); }
+.input-row .suffix { font-size: 10px; color: var(--tx-4); }
+.bf-slide-quick {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 2px 0 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.bf-slide-quick button {
+  position: relative;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+.bf-slide-quick button + button { border-left: 1px solid var(--line); }
+.bf-slide-quick button:hover { color: var(--tx-1); }
+.bf-slide-quick button.active { color: var(--accent); background: rgba(184, 240, 64, .12); }
+.bf-slide-quick button.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.quick-row { gap: 4px; margin: 4px 0 8px; }
+.chip {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.chip:hover { color: var(--tx-1); border-color: #3a3a44; }
+.chip.active { background: rgba(184, 240, 64, .14); border-color: var(--accent); color: var(--accent); }
+.hint { font-size: 10.5px; color: var(--tx-4); line-height: 1.5; }
+.hint b { color: var(--tx-2); }
+.btn {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-3);
+  color: var(--tx-2);
+}
+.btn:hover { background: var(--bg-4); color: var(--tx-1); }
+.btn-icon { width: 28px; height: 26px; border-radius: var(--r); }
+.btn-primary { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
+.btn-primary:hover { background: #33333d; }
+#btnQuick { color: var(--accent); border-color: rgba(184, 240, 64, .35); }
+.order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
+.order-actions .btn { height: 38px; font-size: 13px; font-weight: 700; border: 0; border-radius: var(--r); }
+.btn-long { background: var(--up); color: #04241a; }
+.btn-long:hover { background: #2fd9a0; }
+.btn-short { background: var(--down); color: #2b0a09; }
+.btn-short:hover { background: #ff6d67; }
+.btn-long:disabled, .btn-short:disabled { opacity: .45; cursor: not-allowed; }
+.bf-fee-row > .visually-hidden { display: none; }
+.bf-fee-row { grid-template-columns: minmax(0, 1fr); }
+.bf-cost {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10.5px;
+  color: var(--tx-4);
+}
+.bf-cost b { color: var(--tx-2); font-weight: 600; }
+.bf-flat {
+  margin-left: auto;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--tx-3);
+}
+.bf-flat:hover { color: var(--down); border-color: var(--down); }
+#bottomPanel {
+  background: var(--bg-1);
+  border-top: 1px solid var(--line);
+  height: 198px;
+}
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 33px;
+  padding: 0 6px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  position: relative;
+  height: 100%;
+  padding: 0 13px;
+  border: 0;
+  background: transparent;
+  color: var(--tx-3);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--tx-1); background: var(--bg-3); }
+.tab.active { color: var(--tx-1); font-weight: 600; }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px; right: 10px; bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.tab .count, .tab span[id] { color: var(--tx-4); font-variant-numeric: tabular-nums; }
+.tabs-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.tab-body { padding: 0; min-height: 0; }
+.tab-body.active { display: block; overflow: auto; }   
+#bottomPanel { overflow: hidden; }
+.bf-tabrow { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; }
+.bf-tabrow > .card { flex: 1 1 440px; border-right: 1px solid var(--line); }
+.bf-tabnote { padding: 12px; color: var(--tx-4); font-size: 11px; }
+#tab-positions .card-body,
+#tab-account .card-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 0 18px;
+  align-items: start;
+  padding: 8px 10px 10px;
+}
+#tab-positions .card-body > .pos-mgmt {
+  grid-column: 1 / -1;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+.pos-mgmt { gap: 5px; }
+.pm-row { gap: 5px; }
+.pm-label { font-size: 10.5px; color: var(--tx-3); letter-spacing: .2px; }
+.pm-row input { height: 26px; }
+.mini-btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10.5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.mini-btn:hover { color: var(--tx-1); background: var(--bg-4); }
+.mini-btn:disabled { opacity: .4; }
+.pending-list { display: flex; flex-direction: column; gap: 0; }
+.limit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  border-radius: 0;
+}
+.limit-row:hover { background: var(--bg-2); }
+.limit-row .lr-price { font-size: 12px; font-weight: 700; }
+#chartArea { background: var(--bg-0); }
+#drawToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--toolbar-h);
+  padding: 0 8px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+.tool-cluster { gap: 2px; padding: 0; }
+.tool {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 5px;
+  font-size: 11.5px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.tool:hover { background: var(--bg-3); color: var(--tx-1); }
+.tool.active { background: rgba(184, 240, 64, .16); color: var(--accent); }
+.mini-select { height: 24px; font-size: 10.5px; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--tx-2); }
+.color-pick input[type="color"] { width: 22px; height: 22px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-3); }
+#ohlcLegend {
+  gap: 10px;
+  padding: 4px 9px;
+  background: rgba(13, 13, 16, .82);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  font-size: 11px;
+}
+#ohlcLegend .lg-pair { font-size: 11.5px; }
+#ohlcLegend b { color: var(--tx-1); }
+#ohlcLegend .lg-src { color: var(--tx-4); }
+#tvCredit { color: var(--tx-4); font-size: 9.5px; }
+#hiddenNotice { background: rgba(240, 185, 11, .14); border: 1px solid rgba(240, 185, 11, .4); color: var(--warn); border-radius: var(--r); }
+.indPane { border-top: 1px solid var(--line); background: var(--bg-1); }
+.pane-head { height: 24px; padding: 0 8px; background: var(--bg-2); }
+.pane-title { font-size: 10.5px; color: var(--tx-3); }
+.pane-val { font-size: 10.5px; }
+#replayBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+}
+.rb-buttons { gap: 3px; }
+.rb-btn {
+  width: 30px;
+  height: 26px;
+  font-size: 11px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-2);
+}
+.rb-btn:hover { background: var(--bg-4); color: var(--tx-1); }
+.rb-play { width: 40px; background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 700; }
+.rb-play:hover { background: #c6ff5c; color: var(--accent-ink); }
+.speed-btn {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--tx-3);
+}
+.speed-btn.active { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
+.rb-info { font-size: 10.5px; color: var(--tx-3); }
+.rb-clock-val { font-size: 11.5px; color: var(--tx-1); }
+.rb-status { font-size: 9px; padding: 1px 6px; border-radius: var(--r-sm); letter-spacing: .6px; }
+.rb-status.playing { background: rgba(37, 202, 147, .16); color: var(--up); }
+.rb-status.paused { background: var(--bg-4); color: var(--tx-3); }
+#progressRange { accent-color: var(--accent); }
+table { font-size: 11px; }
+thead th {
+  position: sticky;
+  top: 0;
+  padding: 5px 8px;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--tx-4);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+tbody td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); }
+tbody tr:hover td { background: var(--bg-2); }
+.pnl.up, .up { color: var(--up); }
+.pnl.dn, .dn { color: var(--down); }
+.empty { color: var(--tx-4); font-size: 11px; padding: 14px; }
+.log-list { padding: 6px 8px; }
+.log-line { font-size: 10.5px; padding: 2px 0; border-bottom: 0; }
+.log-time { color: var(--tx-4); }
+.draw-list { padding: 6px 8px; }
+.draw-row { padding: 4px 6px; border-radius: var(--r-sm); font-size: 11px; }
+.draw-row:hover { background: var(--bg-2); }
+.stat-grid { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 1px; }
+.stat {
+  padding: 6px 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+}
+.stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--tx-4); }
+.stat b { font-size: 13px; }
+.kv { padding: 3px 0; font-size: 11.5px; border-bottom: 1px dashed var(--line-soft); }
+.kv span { color: var(--tx-3); }
+.kv b { color: var(--tx-1); font-weight: 600; }
+.kv.big b { font-size: 15px; }
+.kv.small { font-size: 10px; color: var(--tx-4); }
+.meter { height: 4px; background: var(--bg-4); border-radius: 2px; }
+.meter-fill { background: var(--warn); }
+.panels-list { gap: 0; }
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.panel-row:hover { background: var(--bg-3); }
+.modal-box, .modal { }
+.modal-box {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-2);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .66);
+}
+.modal-head { border-bottom: 1px solid var(--line); }
+.modal-head h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--tx-2); }
+.modal-body { font-size: 12px; }
+.toast {
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: var(--r);
+  background: var(--bg-3);
+  font-size: 11.5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+}
+.toast.ok { border-left-color: var(--up); }
+.toast.err { border-left-color: var(--down); }
+.toast.warn { border-left-color: var(--warn); }
+kbd {
+  padding: 1px 5px;
+  font-size: 10.5px;
+  background: var(--bg-4);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  color: var(--tx-2);
+}
+.symbol-btn { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); }
+.symbol-btn:hover { border-color: #3a3a44; }
+.tf-quick { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); padding: 0; height: 28px; }
+.tf-btn { height: 26px; min-width: 32px; font-size: 11px; border-radius: var(--r-sm); }
+.tf-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+#btnBookLive { letter-spacing: .3px; }
+#btnBookLive.on { color: var(--up); border-color: rgba(37, 202, 147, .45); }
+#btnBookLive.off { color: var(--tx-4); }
+@media (max-width: 1000px) {
+  :root { --stats-h: 34px; --toolbar-h: 30px; }
+  #topbar { min-height: 0; }
+  #topbar .brand { border-right: 0; min-height: 0; padding: 7px 10px; }
+  #topbar .topbar-group { padding: 6px 10px; }
+  .bf-stats { width: 100%; }
+  #workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .bf-book-cols { display: none; }
+  .bf-asks, .bf-bids { max-height: 51px; }
+  #sidebar {
+    flex-direction: row;
+    align-items: stretch;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 190px;
+    min-height: 0;
+  }
+  #sidebar > .card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 300px;
+    max-width: 380px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  #bookCard { min-width: 268px; max-width: 300px; }
+  #bookCard .card-body { max-height: 118px; }
+  #sidebar > .card { order: 3; }
+  #sidebar > #orderCard { order: 1; }
+  #sidebar > #bookCard { order: 2; }
+  #bottomPanel { height: 158px; }
+  #replayBar { height: 38px; }
+}
+@media (max-width: 700px) {
+  #bottomPanel { height: 236px; }
+  .bf-stat { min-width: 104px; padding: 0 10px; }
+  .bf-stat.bf-last { min-width: 118px; }
+  .bf-stat.bf-last .bf-v { font-size: 15px; }
+  #bottomPanel { height: 190px; }
+  #tab-positions .card-body,
+  #tab-account .card-body { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .bf-book-cols, .bf-row { grid-template-columns: 1fr 1fr; }
+  .bf-row .t, .bf-book-cols span:last-child { display: none; }   
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+@media (max-height:860px) {
+  :root { --stats-h: 36px; }
+  #bottomPanel { height: 176px; }
+  .indPane { height: 84px; }
+  .bf-asks, .bf-bids { max-height: 118px; overflow: hidden; }
+}
+@media (max-height:820px) {
+  :root { --stats-h: 34px; --toolbar-h: 30px; }
+  #topbar .brand { min-height: 42px; }
+  #topbar .topbar-group { padding: 4px 10px; }
+  #bottomPanel { height: 156px; }
+  #replayBar { height: 38px; }
+  #drawToolbar { height: 30px; }
+  .bf-stat { min-width: 100px; padding: 0 10px; }
+  .bf-stat .bf-v { font-size: 12.5px; }
+  .bf-stat.bf-last .bf-v { font-size: 15px; }
+  .indPane { height: 64px; }
+  #sidebar { overflow-y: auto; }                       
+  #sidebar > .card > .card-body { max-height: none; }  
+  .bf-asks, .bf-bids { max-height: 102px; overflow: hidden; }
+}
+@media (max-height:700px) {
+  :root { --stats-h: 30px; }
+  #topbar .brand { min-height: 36px; padding: 0 8px; }
+  #bottomPanel { height: 104px; }
+  #replayBar { height: 34px; }
+  #drawToolbar { height: 28px; }
+  .tabs { height: 28px; }
+  .tab { padding: 0 10px; font-size: 10.5px; }
+  .rb-btn { width: 27px; height: 24px; }
+  .rb-play { width: 34px; }
+  .indPane { height: 56px; }
+  .bf-asks, .bf-bids { max-height: 68px; overflow: hidden; }
+  .bf-stat { min-width: 92px; }
+  .bf-stat .bf-sub { display: none; }
+  .ob-row { height: 15px; }
+  #chartWrap { min-height: 150px; }
+  #topbar .topbar-group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  #topbar .topbar-group::-webkit-scrollbar { height: 0; }
+  #tfQuick { flex-wrap: nowrap; }
+}
+@media (max-height:560px) {
+  .bf-stats { height: 24px; }
+  .bf-stat { min-width: 84px; gap: 0; }
+  .bf-stat .bf-k { font-size: 8.5px; }
+  .bf-stat .bf-v { font-size: 11px; }
+  .bf-stat.bf-last .bf-v { font-size: 12.5px; }
+  #bottomPanel { height: 88px; }
+  .tab-body .card-body, #tab-positions .card-body { padding: 4px 8px; }
+  .indPane { height: 44px; }
+}
+@media (max-width:1000px) and (max-height:820px) {
+  #sidebar { max-height: 176px; }
+  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; }
+  #bookCard .card-body { max-height: 110px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 51px; overflow: hidden; }
+}
+@media (max-width:1000px) and (max-height:700px) {
+  #bottomPanel { height: 86px; }
+  #sidebar { max-height: 170px; }
+  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; }
+  #bookCard .card-body { max-height: 130px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 44px; overflow: hidden; }
+}
+@media (max-width:1000px) and (max-height:640px) {
+  #sidebar { max-height: 122px; }
+  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 24px; }
+  .indPane { height: 48px; }
+}
+@media (max-width:640px) {
+  .indPane { height: 52px; }
+  #bottomPanel { height: 150px; }
+  #sidebar { max-height: 132px; }
+  #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
+}
 </style>
 </head>
 <body>
@@ -851,8 +1625,23 @@ kbd{
       <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6v.3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="12" cy="17" r="1.15" fill="currentColor"/></svg>
     </button>
   </div>
+  <!-- =====================================================================
+       FILA DE ESTADÍSTICAS (Bitunix): último precio, 24 h, mark/index,
+       financiación, interés abierto, volumen y reparto long/short.
+       Cada valor lleva su procedencia en el title (dato real o del replay).
+       ===================================================================== -->
+  <div class="bf-stats" id="bfStats">
+    <div class="bf-stat bf-last"><span class="bf-k">Último</span><b class="bf-v" id="bfLast">—</b></div>
+    <div class="bf-stat"><span class="bf-k">24 h</span><b class="bf-v" id="bfChg24">—</b><span class="bf-sub" id="bfHighLow">máx — · mín —</span></div>
+    <div class="bf-stat"><span class="bf-k">Mark</span><b class="bf-v" id="bfMark">—</b><span class="bf-sub" id="bfIndex">índice —</span></div>
+    <div class="bf-stat"><span class="bf-k">Funding</span><b class="bf-v" id="bfFunding">—</b><span class="bf-sub" id="bfFundingNext">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Interés abierto</span><b class="bf-v" id="bfOi">—</b><span class="bf-sub" id="bfOiVal">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Vol. 24 h</span><b class="bf-v" id="bfVol">—</b><span class="bf-sub" id="bfVolQuote">—</span></div>
+    <div class="bf-stat bf-frac"><span class="bf-k">Long / Short</span><span class="bf-bar"><i id="bfLsLong"></i></span><span class="bf-sub" id="bfLs">—</span></div>
+    <div class="bf-stat bf-acct"><span class="bf-k">Disponible</span><b class="bf-v" id="bfAvail">—</b><span class="bf-sub" id="bfEquity">—</span></div>
+    <div class="bf-stat bf-src" id="bfSource" title="De dónde sale cada número">—</div>
+  </div>
 </header>
-
 <!-- =====================================================================
      ÁREA PRINCIPAL
      ===================================================================== -->
@@ -864,7 +1653,7 @@ kbd{
     <!-- Barra de herramientas de dibujo -->
     <div id="drawToolbar">
       <div class="tool-cluster" role="group" aria-label="Herramientas de dibujo">
-        <button class="tool active" data-tool="cursor" title="Cursor / seleccionar y mover dibujos">🖱️</button>
+        <button class="tool active" data-tool="cursor" title="Cursor: seleccionar y mover dibujos">↖</button>
         <button class="tool" data-tool="trend" title="Línea de tendencia">╱</button>
         <button class="tool" data-tool="ray" title="Línea de tendencia extendida (rayo)">➚</button>
         <button class="tool" data-tool="hline" title="Línea horizontal de soporte / resistencia">─</button>
@@ -893,9 +1682,9 @@ kbd{
       </div>
 
       <div class="tool-cluster">
-        <button class="tool" id="btnDeleteDrawing" title="Borrar el dibujo seleccionado (o Supr)">🧽</button>
-        <button class="tool" id="btnClearDrawings" title="Borrar todos los dibujos">🗑️</button>
-        <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">🧲</button>
+        <button class="tool" id="btnDeleteDrawing" title="Borrar el dibujo seleccionado (o Supr)">⌫</button>
+        <button class="tool" id="btnClearDrawings" title="Borrar todos los dibujos">✕</button>
+        <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">◎</button>
       </div>
 
       <div class="tool-cluster tool-cluster-right">
@@ -903,7 +1692,7 @@ kbd{
         <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
         <label class="switch" title="Bloquear desplazamiento del chart al arrastrar en él">
           <input type="checkbox" id="chkLockScroll">
-          <span>🔒 scroll</span>
+          <span>⊘ scroll</span>
         </label>
       </div>
     </div>
@@ -1001,44 +1790,57 @@ kbd{
 
   <!-- ---------- BARRA LATERAL ---------- -->
   <aside id="sidebar">
+    <!-- =============================================================
+         LIBRO DE ÓRDENES (esquilo Bitunix)
+         Ventas en rojo de mayor a menor, precio último en el centro con su
+         flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
+         salen del espejo público de Binance cuando hay red y, si no, se
+         derivan de las velas del replay (js/orderBook.js lo etiqueta).
+         ============================================================= -->
+    <div class="card bf-book" id="bookCard">
+      <div class="card-head">
+        <span class="card-title">Libro de órdenes</span>
+        <span class="tag tag-muted" id="bookSrc">—</span>
+        <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
+      </div>
+      <div class="card-body">
+        <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+        <div class="bf-asks" id="bookAsks"></div>
+        <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
+        <div class="bf-bids" id="bookBids"></div>
+        <div class="bf-book-frac">
+          <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
+          <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
+        </div>
+      </div>
+    </div>
+
 
     <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
          actuales de cada indicador, que se refrescan en cada vela del replay.
          El botón 👁 muestra u oculta la serie; clic en la fila configura. -->
-    <div class="card" id="panelsCard">
-      <div class="card-head">
-        <span class="card-title">📈 Paneles</span>
-        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
-        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
-      </div>
-      <div class="card-body">
-        <div id="panelsList" class="panels-list"></div>
-      </div>
-    </div>
 
     <!-- CUENTA -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">💼 Cuenta</span>
-        <span class="tag" id="tagLeverage">1x</span>
-      </div>
-      <div class="card-body">
-        <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
-        <div class="kv"><span>Equity</span><b id="acEquity">$10,000.00</b></div>
-        <div class="kv"><span>PnL total</span><b id="acTotalPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>PnL abierto</span><b id="acOpenPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>Margen usado</span><b id="acMargin">$0.00</b></div>
-        <div class="kv"><span>Balance libre</span><b id="acFree">$10,000.00</b></div>
-        <div class="meter"><div class="meter-fill" id="marginMeter"></div></div>
-        <div class="kv small"><span id="acExposure">Exposición 0%</span><span id="acFees">Comisiones $0.00</span></div>
-      </div>
-    </div>
 
     <!-- NUEVA ORDEN -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">⚡ Nueva orden</span>
+    <div class="card bf-order" id="orderCard">
+      <div class="card-head"><span class="card-title">Nueva orden</span>
         <span class="tag tag-muted" id="tagPrice">—</span>
       </div>
       <div class="card-body">
+        <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
+             apalancamiento y unidad. El modo cambia el cálculo de liquidación
+             (js/tradingEngine.js: `marginMode`). -->
+        <div class="bf-margin-row">
+          <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
+            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzado</button>
+            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislado</button>
+          </div>
+          <div class="bf-lev" title="Apalancamiento actual">
+            <b id="bfLevVal">1x</b>
+            <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
+          </div>
+        </div>
         <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
           <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
           <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
@@ -1079,28 +1881,31 @@ kbd{
           </span>
         </label>
 
-        <div class="quick-row" id="quickSize">
-          <button class="chip" data-pct="5">5%</button>
-          <button class="chip" data-pct="10">10%</button>
-          <button class="chip" data-pct="25">25%</button>
-          <button class="chip" data-pct="50">50%</button>
-          <button class="chip active" data-pct="100">100%</button>
+        <div class="bf-slide-quick" id="quickSize" role="group" aria-label="Fracción del disponible">
+          <button class="q0" data-pct="0">0</button><button class="q1" data-pct="25">25</button><button class="q2" data-pct="50">50</button><button class="q3" data-pct="75">75</button><button class="q4 active" data-pct="100">100</button>
         </div>
 
-        <div class="grid-2">
-          <label class="field">
-            <span class="field-label">Apalancamiento</span>
-            <select id="leverageSelect">
+        <div class="grid-2 bf-fee-row">
+          <!-- Control HEREDADO del tema anterior: sigue existiendo porque
+               `UI.syncLeverage` y varias pruebas lo usan como fuente de verdad
+               del apalancamiento, pero no se pinta (lo visible es el deslizador
+               de arriba). La etiqueta también se oculta: decía «Comisión
+               taker (%)» y no correspondía a ningún campo. -->
+          <label class="field visually-hidden" aria-hidden="true">
+            <span class="field-label">Apalancamiento (control heredado)</span>
+            <select id="leverageSelect" tabindex="-1">
               <option value="1" selected>1x</option>
               <option value="2">2x</option>
               <option value="5">5x</option>
               <option value="10">10x</option>
               <option value="25">25x</option>
               <option value="50">50x</option>
+              <option value="75">75x</option>
+              <option value="100">100x</option>
             </select>
           </label>
           <label class="field">
-            <span class="field-label">Comisión (%)</span>
+            <span class="field-label">Comisión por operación (%)</span>
             <input type="number" id="feeInput" value="0.1" min="0" max="1" step="0.01">
           </label>
         </div>
@@ -1126,105 +1931,34 @@ kbd{
         </div>
 
         <div class="order-actions">
-          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">▲ COMPRAR / LONG</button>
-          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">▼ VENDER / SHORT</button>
+          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Long</button>
+          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Short</button>
         </div>
-        <button class="btn btn-ghost full" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">✖ CERRAR POSICIÓN (Esc)</button>
+        <div class="bf-cost" id="bfCost">
+          <span class="c">Coste <b id="bfCostVal">—</b></span>
+          <span class="m">Margen <b id="bfMarginVal">—</b></span>
+          <button class="bf-flat" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">Cerrar todo</button>
+        </div>
 
         <div class="hint" id="orderHint">Sin posición abierta.</div>
       </div>
     </div>
 
     <!-- ÓRDENES LÍMITE PENDIENTES -->
-    <div class="card" id="pendingCard">
-      <div class="card-head"><span class="card-title">⏳ Órdenes pendientes</span>
-        <span class="tag" id="pendingCount">0</span>
-        <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
-      </div>
-      <div class="card-body">
-        <div id="pendingList" class="pending-list">
-          <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
-        </div>
-      </div>
-    </div>
 
     <!-- POSICIÓN ABIERTA -->
-    <div class="card" id="positionCard">
-      <div class="card-head"><span class="card-title">📈 Posición abierta</span>
-        <span class="tag" id="posSide">FLAT</span>
-      </div>
-      <div class="card-body">
-        <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
-        <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
-        <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
-        <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
-        <div class="kv"><span>Precio actual</span><b id="posMark">—</b></div>
-        <div class="kv"><span>Distancia SL</span><b id="posSlDist">—</b></div>
-        <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
-        <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
-        <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
-        <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
-        <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
-        <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
-        <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
-
-        <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
-        <div class="pos-mgmt" id="posMgmt">
-          <div class="pm-row">
-            <span class="pm-label">➕ Promediar</span>
-            <input type="number" id="avgSize" value="25" min="1" step="1"
-                   title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
-            <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
-            <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
-              <input type="checkbox" id="avgReaim"> re-aim</label>
-          </div>
-          <div class="pm-row">
-            <span class="pm-label">➗ Cerrar parcial</span>
-            <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
-            <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
-            <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
-            <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
-          </div>
-          <div class="pm-row">
-            <span class="pm-label">🎯 TP escalonado</span>
-            <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
-            <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
-            <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
-          </div>
-          <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
-            <span class="pm-label">🌀 Trailing</span>
-            <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
-                   title="Retracement (%) desde el pico que dispara el cierre">
-            <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
-                   title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
-            <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
-            <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
-          </div>
-          <div id="tpLevelsList" class="tp-levels"></div>
-        </div>
-      </div>
-    </div>
 
     <!-- ESTADÍSTICAS -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">📊 Estadísticas</span>
-        <button class="mini-btn" id="btnResetStats" title="Reiniciar estadísticas y trades">↺</button>
+    
+
+<div class="card" id="panelsCard">
+      <div class="card-head">
+        <span class="card-title">Paneles</span>
+        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
+        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
       </div>
       <div class="card-body">
-        <div class="stat-grid">
-          <div class="stat"><span class="stat-label">Trades</span><b id="stTrades">0</b></div>
-          <div class="stat"><span class="stat-label">Win Rate</span><b id="stWinRate">—</b></div>
-          <div class="stat"><span class="stat-label">Profit Factor</span><b id="stPf">—</b></div>
-          <div class="stat"><span class="stat-label">Máx. Drawdown</span><b id="stDd">—</b></div>
-          <div class="stat"><span class="stat-label">R:R medio</span><b id="stRr">—</b></div>
-          <div class="stat"><span class="stat-label">W / L</span><b id="stWl">0 / 0</b></div>
-          <div class="stat"><span class="stat-label">Mejor trade</span><b id="stBest" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Peor trade</span><b id="stWorst" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Expectancy</span><b id="stExp" class="pnl">—</b></div>
-          <div class="stat"><span class="stat-label">Racha actual</span><b id="stStreak">—</b></div>
-        </div>
-        <div class="equity-head"><span>Curva de capital</span><b id="eqValue">$10,000.00</b></div>
-        <div id="equityChart"></div>
+        <div id="panelsList" class="panels-list"></div>
       </div>
     </div>
   </aside>
@@ -1235,16 +1969,93 @@ kbd{
      ===================================================================== -->
 <section id="bottomPanel">
   <div class="tabs">
-    <button class="tab active" data-tab="trades">📋 Historial de trades (<span id="tabTradeCount">0</span>)</button>
-    <button class="tab" data-tab="log">🖥️ Log de eventos</button>
-    <button class="tab" data-tab="drawings">✏️ Dibujos (<span id="tabDrawCount">0</span>)</button>
+    <button class="tab active" data-tab="positions">Posiciones <span id="tabPosCount">0</span></button>
+    <button class="tab" data-tab="openorders">Órdenes abiertas <span id="tabPendCount">0</span></button>
+    <button class="tab" data-tab="trades">Historial de trades (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab" data-tab="account">Cuenta</button>
+    <button class="tab" data-tab="stats">Estadísticas</button>
+    <button class="tab" data-tab="log">Log</button>
+    <button class="tab" data-tab="drawings">Dibujos (<span id="tabDrawCount">0</span>)</button>
     <div class="tabs-right">
       <button class="mini-btn" id="btnClearLog" title="Vaciar el log">limpiar log</button>
       <button class="mini-btn" id="btnBottomToggle" title="Plegar / desplegar panel inferior">⌄</button>
     </div>
   </div>
 
-  <div class="tab-body active" id="tab-trades">
+  <div class="tab-body active" id="tab-positions">
+    <div class="bf-tabrow">
+
+    <div class="card" id="positionCard">
+          <div class="card-head"><span class="card-title">Posición abierta</span>
+            <span class="tag" id="posSide">FLAT</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
+            <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
+            <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
+            <div class="kv"><span>Precio actual</span><b id="posMark">—</b></div>
+            <div class="kv"><span>Distancia SL</span><b id="posSlDist">—</b></div>
+            <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
+            <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
+            <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
+            <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
+            <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
+            <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
+            <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
+    
+            <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
+            <div class="pos-mgmt" id="posMgmt">
+              <div class="pm-row">
+                <span class="pm-label">Promediar</span>
+                <input type="number" id="avgSize" value="25" min="1" step="1"
+                       title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
+                <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
+                <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
+                  <input type="checkbox" id="avgReaim"> re-aim</label>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">Cerrar parcial</span>
+                <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
+                <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
+                <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
+                <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">TP escalonado</span>
+                <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
+                <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
+                <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+              </div>
+              <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
+                <span class="pm-label">Trailing</span>
+                <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
+                       title="Retracement (%) desde el pico que dispara el cierre">
+                <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
+                       title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
+                <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
+                <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
+              </div>
+              <div id="tpLevelsList" class="tp-levels"></div>
+            </div>
+          </div>
+        </div>
+
+    <div class="card" id="pendingCard">
+          <div class="card-head"><span class="card-title">Órdenes pendientes</span>
+            <span class="tag" id="pendingCount">0</span>
+            <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
+          </div>
+          <div class="card-body">
+            <div id="pendingList" class="pending-list">
+              <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="tab-trades">
     <table id="tradesTable">
       <thead>
         <tr>
@@ -1258,6 +2069,55 @@ kbd{
     </table>
     <div class="empty" id="tradesEmpty">Todavía no hay trades cerrados. Abre una posición con los botones LONG / SHORT y avanza el replay.</div>
   </div>
+
+  <!-- PESTAÑA «ÓRDENES»: en Bitunix las órdenes en espera tienen pestaña propia.
+       La lista VIVA (con botón de cancelar) vive en la tarjeta de Posiciones para
+       que los atajos y las pruebas la alcancen sin cambiar de pestaña; aquí se
+       pinta una copia de solo lectura, actualizada por `UI.renderPending`. -->
+  <div class="tab-body" id="tab-openorders">
+    <div class="bf-tabnote">Las órdenes en espera se gestionan en la pestaña Posiciones (✖ cancela). Esta es su lista de solo lectura.</div>
+    <div class="pending-list" id="pendingListTab"></div>
+  </div>
+
+  <div class="tab-body" id="tab-account"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Cuenta</span>
+            <span class="tag" id="tagLeverage">1x</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
+            <div class="kv"><span>Equity</span><b id="acEquity">$10,000.00</b></div>
+            <div class="kv"><span>PnL total</span><b id="acTotalPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>PnL abierto</span><b id="acOpenPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Margen usado</span><b id="acMargin">$0.00</b></div>
+            <div class="kv"><span>Balance libre</span><b id="acFree">$10,000.00</b></div>
+            <div class="meter"><div class="meter-fill" id="marginMeter"></div></div>
+            <div class="kv small"><span id="acExposure">Exposición 0%</span><span id="acFees">Comisiones $0.00</span></div>
+          </div>
+        </div></div></div>
+
+  <div class="tab-body" id="tab-stats"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Estadísticas</span>
+            <button class="mini-btn" id="btnResetStats" title="Reiniciar estadísticas y trades">↺</button>
+          </div>
+          <div class="card-body">
+            <div class="stat-grid">
+              <div class="stat"><span class="stat-label">Trades</span><b id="stTrades">0</b></div>
+              <div class="stat"><span class="stat-label">Win Rate</span><b id="stWinRate">—</b></div>
+              <div class="stat"><span class="stat-label">Profit Factor</span><b id="stPf">—</b></div>
+              <div class="stat"><span class="stat-label">Máx. Drawdown</span><b id="stDd">—</b></div>
+              <div class="stat"><span class="stat-label">R:R medio</span><b id="stRr">—</b></div>
+              <div class="stat"><span class="stat-label">W / L</span><b id="stWl">0 / 0</b></div>
+              <div class="stat"><span class="stat-label">Mejor trade</span><b id="stBest" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Peor trade</span><b id="stWorst" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Expectancy</span><b id="stExp" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Racha actual</span><b id="stStreak">—</b></div>
+            </div>
+            <div class="equity-head"><span>Curva de capital</span><b id="eqValue">$10,000.00</b></div>
+            <div id="equityChart"></div>
+          </div>
+        </div></div></div>
 
   <div class="tab-body" id="tab-log">
     <div id="logList" class="log-list"></div>
@@ -1526,6 +2386,7 @@ kbd{
 <div id="toasts"></div>
 
 <!-- ============ SCRIPTS (orden de dependencias) ============ -->
+
 
 
 
@@ -2533,6 +3394,126 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   DS.cacheKey = (symbol, interval) => `brp_kl_${symbol}_${interval}`;
 
+  /* =========================================================================
+   * DATOS DE MERCADO DEL TERMINAL (fila de estadísticas + libro de órdenes)
+   * -------------------------------------------------------------------------
+   * Dos procedencias y CADA VALOR lleva la suya, para no vender como de
+   * futuros lo que es de spot:
+   *   · «spot»    → espejo público de Binance (mismo mercado que las velas
+   *                 que usa la app): libro de órdenes y estadísticas de 24 h.
+   *   · «futuros» → API pública de Bitget (USDT-FUTURES, sin clave, CORS *):
+   *                 mark, índice, funding, interés abierto y reparto de
+   *                 cuentas long/short.
+   * Todo es opcional: si un endpoint no responde, js/orderBook.js deriva el
+   * valor de las velas cargadas y lo ETIQUETA como derivado.
+   * ======================================================================= */
+  DS.MARKET = {
+    TIMEOUT: 4200,
+    BITGET: 'https://api.bitget.com',
+    PRODUCT: 'USDT-FUTURES',
+    _cache: new Map(),
+
+    /** GET JSON con timeout y caché (ttl en ms; 0 = no cachear). */
+    async json(key, url, ttl) {
+      const now = Date.now();
+      const hit = DS.MARKET._cache.get(key);
+      if (ttl > 0 && hit && now - hit.t < ttl) return hit.d;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), DS.MARKET.TIMEOUT);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        if (ttl > 0) DS.MARKET._cache.set(key, { t: now, d });
+        return d;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
+    /**
+     * URL a través del proxy del mismo origen (server.js), si lo hay. Así, en
+     * la sandbox y en local, NINGUNA petición del terminal sale a internet
+     * directo: es la invariante que vigila tests/preview-live.test.js.
+     */
+    async proxied(pathAndQuery, directo, ttl) {
+      if (DS.MISMO_ORIGEN_UTIL) {
+        try { return await DS.MARKET.json('px|' + pathAndQuery, pathAndQuery, ttl); }
+        catch (e) { /* el proxy no está: se prueba la fuente directa */ }
+      }
+      return await DS.MARKET.json('dx|' + directo, directo, ttl);
+    },
+
+    /** Prueba los hosts de Binance (primero el proxy del mismo origen, si lo hay). */
+    async binance(pathAndQuery, ttl) {
+      let last = null;
+      for (const host of DS.BINANCE_HOSTS) {
+        try { return await DS.MARKET.json('bk|' + host + pathAndQuery, host + pathAndQuery, ttl); }
+        catch (e) { last = e; }
+      }
+      throw last || new Error('sin hosts que probar');
+    },
+
+    /** Libro real (bid/ask) del espejo spot: [[precio, cantidad], …]. */
+    async depth(symbol, limit = 30) {
+      const r = await DS.MARKET.binance(`/api/v3/depth?symbol=${symbol}&limit=${limit}`, 2500);
+      const f = (a) => (a || []).map((x) => [+x[0], +x[1]]);
+      if (!r || (!r.asks && !r.bids)) throw new Error('libro vacío');
+      return { asks: f(r.asks), bids: f(r.bids), id: +r.lastUpdateId || 0 };
+    },
+
+    /** Estadísticas de 24 h del espejo spot. */
+    async ticker24(symbol) {
+      const r = await DS.MARKET.binance(`/api/v3/ticker/24hr?symbol=${symbol}`, 15000);
+      return {
+        last: +r.lastPrice, chgPct: +r.priceChangePercent, open: +r.openPrice,
+        high: +r.highPrice, low: +r.lowPrice,
+        vol: +r.volume, quote: +r.quoteVolume, trades: +r.count || 0,
+      };
+    },
+
+    /** Mark, índice, funding, OI y long/short del perpetuo (Bitget). */
+    async futuresMeta(symbol) {
+      const B = DS.MARKET.BITGET;
+      const P = DS.MARKET.PRODUCT;
+      const q = `symbol=${symbol}&productType=${P}`;
+      // Cada dato intenta primero el proxy del mismo origen y si no, la API
+      // pública de Bitget (admite CORS, así que en Pages funciona igual).
+      const [tk, fr, ls] = await Promise.allSettled([
+        DS.MARKET.proxied(`/api/market/futures-ticker?${q}`, `${B}/api/v2/mix/market/ticker?${q}`, 15000),
+        DS.MARKET.proxied(`/api/market/funding?${q}`, `${B}/api/v2/mix/market/current-fund-rate?${q}`, 60000),
+        DS.MARKET.proxied(`/api/market/long-short?${q}&period=1h`, `${B}/api/v2/mix/market/account-long-short?${q}&period=1h`, 300000),
+      ]);
+      const pick = (r) => (r && r.status === 'fulfilled' && r.value && r.value.data ? r.value.data[0] : null);
+      const d = pick(tk);
+      const f = pick(fr);
+      const l = pick(ls);
+      if (!d && !f && !l) throw new Error('Bitget sin datos');
+      const out = { venues: [] };
+      if (d) {
+        out.mark = +d.markPrice;
+        out.index = +d.indexPrice;
+        out.oi = +d.holdingAmount;                 // unidades declaradas por el exchange
+        out.oiUsd = d.usdtVolume ? +d.usdtVolume : null;
+        out.high24 = +d.high24h;
+        out.low24 = +d.low24h;
+        out.venues.push('Bitget USDT-FUTURES');
+      }
+      if (f) {
+        out.funding = +f.fundingRate;
+        out.fundingEvery = +f.fundingRateInterval || 8;
+        out.nextFunding = +f.nextUpdate;
+        out.venues.push('funding Bitget');
+      }
+      if (l) {
+        out.longPct = +l.longAccountRatio * 100;
+        out.shortPct = +l.shortAccountRatio * 100;
+        out.lsTs = +l.ts;
+      }
+      return out;
+    },
+  };
+
   global.DS = DS;
 })(window);
 
@@ -2886,6 +3867,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     balance: 10000,          // capital realizado (sin PnL abierto)
     equity: 10000,           // balance + PnL no realizado
     leverage: 1,
+    marginMode: 'cross',     // 'cross' (toda la cuenta) | 'isolated' (solo el margen)
     feePct: 0.1,             // % por lado (apertura y cierre)
     fundingPct: 0,           // % por vela sobre el notional (opcional)
     slFirst: 'worst',        // 'worst' | 'best'
@@ -2941,12 +3923,51 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return p ? p.notional / p.leverage : 0;
   };
 
-  /** Precio de liquidación aproximado (aislado, sin mantenimiento). */
+  /** Margen libre: balance realizado menos lo inmovilizado (respaldo del cruzado). */
+  TE.freeMargin = function () {
+    return Math.max(0, TE.state.balance - TE.marginUsed());
+  };
+
+  /**
+   * Precio de liquidación aproximado, según el MODO DE MARGEN elegido en el
+   * panel de órdenes (Cruzado / Aislado, como en Bitunix):
+   *
+   *   · aislado  → solo respalda la posición el margen asignado:
+   *                  liq = entrada ∓ margen/cantidad
+   *   · cruzado  → respalda también el margen libre de la cuenta:
+   *                  liq = entrada ∓ (margen + libre)/cantidad
+   *
+   * Se desprecia el margen de mantenimiento (el modelo de comisiones de la app
+   * tampoco lo tiene), por eso con 1x y cuenta holgada el precio sale 0: en
+   * cruzado real la posición no liquida antes de tocar suelo. Con margen de
+   * mantenimiento 0 la fórmula aislada coincide exactamente con la anterior.
+   */
   TE.liquidationPrice = function (position) {
     if (!position) return null;
     const p = position;
     const side = p.side === 'long' ? 1 : -1;
-    return p.entryPrice * (1 - side / p.leverage);
+    if (!p.qty) return p.entryPrice * (1 - side / p.leverage);
+    const margen = TE.marginOf(p);
+    const libre = (TE.state.marginMode || 'cross') === 'cross'
+      ? Math.max(0, TE.freeMargin()) : 0;
+    const liq = p.entryPrice - side * (margen + libre) / p.qty;
+    return Math.max(0, +liq.toFixed(6));
+  };
+
+  /** Margen inmovilizado por UNA posición (incluye el añadido al promediar). */
+  TE.marginOf = function (position) {
+    const p = position;
+    if (!p) return 0;
+    return Number.isFinite(p.margin) && p.margin > 0 ? p.margin : (p.notional / p.leverage);
+  };
+
+  /** Cambia el modo de margen y reescribe la liquidación de lo abierto. */
+  TE.setMarginMode = function (mode) {
+    const m = mode === 'isolated' ? 'isolated' : 'cross';
+    TE.state.marginMode = m;
+    // La liquidación no se guarda: se recalcula al pintar (UI, carta y
+    // comercial), así cambiar el modo no deja valores viejos.
+    return m;
   };
 
   TE._pushEquity = function (time, value) {
@@ -4042,6 +5063,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         balance: TE.state.balance,
         equity: TE.state.equity,
         leverage: TE.state.leverage,
+        marginMode: TE.state.marginMode,
         feePct: TE.state.feePct,
         fundingPct: TE.state.fundingPct,
         slFirst: TE.state.slFirst,
@@ -4387,11 +5409,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   const CM = {};
 
   const COLORS = {
-    bg: '#0b0c16', grid: '#1b1d33', gridSoft: '#15162a', border: '#2c2f52',
-    text: '#7d81a8', crosshair: '#5d628f',
-    up: '#00c853', down: '#ff1744',
-    entry: '#2979ff', sl: '#ff1744', tp: '#00e5ff', liq: '#ff9100',
-    limit: '#ffab00',   // órdenes límite pendientes (ámbar punteado)
+    // Paleta MEDIDA sobre la captura del terminal de futuros (css/bitunix.css):
+    // fondo casi negro, velas verde #25ca93 / rojo #f65b55 y la línea de
+    // entrada en blanco, como marca el exchange.
+    bg: '#0a0a0b', grid: '#1a1a1f', gridSoft: '#141418', border: '#242429',
+    text: '#8b8e96', crosshair: '#4a4d55',
+    up: '#25ca93', down: '#f65b55',
+    entry: '#f2f3f5', sl: '#f65b55', tp: '#25ca93', liq: '#f0b90b',
+    limit: '#b8f040',   // órdenes límite pendientes (lima de la marca, punteada)
   };
 
   /**
@@ -4853,18 +5878,18 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (typeof TE.breakEvenPrice === 'function') {
       const be = TE.breakEvenPrice(pos);
       if (be !== null && Math.abs(be - pos.entryPrice) / pos.entryPrice > 1e-6) {
-        mk(be, '#9aa0aa', 'BE ' + U.fmtPrice(be), 3);
+        mk(be, '#8b8e96', 'BE ' + U.fmtPrice(be), 3);
       }
     }
     // Trailing stop: línea morada que SE MUEVE sola conforme la posición hace
     // un nuevo pico. No se pinta mientras esté esperando activación (no hay nivel).
     if (typeof TE.trailingPrice === 'function') {
       const tl = TE.trailingPrice(pos);
-      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b388ff', `TRAIL ${U.fmtPrice(tl)}`, 1);
+      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b8f040', `TRAIL ${U.fmtPrice(tl)}`, 1);
     }
     // Niveles de TP escalonado (Partial TP/SL): uno por línea, con su porcentaje.
     if (pos.tpLevels && pos.tpLevels.length) {
-      pos.tpLevels.forEach((l, i) => mk(l.price, '#00e5ff', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
+      pos.tpLevels.forEach((l, i) => mk(l.price, '#25ca93', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
     }
     // Cada entrada promediada queda marcada en tono azul suave.
     if (pos.parts && pos.parts.length > 1) {
@@ -6250,7 +7275,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       d.points.forEach((p) => {
         const s = DT._screenPoint(p);
         if (!s) return;
-        ctx.fillStyle = '#0b0c16'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
+        ctx.fillStyle = '#0a0a0b'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.rect(s.x - 4, s.y - 4, 8, 8); ctx.fill(); ctx.stroke();
       });
       ctx.restore();
@@ -6301,7 +7326,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 3) : ctx.rect(bx, by, bw, bh);
       ctx.fill();
-      ctx.fillStyle = '#0b0c16';
+      ctx.fillStyle = '#0a0a0b';
       ctx.font = 'bold 10px ui-monospace, monospace';
       ctx.fillText(txt, bx + 5, y + 3.5);
       ctx.restore();
@@ -6367,6 +7392,453 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   global.DT = DT;
+})(window);
+
+
+/* ==================== js/orderBook.js ==================== */
+/* =========================================================================
+ * orderBook.js — LIBRO DE ÓRDENES y FILA DE ESTADÍSTICAS del terminal.
+ *
+ * Reproduce las dos zonas de datos de la pantalla de futuros de Bitunix:
+ *
+ *   1. #bfStats · último precio, 24 h, mark/index, funding (con su cuenta
+ *      atrás), interés abierto, volumen y reparto long/short.
+ *   2. #bookCard · ventas en rojo, precio último en el centro con su flecha,
+ *      compras en verde y la banda bid/ask al pie. Pinchar una fila pone ese
+ *      precio en el campo «Precio límite» y cambia el panel a modo Límite,
+ *      igual que en el exchange.
+ *
+ * HONESTIDAD DE LOS DATOS (importante):
+ *   · `live = true`  → se pregunta al espejo público de Binance (libro y 24 h,
+ *     mismo mercado que las velas de esta app) y a Bitget USDT-FUTURES (mark,
+ *     índice, funding, OI, long/short). Cada valor lleva su procedencia en el
+ *     `title` y la fila muestra un resumen en #bfSource.
+ *   · `live = false` (por defecto mientras se replayea) → el libro se DERIVA
+ *     de la vela del cursor de forma determinista y se etiqueta «derivado»:
+ *     un libro en tiempo real no tiene sentido historical en 2021, y
+ *     disimularlo sería mentira. Las cifras de 24 h del replay sí salen de
+ *     datos reales: se calculan sobre las velas cargadas.
+ *
+ * Ningún fallo de red rompe la app: si un endpoint no responde, se usa el
+ * valor derivado y se anota en la etiqueta de origen.
+ * ======================================================================= */
+(function (global) {
+  'use strict';
+
+  const OB = {};
+
+  /* ------------------------------ estado ------------------------------ */
+
+  OB.ROWS = 10;              // niveles por lado (el original muestra 10-15)
+  OB.POLL_MS = 6000;         // ritmo de refresco cuando el modo live está activo
+  OB.state = {
+    pair: null,
+    live: false,             // false = valores del replay, true = exchange
+    book: null,              // {asks:[[p,q]…], bids:[[p,q]…], src}
+    t24: null,               // estadísticas de 24 h reales (spot)
+    meta: null,              // mark/index/funding/OI/long-short reales (futuros)
+    venues: [],              // qué ha respondido últimamente
+    errors: [],              // por qué no, si algo falló
+    lastPoll: 0,
+    polls: 0,
+    renders: 0,
+  };
+
+  const el = (id) => document.getElementById(id);
+  const setTxt = (id, v) => { const n = el(id); if (n && n.textContent !== v) n.textContent = v; };
+  const setCls = (id, cls) => {
+    const n = el(id);
+    if (n) n.className = n.className.replace(/\b(up|dn|wn)\b/g, '').trim() + (cls ? ' ' + cls : '');
+  };
+
+  /* --------------------------- formato numérico --------------------------- */
+
+  /** Tamaño de tick según la magnitud del precio (0,01 en SOL; 0,5 en BTC…). */
+  OB.tickOf = function (price) {
+    const p = Math.abs(price) || 1;
+    if (p >= 5000) return 0.5;
+    if (p >= 500) return 0.05;
+    if (p >= 20) return 0.01;
+    if (p >= 1) return 0.001;
+    return 0.00001;
+  };
+
+  /** Decimales coherentes con el tick, sin coma flotante fea. */
+  OB.priceDecimals = function (tick) {
+    const s = String(tick);
+    const i = s.indexOf('.');
+    return i < 0 ? 0 : Math.min(8, s.length - i - 1);
+  };
+
+  OB.fmtQty = function (v) {
+    if (!Number.isFinite(v) || v <= 0) return '0';
+    if (v >= 1000) return U.num(v, 0);
+    if (v >= 1) return U.num(v, 3);
+    if (v >= 0.001) return U.num(v, 5);
+    return U.num(v, 8);
+  };
+
+  OB.fmtUsd = function (v) {
+    if (!Number.isFinite(v)) return '—';
+    const a = Math.abs(v);
+    if (a >= 1e9) return U.num(v / 1e9, 2) + ' B';
+    if (a >= 1e6) return U.num(v / 1e6, 2) + ' M';
+    if (a >= 1e3) return U.num(v / 1e3, 1) + ' K';
+    return U.num(v, 2);
+  };
+
+  /** Tiempo hasta la próxima liquidación de funding, en HH:MM:SS. */
+  OB.countdown = function (nextTs, nowMs) {
+    if (!Number.isFinite(nextTs)) return '—';
+    let ms = nextTs - (nowMs === undefined ? Date.now() : nowMs);
+    if (ms <= 0) return '00:00:00';
+    const s = Math.floor(ms / 1000);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
+  };
+
+  /* ------------------- PRNG determinista para el libro ------------------- */
+  /* Semilla = par + instante de la vela + nivel. Misma vela → mismo libro, y
+     así los tests pueden reproducir el libro exacto. */
+  function seedOf(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h >>> 0 || 1;
+  }
+  function rnd32(seed) {
+    let x = seed >>> 0;
+    return function () {
+      x ^= x << 13; x >>>= 0;
+      x ^= x >>> 17;
+      x ^= x << 5; x >>>= 0;
+      return x / 4294967296;
+    };
+  }
+
+  /**
+   * Libro sintético pero coherente: los niveles se reparten alrededor del
+   * precio de la vela, el tamaño escala con el volumen de la vela y el sesgo
+   * bid/ask sale del cuerpo de la vela (vela alcista ⇒ más compra acumulada).
+   */
+  OB.derivedBook = function (price, candle, symbol) {
+    const tick = OB.tickOf(price);
+    const dec = OB.priceDecimals(tick);
+    const vol = Number.isFinite(candle && candle.volume) ? candle.volume : 0;
+    const base = Math.max(vol * 0.05, price > 1000 ? 0.35 : 12);
+    const body = candle && candle.high > candle.low
+      ? (candle.close - candle.open) / (candle.high - candle.low) : 0;
+    const bidShare = Math.min(0.82, Math.max(0.18, 0.5 + body * 0.3));
+    const rnd = rnd32(seedOf((symbol || '') + '|' + Math.round(price * 100) + '|' + Math.round((candle && candle.time) || 0)));
+    const mk = (sign) => {
+      const out = [];
+      let cum = 0;
+      for (let i = 1; i <= OB.ROWS; i++) {
+        const p = +(price + sign * tick * i).toFixed(dec);
+        // la liquidez se espesa hacia el precio, como en un libro real
+        const q = +(base * (0.28 + rnd() * 1.35) / (1 + i * 0.16)).toFixed(6);
+        cum += q;
+        out.push([p, q, cum]);
+      }
+      return out;
+    };
+    const asks = mk(1);
+    const bids = mk(-1);
+    // reescalar para que el acumulado refleje el sesgo de la vela
+    const scale = bidShare / 0.5;
+    for (let i = 0; i < bids.length; i++) bids[i][1] = +(bids[i][1] * Math.min(2, scale)).toFixed(6);
+    for (let i = 0; i < asks.length; i++) asks[i][1] = +(asks[i][1] * Math.min(2, 2 - Math.min(2, scale))).toFixed(6);
+    const redim = (a) => { let c = 0; return a.map((r) => { c += r[1]; return [r[0], r[1], c]; }); };
+    return { asks: redim(asks), bids: redim(bids), src: 'derivado', tick, dec };
+  };
+
+  /* ------------------------------ render ------------------------------ */
+
+  function rowHtml(r, max) {
+    const w = max > 0 ? Math.min(100, (r[2] / max) * 100) : 0;
+    return `<div class="bf-row" data-p="${r[0]}"><i class="d" style="--w:${w.toFixed(1)}%"></i>` +
+      `<span class="p">${U.fmtPrice(r[0])}</span><span class="q">${OB.fmtQty(r[1])}</span>` +
+      `<span class="t">${OB.fmtQty(r[2])}</span></div>`;
+  }
+
+  OB.renderBook = function () {
+    const boxA = el('bookAsks');
+    const boxB = el('bookBids');
+    if (!boxA || !boxB) return;
+    const b = OB.state.book;
+    if (!b) { boxA.innerHTML = ''; boxB.innerHTML = ''; return; }
+    const max = Math.max(b.asks[b.asks.length - 1][2] || 0, b.bids[b.bids.length - 1][2] || 0) || 1;
+    // Se pintan en el orden que devuelve el exchange (mejor primero). El orden
+    // VISUAL lo decide la hoja: `.bf-asks` es `column-reverse`, así que la mejor
+    // venta cae abajo, pegada al precio último, y la más lejana arriba —como en
+    // Bitunix—. Su columna «Total» (acumulada) es por eso máxima en la fila de
+    // arriba. No invertir también el array: se harían dos volteos y quedaría al revés.
+    boxA.innerHTML = b.asks.map((r) => rowHtml(r, max)).join('');
+    boxB.innerHTML = b.bids.map((r) => rowHtml(r, max)).join('');
+
+    const px = App.currentPrice();
+    const last = el('bookLast');
+    if (last) last.textContent = px ? U.fmtPrice(px) : '—';
+    // flecha según la última vela: verde si sube, rojo si baja
+    const n = App.candles && App.candles.length ? App.candles[Math.min(BR.state.index, App.candles.length - 1)] : null;
+    const arrow = el('bookArrow');
+    const wrap = last && last.parentElement;
+    if (arrow && n) {
+      const up = n.close >= n.open;
+      arrow.textContent = up ? '↑' : '↓';
+      if (wrap) wrap.classList.toggle('up', up), wrap.classList.toggle('dn', !up);
+    }
+    // banda bid/ask del pie del libro
+    const bq = b.bids.reduce((s, r) => s + r[1], 0);
+    const aq = b.asks.reduce((s, r) => s + r[1], 0);
+    const tot = bq + aq || 1;
+    const bidPct = (bq / tot) * 100;
+    const bar = el('bookBidBar');
+    if (bar) bar.style.width = bidPct.toFixed(1) + '%';
+    const askBar = el('bookAskBar');
+    if (askBar) askBar.style.width = (100 - bidPct).toFixed(1) + '%';
+    setTxt('bookBidPct', 'B ' + U.num(bidPct, 2) + ' %');
+    setTxt('bookAskPct', 'S ' + U.num(100 - bidPct, 2) + ' %');
+    const srcTag = el('bookSrc');
+    if (srcTag) {
+      srcTag.textContent = b.src === 'derivado' ? 'derivado' : (b.src || 'real');
+      srcTag.title = b.src === 'derivado'
+        ? 'Libro DERIVADO de la vela del replay (no existe un libro histórico por vela). Activa «live» para ver el libro real del exchange.'
+        : 'Libro real: ' + (b.src || '—');
+    }
+  };
+
+  /** Ventana de 24 h calculada SOBRE LAS VELAS CARGADAS (datos reales). */
+  OB.stats24FromCandles = function () {
+    const arr = App.candles || [];
+    const idx = Math.min(BR.state.index, arr.length - 1);
+    if (idx < 1) return null;
+    const tf = (DS.TIMEFRAMES && DS.TIMEFRAMES[App.interval]) || { ms: 3600e3 };
+    const tfMs = tf.ms;
+    const span = Math.max(1, Math.round(86400000 / tfMs));
+    const from = Math.max(0, idx - span + 1);
+    let high = -Infinity, low = Infinity, vol = 0, quote = 0;
+    for (let i = from; i <= idx; i++) {
+      const c = arr[i];
+      if (!c) continue;
+      if (c.high > high) high = c.high;
+      if (c.low < low) low = c.low;
+      vol += c.volume || 0;
+      quote += c.quoteVolume || (c.volume || 0) * c.close;
+    }
+    const open = arr[from].open;
+    const last = arr[idx].close;
+    return { open, last, high, low, vol, quote, chgPct: open ? ((last - open) / open) * 100 : 0, from, to: idx };
+  };
+
+  OB.renderStats = function () {
+    const px = App.currentPrice();
+    const n = App.candles && App.candles.length ? App.candles[Math.min(BR.state.index, App.candles.length - 1)] : null;
+    setTxt('bfLast', px ? U.fmtPrice(px) : '—');
+    if (px && n) setCls('bfLast', n.close >= n.open ? 'up' : 'dn');
+
+    const meta = OB.state.meta || null;
+    const live = OB.state.live;
+
+    // 24 h: siempre sobre las velas cargadas (siempre es histórico real del replay)
+    const s24 = OB.stats24FromCandles();
+    const real24 = live && OB.state.t24 ? OB.state.t24 : null;
+    const g = real24 || s24;
+    if (g) {
+      setTxt('bfChg24', (g.chgPct >= 0 ? '+' : '') + U.num(g.chgPct, 2) + ' %');
+      setCls('bfChg24', g.chgPct >= 0 ? 'up' : 'dn');
+      setTxt('bfHighLow', 'máx ' + U.fmtPrice(g.high) + ' · mín ' + U.fmtPrice(g.low));
+      setTxt('bfVol', OB.fmtUsd(g.vol) + ' ' + (DS.baseOf ? DS.baseOf(App.pair) : ''));
+      setTxt('bfVolQuote', OB.fmtUsd(g.quote) + ' USDT');
+      el('bfChg24').title = (real24 ? 'Variación de 24 h REAL (espejo spot de Binance).'
+        : 'Variación de 24 h CALCULADA sobre las velas del replay (' + (s24 ? s24.to - s24.from + 1 : 0) + ' velas).') +
+        ' Máx/mín del mismo tramo.';
+    }
+
+    // mark / índice: en el replay es el precio negociado; en live, el del exchange
+    const markEl = el('bfMark');
+    if (markEl) {
+      const mv = live && meta && meta.mark ? meta.mark : px;
+      markEl.textContent = mv ? U.fmtPrice(mv) : '—';
+      markEl.title = (live && meta && meta.mark ? 'Precio de marca REAL de ' + meta.venues[0] + '.'
+        : 'Mark del replay: se toma el cierre de la vela actual (el backtest no tiene precio de marca histórico).') +
+        (meta && meta.mark ? '  ·  mark actual del exchange: ' + U.fmtPrice(meta.mark) : '');
+      setTxt('bfIndex', 'índice ' + (live && meta && meta.index ? U.fmtPrice(meta.index) : (px ? U.fmtPrice(px) : '—')));
+    }
+
+    // funding: solo existe en futuros; el valor real es el de hoy (no histórico)
+    const fEl = el('bfFunding');
+    if (fEl) {
+      if (meta && Number.isFinite(meta.funding)) {
+        fEl.textContent = (meta.funding * 100).toFixed(4) + ' %';
+        setCls('bfFunding', meta.funding > 0 ? 'up' : meta.funding < 0 ? 'dn' : '');
+        fEl.title = 'Tipo de financiación REAL actual (' + (meta.venues[1] || 'Bitget USDT-FUTURES') +
+          '), cada ' + (meta.fundingEvery || 8) + ' h. Es el valor de hoy: el replay no tiene histórico de funding.';
+      } else {
+        // Sin dato real NO se inventa un funding: se deja vacío y se explica.
+        fEl.textContent = '—';
+        setCls('bfFunding', '');
+        fEl.title = 'Funding no disponible: el exchange no respondió. En el backtest no se inventa un tipo de financiación.';
+      }
+      setTxt('bfFundingNext', meta && meta.nextFunding ? 'en ' + OB.countdown(meta.nextFunding) : '—');
+    }
+
+    // interés abierto
+    const oiEl = el('bfOi');
+    if (oiEl) {
+      if (meta && Number.isFinite(meta.oi) && meta.oi > 0) {
+        oiEl.textContent = OB.fmtUsd(meta.oi) + ' ' + (DS.baseOf ? DS.baseOf(App.pair) : '');
+        oiEl.title = 'Interés abierto REAL declarado por ' + (meta.venues[0] || 'el exchange') +
+          ' (unidades del exchange). Es el valor de hoy, no el de la vela del replay.';
+        setTxt('bfOiVal', 'en ' + OB.fmtUsd(meta.oi * (px || meta.mark || 0)) + ' USDT');
+      } else {
+        oiEl.textContent = '—';
+        oiEl.title = 'Interés abierto no disponible (el exchange no respondió).';
+        setTxt('bfOiVal', '—');
+      }
+    }
+
+    // reparto long/short de cuentas
+    const lsEl = el('bfLs');
+    if (lsEl) {
+      if (meta && Number.isFinite(meta.longPct)) {
+        const lp = meta.longPct;
+        lsEl.textContent = 'L ' + U.num(lp, 2) + ' % / S ' + U.num(meta.shortPct, 2) + ' %';
+        const bar = el('bfLsLong');
+        if (bar) bar.style.width = Math.max(0, Math.min(100, lp)) + '%';
+        lsEl.title = 'Proporción de cuentas en largo/corto REAL (' + (meta.venues[0] || 'Bitget') +
+          (meta.lsTs ? ', instante ' + U.fmtDateEs(Math.round(meta.lsTs / 1000)) : '') + ').';
+      } else {
+        lsEl.textContent = '—';
+        lsEl.title = 'Reparto long/short no disponible (sin respuesta del exchange).';
+      }
+    }
+
+    // espejo de la cuenta, para no duplicar cálculos: el propio panel lo pinta
+    const free = el('acFree');
+    const eq = el('acEquity');
+    setTxt('bfAvail', free ? free.textContent : '—');
+    setTxt('bfEquity', eq ? 'equity ' + eq.textContent : '—');
+
+    // resumen de procedencia, siempre visible
+    const src = el('bfSource');
+    if (src) {
+      const partes = [];
+      partes.push(live ? 'libro y 24 h: ' + (OB.state.book && OB.state.book.src !== 'derivado' ? 'espejo spot Binance' : 'derivado') : 'libro: derivado del replay');
+      partes.push(meta && meta.mark ? 'mark/OI/funding: ' + meta.venues.join(' + ') : 'futuros: sin dato');
+      src.textContent = partes.join(' · ');
+      src.title = (OB.state.errors.length ? 'Avisos: ' + OB.state.errors.join(' · ') : 'Sin avisos de red.');
+    }
+  };
+
+  OB.render = function () {
+    OB.state.renders++;
+    OB.renderBook();
+    OB.renderStats();
+  };
+
+  /* ------------------------------- red ------------------------------- */
+
+  /** Pregunta al exchange (libro + 24 h + futuros). Los fallos no lanzan. */
+  OB.poll = async function (force) {
+    const now = Date.now();
+    if (!force && now - OB.state.lastPoll < OB.POLL_MS) return false;
+    OB.state.lastPoll = now;
+    OB.state.polls++;
+    OB.state.errors = [];
+    const symbol = App.pair;
+    const atHead = BR.state.index >= (App.candles.length - 1);
+    try {
+      OB.state.book = Object.assign({ src: 'spot Binance' }, await DS.MARKET.depth(symbol, 30));
+    } catch (e) {
+      OB.state.errors.push('libro: ' + (e && e.message || e));
+      OB.state.book = null;
+    }
+    try { OB.state.t24 = await DS.MARKET.ticker24(symbol); }
+    catch (e) { OB.state.errors.push('24h: ' + (e && e.message || e)); }
+    try { OB.state.meta = await DS.MARKET.futuresMeta(symbol); }
+    catch (e) { OB.state.errors.push('futuros: ' + (e && e.message || e)); OB.state.meta = null; }
+    if (!OB.state.book) OB.fillDerivedBook();
+    OB.state.atHead = !!atHead;
+    OB.render();
+    return true;
+  };
+
+  /** Libro derivado de la vela del cursor (modo replay). */
+  OB.fillDerivedBook = function () {
+    const n = App.candles && App.candles.length ? App.candles[Math.min(BR.state.index, App.candles.length - 1)] : null;
+    const px = (n && n.close) || App.currentPrice();
+    if (!Number.isFinite(px)) return;
+    OB.state.book = OB.derivedBook(px, n, App.pair);
+  };
+
+  /**
+   * Refresco en cada vela del replay. El libro derivado se rehace SIEMPRE
+   * (cuesta microsegundos y así el panel acompaña al gráfico); el real solo
+   * cuando el usuario pide el modo live.
+   */
+  OB.onTick = function () {
+    if (OB.state.pair !== App.pair) { OB.state.pair = App.pair; OB.state.meta = null; OB.state.t24 = null; }
+    if (!OB.state.live || !OB.state.book || OB.state.book.src === 'derivado') OB.fillDerivedBook();
+    OB.render();
+  };
+
+  OB.setLive = function (on) {
+    OB.state.live = !!on;
+    const b = el('btnBookLive');
+    if (b) {
+      b.classList.toggle('on', OB.state.live);
+      b.classList.toggle('off', !OB.state.live);
+      b.textContent = OB.state.live ? 'live' : 'fijar';
+    }
+    if (OB.state.live) { OB.poll(true); OB.timer = setInterval(() => { if (OB.state.live) OB.poll(false); }, OB.POLL_MS); }
+    else {
+      if (OB.timer) clearInterval(OB.timer);
+      OB.timer = null;
+      OB.state.book = null;
+      OB.fillDerivedBook();
+      OB.render();
+    }
+    U.log(OB.state.live ? '📡 Libro en vivo (espejo spot + futuros Bitget)' : '🔒 Libro fijado a las velas del replay', 'sys');
+  };
+
+  /* ------------------------------ arranque ------------------------------ */
+
+  OB.init = function () {
+    OB.state.pair = App.pair;
+    OB.fillDerivedBook();
+    OB.render();
+    const btn = el('btnBookLive');
+    if (btn) btn.addEventListener('click', () => OB.setLive(!OB.state.live));
+    if (btn) { btn.classList.add('off'); btn.textContent = 'fijar'; }
+
+    // pinchar una fila del libro prepara una orden límite a ese precio
+    const card = el('bookCard');
+    if (card) card.addEventListener('click', (ev) => {
+      const row = ev.target.closest ? ev.target.closest('.bf-row') : null;
+      if (!row) return;
+      const p = +row.dataset.p;
+      if (!Number.isFinite(p)) return;
+      const inp = el('limitInput');
+      if (inp) { inp.value = p; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+      const seg = el('segOrderType');
+      if (seg) {
+        const b = seg.querySelector('[data-otype="limite"]');
+        if (b) b.click();
+      }
+      U.toast('Precio límite ' + U.fmtPrice(p) + ' tomado del libro', 'info', 1600);
+    });
+
+    // cuenta atrás del funding (1 s, solo si hay fecha real de próxima liquidación)
+    setInterval(() => {
+      const m = OB.state.meta;
+      if (m && m.nextFunding) setTxt('bfFundingNext', 'en ' + OB.countdown(m.nextFunding));
+    }, 1000);
+
+    // primer intento de datos reales, sin bloquear el arranque
+    OB.poll(true).then(() => { if (!OB.state.live) { OB.state.book = null; OB.fillDerivedBook(); OB.render(); } });
+  };
+
+  global.OB = OB;
 })(window);
 
 
@@ -6542,15 +8014,25 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }));
 
     document.getElementById('sizeInput').addEventListener('input', UI.updateOrderHint);
-    U.$$('#quickSize .chip').forEach((c) => c.addEventListener('click', () => {
-      U.$$('#quickSize .chip').forEach((x) => x.classList.toggle('active', x === c));
-      document.getElementById('sizeInput').value = c.dataset.pct;
+    // Deslizador de fracción 0 / 25 / 50 / 75 / 100 (como el panel de órdenes
+    // de Bitunix): fija el tamaño sobre la unidad activa (% | USD | Qty).
+    U.$$('#quickSize [data-pct]').forEach((c) => c.addEventListener('click', () => {
+      U.$$('#quickSize [data-pct]').forEach((x) => x.classList.toggle('active', x === c));
+      const pct = +c.dataset.pct;
+      const inp = document.getElementById('sizeInput');
+      if (App.sizeMode === 'notional') inp.value = U.round(TE.state.equity * (pct / 100), 2);
+      else if (App.sizeMode === 'qty') inp.value = U.round(TE.state.equity * (pct / 100) / Math.max(1e-9, App.currentPrice() || 1) / Math.max(1, TE.state.leverage), 6);
+      else inp.value = pct;
       UI.updateOrderHint();
     }));
+
+    // MODO DE MARGEN (Cruzado / Aislado) y apalancamiento con deslizador.
+    UI.initTerminal();
 
     document.getElementById('leverageSelect').addEventListener('change', (e) => {
       TE.configure({ leverage: +e.target.value });
       setText('tagLeverage', e.target.value + 'x');
+      UI.syncLeverage(+e.target.value);
       UI.updateOrderHint();
       UI.refreshAccount();
     });
@@ -6602,6 +8084,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     U.$$('.tab').forEach((t) => t.addEventListener('click', () => {
       U.$$('.tab').forEach((x) => x.classList.toggle('active', x === t));
       U.$$('.tab-body').forEach((b) => b.classList.toggle('active', b.id === 'tab-' + t.dataset.tab));
+      // Al hacerse visible hay que repintar lo que depende del ancho disponible
+      // (la curva de capital se dibujaría con 0 px si estaba oculta) y lo que
+      // depende del estado (posición y órdenes en espera).
+      const _t = t.dataset.tab;
+      if (_t === 'stats') UI.refreshStats();
+      else if (_t === 'positions') { UI.refreshPosition(); UI.renderPending(); }
+      else if (_t === 'account') UI.refreshAccount();
       if (t.dataset.tab === 'drawings') DT.renderList(document.getElementById('drawList'));
     }));
 
@@ -6965,6 +8454,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!cont) return;
     const ordenes = (TE.state.pending || []);
     if (tag) tag.textContent = String(ordenes.length);
+    setText('tabPendCount', String(ordenes.length));   // contador de la pestaña
     const card = document.getElementById('pendingCard');
     if (card) card.classList.toggle('has-orders', ordenes.length > 0);
 
@@ -6998,6 +8488,22 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     cont.querySelectorAll('[data-cancel]').forEach((b) => {
       b.addEventListener('click', () => App.cancelOrder(+b.dataset.cancel));
     });
+
+    // Espejo de solo lectura en la pestaña «Órdenes» (ver index.html): se clona la
+    // lista y se le quitan los botones de cancelar, que solo funcionan en el
+    // original porque ahí es donde están puestos los listeners.
+    const espejo = document.getElementById('pendingListTab');
+    if (espejo) {
+      if (!ordenes.length) {
+        espejo.innerHTML = '<div class="hint">Nada en espera: las órdenes límite que colocques ' +
+          'aparecerán aquí y en la pestaña Posiciones.</div>';
+      } else {
+        const c = cont.cloneNode(true);
+        c.removeAttribute('id');
+        c.querySelectorAll('[data-cancel]').forEach((b) => b.remove());
+        espejo.innerHTML = c.innerHTML;
+      }
+    }
   };
 
   /* ======================= BUSCADOR DE SÍMBOLOS ======================= */
@@ -7412,6 +8918,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('lgTf', App.interval);
     UI.renderPending();     // órdenes límite en espera
     UI.renderPanels();      // lista de indicadores con su valor actual
+    // Libro de órdenes y fila de estadísticas del terminal (css/bitunix.css):
+    // se refrescan con la misma cadencia que el resto de paneles.
+    if (global.OB && OB.onTick) OB.onTick();
     UI.updateLimitHint && UI.updateLimitHint();
   };
 
@@ -7459,6 +8968,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const p = TE.state.position;
     const price = App.currentPrice();
     const tag = document.getElementById('posSide');
+    setText('tabPosCount', p ? '1' : '0');   // aviso en la pestaña «Posiciones»
     UI.syncPositionGraphics(p);
     if (!p) {
       tag.textContent = 'FLAT';
@@ -7713,6 +9223,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const eq = TE.state.balance;
       parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
     }
+    UI.renderOrderCost();
     const pAb = TE.state.position;
     if (pAb) {
       parts.push(TE.state.averaging
@@ -7720,6 +9231,61 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         : 'posición abierta: cierra antes de abrir otra (activa «Promediar entradas» en Ajustes)');
     }
     hint.textContent = parts.length ? parts.join(' · ') : 'Sin SL/TP definidos (puedes añadirlos por precio o con los atajos rápidos).';
+  };
+
+  /* ============================ TERMINAL (piel Bitunix) ============================ */
+
+  /** Sincroniza chip + deslizador + <select> del apalancamiento. */
+  UI.syncLeverage = function (v) {
+    const lev = Math.max(1, Math.min(100, Math.round(+v || 1)));
+    const sel = document.getElementById('leverageSelect');
+    if (sel) {
+      if (!Array.prototype.some.call(sel.options, (o) => +o.value === lev)) {
+        const o = document.createElement('option');
+        o.value = String(lev); o.textContent = lev + 'x';
+        sel.appendChild(o);
+      }
+      if (+sel.value !== lev) { sel.value = String(lev); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    setText('bfLevVal', lev + 'x');
+    const r = document.getElementById('levRange');
+    if (r && +r.value !== lev) r.value = String(lev);
+  };
+
+  /** Controles nuevos de la fila superior del panel de órdenes. */
+  UI.initTerminal = function () {
+    const seg = document.getElementById('segMarginMode');
+    if (seg) seg.addEventListener('click', (e) => {
+      const b = e.target.closest ? e.target.closest('[data-mm]') : null;
+      if (!b) return;
+      U.$$('#segMarginMode [data-mm]').forEach((x) => x.classList.toggle('active', x === b));
+      const m = TE.setMarginMode(b.dataset.mm);
+      const p = TE.state.position;
+      U.log(`🧮 Modo de margen: ${m === 'cross' ? 'CRUZADO (toda la cuenta respalda)' : 'AISLADO (solo el margen de la posición)'}` +
+        (p ? ` · liq. ${U.fmtPrice(TE.liquidationPrice(p))}` : ''), 'sys');
+      UI.refreshPosition();
+      App.refreshOrderLines();
+      UI.refreshAccount();
+    });
+    const r = document.getElementById('levRange');
+    if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
+    const sel = document.getElementById('leverageSelect');
+    if (sel) UI.syncLeverage(+sel.value);     // estado inicial coherente
+  };
+
+  /** Coste / margen de la orden y bloqueo si el tamaño es 0 (Bitunix lo deshabilita). */
+  UI.renderOrderCost = function () {
+    const price = App.currentPrice();
+    const est = price ? (App.estimateSize(price) || {}) : {};
+    const notional = +est.notional || 0;
+    const lev = Math.max(1, TE.state.leverage);
+    setText('bfCostVal', notional > 0 ? U.fmtMoney(notional) : '—');
+    setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}x)` : '—');
+    const cero = notional <= 0;
+    ['btnLong', 'btnShort'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = cero;
+    });
   };
 
   /* -------------------------------- Confirmaciones -------------------------------- */
@@ -7798,7 +9364,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     cv.height = Math.round(areaRect.height * dpr);
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0b0c16';
+    ctx.fillStyle = '#0a0a0b';
     ctx.fillRect(0, 0, areaRect.width, areaRect.height);
 
     // Todas las velas/paneles renderizados por canvas dentro del área del gráfico
@@ -7931,6 +9497,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     // 5) UI
     UI.init();
+    // Libro de órdenes y fila de estadísticas del terminal (js/orderBook.js)
+    if (global.OB && OB.init) OB.init();
     UI.setPairLabels(App.pair, App.interval);
     UI.updateSymbolButton && UI.updateSymbolButton();   // botón-buscador de la barra
     UI.syncTfButtons && UI.syncTfButtons();             // temporalidades rápidas

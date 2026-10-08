@@ -17,11 +17,14 @@
   const CM = {};
 
   const COLORS = {
-    bg: '#0b0c16', grid: '#1b1d33', gridSoft: '#15162a', border: '#2c2f52',
-    text: '#7d81a8', crosshair: '#5d628f',
-    up: '#00c853', down: '#ff1744',
-    entry: '#2979ff', sl: '#ff1744', tp: '#00e5ff', liq: '#ff9100',
-    limit: '#ffab00',   // órdenes límite pendientes (ámbar punteado)
+    // Paleta MEDIDA sobre la captura del terminal de futuros (css/bitunix.css):
+    // fondo casi negro, velas verde #25ca93 / rojo #f65b55 y la línea de
+    // entrada en blanco, como marca el exchange.
+    bg: '#0a0a0b', grid: '#1a1a1f', gridSoft: '#141418', border: '#242429',
+    text: '#8b8e96', crosshair: '#4a4d55',
+    up: '#25ca93', down: '#f65b55',
+    entry: '#f2f3f5', sl: '#f65b55', tp: '#25ca93', liq: '#f0b90b',
+    limit: '#b8f040',   // órdenes límite pendientes (lima de la marca, punteada)
   };
 
   /**
@@ -483,18 +486,18 @@
     if (typeof TE.breakEvenPrice === 'function') {
       const be = TE.breakEvenPrice(pos);
       if (be !== null && Math.abs(be - pos.entryPrice) / pos.entryPrice > 1e-6) {
-        mk(be, '#9aa0aa', 'BE ' + U.fmtPrice(be), 3);
+        mk(be, '#8b8e96', 'BE ' + U.fmtPrice(be), 3);
       }
     }
     // Trailing stop: línea morada que SE MUEVE sola conforme la posición hace
     // un nuevo pico. No se pinta mientras esté esperando activación (no hay nivel).
     if (typeof TE.trailingPrice === 'function') {
       const tl = TE.trailingPrice(pos);
-      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b388ff', `TRAIL ${U.fmtPrice(tl)}`, 1);
+      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b8f040', `TRAIL ${U.fmtPrice(tl)}`, 1);
     }
     // Niveles de TP escalonado (Partial TP/SL): uno por línea, con su porcentaje.
     if (pos.tpLevels && pos.tpLevels.length) {
-      pos.tpLevels.forEach((l, i) => mk(l.price, '#00e5ff', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
+      pos.tpLevels.forEach((l, i) => mk(l.price, '#25ca93', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
     }
     // Cada entrada promediada queda marcada en tono azul suave.
     if (pos.parts && pos.parts.length > 1) {

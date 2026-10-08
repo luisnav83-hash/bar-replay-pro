@@ -169,15 +169,25 @@
     }));
 
     document.getElementById('sizeInput').addEventListener('input', UI.updateOrderHint);
-    U.$$('#quickSize .chip').forEach((c) => c.addEventListener('click', () => {
-      U.$$('#quickSize .chip').forEach((x) => x.classList.toggle('active', x === c));
-      document.getElementById('sizeInput').value = c.dataset.pct;
+    // Deslizador de fracción 0 / 25 / 50 / 75 / 100 (como el panel de órdenes
+    // de Bitunix): fija el tamaño sobre la unidad activa (% | USD | Qty).
+    U.$$('#quickSize [data-pct]').forEach((c) => c.addEventListener('click', () => {
+      U.$$('#quickSize [data-pct]').forEach((x) => x.classList.toggle('active', x === c));
+      const pct = +c.dataset.pct;
+      const inp = document.getElementById('sizeInput');
+      if (App.sizeMode === 'notional') inp.value = U.round(TE.state.equity * (pct / 100), 2);
+      else if (App.sizeMode === 'qty') inp.value = U.round(TE.state.equity * (pct / 100) / Math.max(1e-9, App.currentPrice() || 1) / Math.max(1, TE.state.leverage), 6);
+      else inp.value = pct;
       UI.updateOrderHint();
     }));
+
+    // MODO DE MARGEN (Cruzado / Aislado) y apalancamiento con deslizador.
+    UI.initTerminal();
 
     document.getElementById('leverageSelect').addEventListener('change', (e) => {
       TE.configure({ leverage: +e.target.value });
       setText('tagLeverage', e.target.value + 'x');
+      UI.syncLeverage(+e.target.value);
       UI.updateOrderHint();
       UI.refreshAccount();
     });
@@ -229,6 +239,13 @@
     U.$$('.tab').forEach((t) => t.addEventListener('click', () => {
       U.$$('.tab').forEach((x) => x.classList.toggle('active', x === t));
       U.$$('.tab-body').forEach((b) => b.classList.toggle('active', b.id === 'tab-' + t.dataset.tab));
+      // Al hacerse visible hay que repintar lo que depende del ancho disponible
+      // (la curva de capital se dibujaría con 0 px si estaba oculta) y lo que
+      // depende del estado (posición y órdenes en espera).
+      const _t = t.dataset.tab;
+      if (_t === 'stats') UI.refreshStats();
+      else if (_t === 'positions') { UI.refreshPosition(); UI.renderPending(); }
+      else if (_t === 'account') UI.refreshAccount();
       if (t.dataset.tab === 'drawings') DT.renderList(document.getElementById('drawList'));
     }));
 
@@ -592,6 +609,7 @@
     if (!cont) return;
     const ordenes = (TE.state.pending || []);
     if (tag) tag.textContent = String(ordenes.length);
+    setText('tabPendCount', String(ordenes.length));   // contador de la pestaña
     const card = document.getElementById('pendingCard');
     if (card) card.classList.toggle('has-orders', ordenes.length > 0);
 
@@ -625,6 +643,22 @@
     cont.querySelectorAll('[data-cancel]').forEach((b) => {
       b.addEventListener('click', () => App.cancelOrder(+b.dataset.cancel));
     });
+
+    // Espejo de solo lectura en la pestaña «Órdenes» (ver index.html): se clona la
+    // lista y se le quitan los botones de cancelar, que solo funcionan en el
+    // original porque ahí es donde están puestos los listeners.
+    const espejo = document.getElementById('pendingListTab');
+    if (espejo) {
+      if (!ordenes.length) {
+        espejo.innerHTML = '<div class="hint">Nada en espera: las órdenes límite que colocques ' +
+          'aparecerán aquí y en la pestaña Posiciones.</div>';
+      } else {
+        const c = cont.cloneNode(true);
+        c.removeAttribute('id');
+        c.querySelectorAll('[data-cancel]').forEach((b) => b.remove());
+        espejo.innerHTML = c.innerHTML;
+      }
+    }
   };
 
   /* ======================= BUSCADOR DE SÍMBOLOS ======================= */
@@ -1039,6 +1073,9 @@
     setText('lgTf', App.interval);
     UI.renderPending();     // órdenes límite en espera
     UI.renderPanels();      // lista de indicadores con su valor actual
+    // Libro de órdenes y fila de estadísticas del terminal (css/bitunix.css):
+    // se refrescan con la misma cadencia que el resto de paneles.
+    if (global.OB && OB.onTick) OB.onTick();
     UI.updateLimitHint && UI.updateLimitHint();
   };
 
@@ -1086,6 +1123,7 @@
     const p = TE.state.position;
     const price = App.currentPrice();
     const tag = document.getElementById('posSide');
+    setText('tabPosCount', p ? '1' : '0');   // aviso en la pestaña «Posiciones»
     UI.syncPositionGraphics(p);
     if (!p) {
       tag.textContent = 'FLAT';
@@ -1340,6 +1378,7 @@
       const eq = TE.state.balance;
       parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
     }
+    UI.renderOrderCost();
     const pAb = TE.state.position;
     if (pAb) {
       parts.push(TE.state.averaging
@@ -1347,6 +1386,61 @@
         : 'posición abierta: cierra antes de abrir otra (activa «Promediar entradas» en Ajustes)');
     }
     hint.textContent = parts.length ? parts.join(' · ') : 'Sin SL/TP definidos (puedes añadirlos por precio o con los atajos rápidos).';
+  };
+
+  /* ============================ TERMINAL (piel Bitunix) ============================ */
+
+  /** Sincroniza chip + deslizador + <select> del apalancamiento. */
+  UI.syncLeverage = function (v) {
+    const lev = Math.max(1, Math.min(100, Math.round(+v || 1)));
+    const sel = document.getElementById('leverageSelect');
+    if (sel) {
+      if (!Array.prototype.some.call(sel.options, (o) => +o.value === lev)) {
+        const o = document.createElement('option');
+        o.value = String(lev); o.textContent = lev + 'x';
+        sel.appendChild(o);
+      }
+      if (+sel.value !== lev) { sel.value = String(lev); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    setText('bfLevVal', lev + 'x');
+    const r = document.getElementById('levRange');
+    if (r && +r.value !== lev) r.value = String(lev);
+  };
+
+  /** Controles nuevos de la fila superior del panel de órdenes. */
+  UI.initTerminal = function () {
+    const seg = document.getElementById('segMarginMode');
+    if (seg) seg.addEventListener('click', (e) => {
+      const b = e.target.closest ? e.target.closest('[data-mm]') : null;
+      if (!b) return;
+      U.$$('#segMarginMode [data-mm]').forEach((x) => x.classList.toggle('active', x === b));
+      const m = TE.setMarginMode(b.dataset.mm);
+      const p = TE.state.position;
+      U.log(`🧮 Modo de margen: ${m === 'cross' ? 'CRUZADO (toda la cuenta respalda)' : 'AISLADO (solo el margen de la posición)'}` +
+        (p ? ` · liq. ${U.fmtPrice(TE.liquidationPrice(p))}` : ''), 'sys');
+      UI.refreshPosition();
+      App.refreshOrderLines();
+      UI.refreshAccount();
+    });
+    const r = document.getElementById('levRange');
+    if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
+    const sel = document.getElementById('leverageSelect');
+    if (sel) UI.syncLeverage(+sel.value);     // estado inicial coherente
+  };
+
+  /** Coste / margen de la orden y bloqueo si el tamaño es 0 (Bitunix lo deshabilita). */
+  UI.renderOrderCost = function () {
+    const price = App.currentPrice();
+    const est = price ? (App.estimateSize(price) || {}) : {};
+    const notional = +est.notional || 0;
+    const lev = Math.max(1, TE.state.leverage);
+    setText('bfCostVal', notional > 0 ? U.fmtMoney(notional) : '—');
+    setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}x)` : '—');
+    const cero = notional <= 0;
+    ['btnLong', 'btnShort'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = cero;
+    });
   };
 
   /* -------------------------------- Confirmaciones -------------------------------- */
@@ -1425,7 +1519,7 @@
     cv.height = Math.round(areaRect.height * dpr);
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0b0c16';
+    ctx.fillStyle = '#0a0a0b';
     ctx.fillRect(0, 0, areaRect.width, areaRect.height);
 
     // Todas las velas/paneles renderizados por canvas dentro del área del gráfico

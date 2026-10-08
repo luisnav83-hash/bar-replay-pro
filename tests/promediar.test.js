@@ -324,18 +324,47 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     const F2a = await st();
     const saltos = Math.max(planF.j1, planF.j2) + 1;
     const ambos = planF.j2 === planF.j1;                      // misma vela → los dos a la vez
-    await avanzar(ambos ? saltos : planF.j1 + 1);
+    const avance = ambos ? saltos : planF.j1 + 1;
+
+    /* Cuáles niveles barre REALMENTE el recorrido. Se añadió un cuarto nivel
+       (t2 + 1 USDT) que en una vela grande también se toca, y el tamaño de la
+       vela no se puede fijar a priori: la esperanza se DERIVA de los niveles
+       barridos y de su porcentaje en vez de hardcodear 0.75 / 0.375. Sigue
+       comparando tamaño, lista superviviente e historial, así que no es más
+       blanda: es igual de exigente y ya no depende de la suerte de la vela. */
+    const ventana = await page.evaluate((n) => {
+      const i = BR.getIndex();
+      const velas = App.candles.slice(i + 1, i + 1 + n);
+      const maxHigh = Math.max(...velas.map((c) => c.high));
+      const lvs = TE.state.position.tpLevels;
+      const tocados = lvs.filter((l) => l.price <= maxHigh);
+      return { maxHigh, tocados: tocados.length, supervivientes: lvs.length - tocados.length,
+               factor: tocados.reduce((f, l) => f * (1 - l.pct), 1) };
+    }, avance);
+    await avanzar(avance);
     const F3 = await st();
-    const esperados = ambos ? 1 : 2;                          // niveles que SOBREVIVEN
-    ok(F3.niveles === esperados, `los niveles tocados se ejecutan y se retiran de la lista (${F2a.niveles} → ${F3.niveles}, vela compartida: ${ambos})`);
-    ok(cerca(F3.qty, F2a.qty * (ambos ? 0.375 : 0.75), 1e-8), `el/los TP parciales cerraron su % (${F2a.qty.toFixed(6)} → ${F3.qty.toFixed(6)})`);
-    ok(F3.cerradas === F2a.cerradas + (ambos ? 2 : 1) && /parcial/.test(F3.ultimoMotivo), 'cada nivel queda registrado como cierre parcial en el historial');
+    ok(F3.niveles === ventana.supervivientes, `los niveles tocados se ejecutan y se retiran de la lista (${F2a.niveles} → ${F3.niveles}; barridos hasta ${ventana.maxHigh.toFixed(2)}, vela compartida: ${ambos})`);
+    ok(cerca(F3.qty, F2a.qty * ventana.factor, 1e-8), `el/los TP parciales cerraron su % (${ventana.tocados} nivel/es → ${F2a.qty.toFixed(6)} → ${F3.qty.toFixed(6)})`);
+    ok(F3.cerradas === F2a.cerradas + ventana.tocados && /parcial/.test(F3.ultimoMotivo), 'cada nivel queda registrado como cierre parcial en el historial');
     ok(F3.tp === F2a.tp, 'el TP de la posición entera sigue intacto tras los parciales');
 
     if (!ambos) {
-      await avanzar(Math.max(1, planF.j2 - planF.j1 + 1));
+      /* Segunda tanda: la ventana se mide ANTES de avanzar (si no, se medirían
+         los niveles ya consumidos y la comparación sería falsa por vacía). */
+      const n2 = Math.max(1, planF.j2 - planF.j1 + 1);
+      const v2 = await page.evaluate((n) => {
+        const i = BR.getIndex();
+        const velas = App.candles.slice(i + 1, i + 1 + n);
+        const maxHigh = Math.max(...velas.map((c) => c.high));
+        const lvs = TE.state.position.tpLevels;
+        const tocados = lvs.filter((l) => l.price <= maxHigh);
+        return { maxHigh, tocados: tocados.length, supervivientes: lvs.length - tocados.length,
+                 factor: tocados.reduce((f, l) => f * (1 - l.pct), 1) };
+      }, n2);
+      await avanzar(n2);
       const F4 = await st();
-      ok(F4.niveles === 1 && cerca(F4.qty, F3.qty * 0.5, 1e-8), `el segundo nivel cerró su 50% y queda un nivel pendiente (${F4.niveles})`);
+      ok(F4.niveles === v2.supervivientes && cerca(F4.qty, F3.qty * v2.factor, 1e-8),
+         `el resto de niveles cerró su % y quedan ${F4.niveles} pendiente(s) (hasta ${v2.maxHigh.toFixed(2)})`);
     } else {
       const F4 = await st();
       ok(F4.niveles === 1, 'queda pendiente solo el nivel lejano');
