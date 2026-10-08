@@ -2039,10 +2039,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   // /api/v3/klines hacia Binance y evita bloqueos regionales o de CORS.
   try {
     if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
-      // Se prueba PRIMERO: si la app se sirve con server.js, esta ruta es la
-      // más rápida y fiable; si no existe, responde 404/502 al instante y se
-      // rota al siguiente host sin penalizar el arranque.
-      DS.BINANCE_HOSTS.unshift('');
+      // El proxy del mismo origen SOLO existe donde hay un servidor detrás de
+      // la app (server.js en local o la tarjeta de preview). En un hosting
+      // estático como GitHub Pages esa ruta no existe: pedirla primero solo
+      // servía para perder un viaje y ensuciar la consola con un 404 antes de
+      // caer en data-api.binance.vision, que ya funciona desde el navegador.
+      const h = (location.hostname || '').toLowerCase();
+      const servidoConBackend =
+        h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h === '[::1]' ||
+        h.endsWith('.e2b.app');           // preview de la sandbox (proxy same-origin real)
+      if (servidoConBackend) DS.BINANCE_HOSTS.unshift('');
+      DS.MISMO_ORIGEN_UTIL = servidoConBackend;
     }
   } catch (e) { /* entorno sin location (tests) */ }
 
