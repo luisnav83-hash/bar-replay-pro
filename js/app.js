@@ -737,13 +737,25 @@
     App.refreshOrderLines();
     UI.refreshAll();
     if (orden) {
-      U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
-      // Con una posición abierta el motor deja los límites en espera (solo hay
-      // una posición a la vez). Se avisa para que no parezca una orden ignorada.
-      if (TE.state.position) {
-        U.log(`ℹ️ Hay una ${TE.state.position.side.toUpperCase()} abierta: la orden límite ` +
-              `esperará a que la cierres para poder ejecutarse`, 'sys');
-        U.toast('Hay una posición abierta: el límite entrará en vigor al cerrarla', 'warn', 4200);
+      // El caso CRUZADO ya se explicó solo (⚡ + «se ejecutó a mercado»): no se le
+      // encima el aviso de «queda en espera», que sería mentira.
+      if (!orden.ejecutada) {
+        U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
+        const posAb = TE.state.position;
+        if (posAb) {
+          // Con una posición abierta el motor deja los límites en espera (solo hay
+          // una posición a la vez), SALVO si son del mismo lado y el promediado está
+          // activo: esos sí se ejecutan y AÑADEN. El aviso tiene que decir lo uno
+          // o lo otro, no lo de siempre en ambos casos.
+          if (TE.state.averaging && posAb.side === side) {
+            U.log(`ℹ️ Hay una ${posAb.side.toUpperCase()} abierta: al tocar ${U.fmtPrice(limite)} esta orden le ` +
+                  `AÑADIRÁ tamaño (precio medio ponderado) en vez de esperar`, 'sys');
+          } else {
+            U.log(`ℹ️ Hay una ${posAb.side.toUpperCase()} abierta: la orden límite ` +
+                  `esperará a que la cierres para poder ejecutarse`, 'sys');
+            U.toast('Hay una posición abierta: el límite entrará en vigor al cerrarla', 'warn', 4200);
+          }
+        }
       }
     }
     return orden;

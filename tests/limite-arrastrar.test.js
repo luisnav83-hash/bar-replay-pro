@@ -55,7 +55,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   await page.goto(FILE, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(() => window.App && window.App.candles && window.App.candles.length > 0, { timeout: 40000 });
-  await wait(1200);
+  // SERIES DETERMINISTAS: sin esto la app arranca con los velas LIVE y cada
+  // ejecución tiene otro precio; los niveles calculados a partir del rango visible
+  // dejan de caer sobre el handle y el arrastre no empieza. «⚡ Práctica rápida»
+  // carga las velas guardadas en el propio archivo.
+  await page.evaluate(() => { const bq = document.getElementById('btnQuick'); if (bq) bq.click(); });
+  await page.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 25000 });
+  await wait(1000);
 
   await page.evaluate(() => {
     document.getElementById('sizeInput').value = '10';

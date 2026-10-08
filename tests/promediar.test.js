@@ -376,6 +376,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     await avanzar(nivelBajo.pasos + 2);
     const G2 = await st();
     ok(G2.qty > antes || G2.cerradas > G1.cerradas, `al tocarse AÑADE a la posición en vez de esperar (qty ${antes.toFixed(6)} → ${G2.qty.toFixed(6)})`);
+    const textoG = await page.evaluate(() => [...document.querySelectorAll('.log-line')].slice(-14).map((l) => l.textContent).join('\n'));
+    ok(/AÑADIRÁ tamaño/.test(textoG), 'y al colocarla avisa de que añadirá, no de que esperará');
     ok(G2.parts > G1.parts, `el promediado viene de una orden límite (parts ${G1.parts} → ${G2.parts})`);
     await page.evaluate(() => { document.getElementById('limitInput').value = ''; });
   } else {
@@ -391,6 +393,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   ok(ladoOpuesto.pend === ladoOpuesto.pendAntes + 1 && cerca(ladoOpuesto.antes, ladoOpuesto.despues, 1e-12),
      'un límite del lado CONTRARIO sigue quedando en espera sin tocar la posición');
+  const textosOp = await page.evaluate(() => [...document.querySelectorAll('.log-line')].slice(-8).map((l) => l.textContent).join('\n'));
+  ok(/esperará a que la cierres/.test(textosOp), 'a un límite del lado contrario sí se le avisa de que esperará');
   await page.evaluate(() => { TE.cancelAll ? TE.cancelAll() : TE.state.pending.splice(0); document.getElementById('limitInput').value = ''; });
 
   /* ---------------- H) El ajuste manda ---------------- */
@@ -408,13 +412,24 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     const c = document.getElementById('setAveraging');
     if (!c) return { existe: false };
     document.getElementById('btnSettings').click();
-    const vis = !document.getElementById('modalSettings').classList.contains('hidden');
+    const abierto = document.getElementById('modalSettings').classList.contains('open');
+    const alto = c.getBoundingClientRect().height;
+    const marcado = c.checked;
     c.checked = true;
     document.getElementById('btnApplySettings').click();
-    return { existe: true, vis, avg: TE.state.averaging };
+    return { existe: true, abierto, alto, marcado, avg: TE.state.averaging };
   });
-  ok(caja.existe && caja.vis, 'el interruptor está en Ajustes y se abre');
+  ok(caja.existe && caja.abierto, '⚙️ Ajustes ABRE el modal de verdad (no solo rellena los campos)');
+  ok(caja.marcado === false, 'al reabrir, el interruptor refleja el estado REAL del motor (apagado arriba)');
   ok(caja.avg === true, 'guardar desde Ajustes reactiva el promediado en el motor');
+  // Y otra vez: debe venir marcado porque el motor lo está
+  const caja2 = await page.evaluate(() => {
+    document.getElementById('btnSettings').click();
+    const v = document.getElementById('setAveraging').checked;
+    document.querySelector('#modalSettings [data-close]').click();
+    return { v, cerrado: !document.getElementById('modalSettings').classList.contains('open') };
+  });
+  ok(caja2.v === true && caja2.cerrado, 'reabrir muestra el valor activo y ✕ cierra el modal');
   await espera(300);
 
   /* ---------------- I) Persistencia ---------------- */
@@ -508,7 +523,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     return r;
   })();
   ok(!estrecho.overflow && !estrecho.doc, 'a 360 px de ancho tampoco hay scroll horizontal');
-  ok(errs.length === 0, `sin errores de JavaScript (${errs.length})`);
+  ok(errs.length === 0, `sin errores de JavaScript (${errs.length})${errs.length ? ' → ' + errs.slice(0, 3).join(' ⧸ ') : ''}`);
 
   // La invariante final: con la posición cerrada del todo, el balance cuadra
   await page.evaluate(() => App.flatten('manual'));

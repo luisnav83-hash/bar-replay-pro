@@ -66,7 +66,10 @@
     document.getElementById('btnSessions').addEventListener('click', () => { UI.renderSessions(); UI.openModal('modalSessions'); });
     document.getElementById('btnExport').addEventListener('click', () => UI.openModal('modalExport'));
     document.getElementById('btnShot').addEventListener('click', () => App.screenshot());
-    document.getElementById('btnSettings').addEventListener('click', () => UI.openSettings());
+    // Solo rellenaba los campos: el ⚙️ de la barra NO abría el modal, así que
+    // «Ajustes» parecía no hacer nada (salió al probar la app publicada, no la suite).
+    // Es openModal el que abre y además rellena, no al revés: al revés hay recursión.
+    document.getElementById('btnSettings').addEventListener('click', () => UI.openModal('modalSettings'));
     document.getElementById('btnHelp').addEventListener('click', () => UI.openModal('modalHelp'));
 
     // Cambiar de par o temporalidad no recarga solo: avisa al usuario
@@ -342,8 +345,6 @@
           : 'Gesto desactivado', 'info', 2600);
       });
     }
-    const chkAvg0 = document.getElementById('setAveraging');
-    if (chkAvg0) chkAvg0.checked = TE.state.averaging !== false;
     document.getElementById('btnApplySettings').addEventListener('click', () => App.applySettings());
     document.getElementById('btnHardReset').addEventListener('click', () => UI.confirmHardReset());
 
@@ -429,6 +430,8 @@
     document.getElementById('setAutoReveal').checked = !!App.autoReveal;
     const cg = document.getElementById('setGesture');
     if (cg) cg.checked = DT.gesture.on !== false;
+    const ca = document.getElementById('setAveraging');
+    if (ca) ca.checked = TE.state.averaging !== false;
   };
 
   /* --------------------------------- Sesiones --------------------------------- */

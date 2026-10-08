@@ -128,6 +128,9 @@ precios, tamaño, PnL, %, R, motivo de cierre y duración).
 - **Captura de pantalla** del gráfico (velas + dibujos + paneles) en PNG.
 - **Modo práctica rápida**: fecha aleatoria y a operar.
 - **Atajos de teclado**, sonidos sintetizados (WebAudio) y diseño responsive.
+- **⚙️ Ajustes abre de verdad**: el botón rellena y abre el modal (`UI.openModal('modalSettings')`,
+  que es quien llama a `UI.openSettings`); al reabrir, los interruptores reflejan el estado real
+  del motor —no el valor con el que nació la página—, incluido «➕ Promediar entradas».
 
 ---
 
@@ -285,13 +288,13 @@ node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBL
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
-node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón y con dedo
-node tests/promediar.test.js    #  73 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana
+node tests/promediar.test.js    #  76 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **628 comprobaciones, 0 fallos** ✅ · **20 suites** en `test:all`
+Resultado actual: **631 comprobaciones, 0 fallos** ✅ · **20 suites** en `test:all`
 
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
@@ -430,6 +433,11 @@ bar-replay-app/
     lo que sigue abierto conserva su SL.
   - **Órdenes límite del mismo lado** con posición abierta **promedian** al tocarse (los del
     lado contrario siguen en espera hasta cerrar, como antes).
+- **Arrastre sin ratón perdido**: los handles de SL/TP y de límite se consuelidan al soltar
+  (`DT._onUp`), y también si se **pierde el foco** de la ventana (`blur`/`pointercancel`): antes,
+  soltar fuera del navegador dejaba la pestaña pegada al cursor. Durante el arrastre los cambios
+  se aplican **en silencio** (un log por cada `mousemove` llenaba el registro) y solo el gesto
+  terminado deja línea en el log y sonido.
 - **Órdenes límite arrastrables**: la línea ámbar de cada orden pendiente tiene una pestaña
   `⏳▲ ⇕` en el borde derecho y se puede **arrastrar** para reubicar el nivel, con la misma
   mecánica que los handles de SL/TP (`DT.setPendingHandles` → `App.moveLimitOrder`). Con el
