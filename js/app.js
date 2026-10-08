@@ -945,6 +945,55 @@
     return nivel;
   };
 
+  /* ─────────────────────────── TRAILING STOP (UI) ─────────────────────────── */
+
+  /**
+   * Activa o reconfigura el trailing stop de la posición abierta desde la tarjeta.
+   * @param {number} pct        retracement en % que dispara el cierre
+   * @param {number|null} act   precio de activación (null = seguir desde ya)
+   * @param {number} [frac]     % de la posición que cierra (100 = entera)
+   */
+  App.setTrailing = function (pct, act, frac) {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
+    const t = TE.setTrailing({ pct, activation: act, frac });
+    if (!t) return null;
+    // El checkpoint de la vela guarda la posición entera (trail incluido), así que
+    // retroceder/reavanzar devuelve también el trailing tal como estaba.
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.syncPositionGraphics(p);
+    UI.refreshAll();
+    return t;
+  };
+
+  /** Desactiva el trailing stop de la posición abierta. */
+  App.trailingOff = function () {
+    const p = TE.state.position;
+    if (!p || !p.trail) { U.toast('No hay ningún trailing activo que quitar', 'info', 1800); return false; }
+    if (!TE.removeTrailing()) return false;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.syncPositionGraphics(p);
+    UI.refreshAll();
+    U.toast('🌀 Trailing quitado: la posición vuelve a su SL fijo', 'info', 2400);
+    return true;
+  };
+
+  /**
+   * Tecla V: alterna. Con trailing activo lo quita; sin él, lo activa con lo que
+   * haya escrito en la tarjeta (por defecto 0.50 % y sin precio de activación).
+   */
+  App.toggleTrailing = function () {
+    const p = TE.state.position;
+    if (!p) { U.toast('Abre una posición para usar el trailing (V)', 'warn', 2200); return false; }
+    if (p.trail) return App.trailingOff();
+    const $ = (id) => document.getElementById(id);
+    const pct = parseFloat(($('trailPct') || {}).value);
+    const raw = (($('trailAct') || {}).value || '').trim();
+    const act = raw === '' ? null : parseFloat(raw);
+    if (raw !== '' && !Number.isFinite(act)) { U.toast('Precio de activación no válido', 'err'); return false; }
+    return !!App.setTrailing(Number.isFinite(pct) && pct > 0 ? pct : 0.5, act);
+  };
+
   /** Quita un nivel de TP escalonado. */
   App.removeTpLevel = function (i) {
     if (!TE.removeTpLevel(i)) return false;

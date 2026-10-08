@@ -251,6 +251,14 @@
 .pm-row input[type=number]{min-height:28px;}
 .pm-row .mini-btn:hover{border-color:var(--accent);background:#1b2740;}
 .pm-row input.pm-wide{width:84px;}
+/* El campo de ACTIVACIÓN del trailing cae en segunda posición de su fila, y la
+   regla :nth-of-type(2) (pensada para el % del TP escalonado) lo dejaría en 56 px:
+   insuficiente para un precio tipo 72 108.18. Se gana por especificidad. */
+.pm-row input[type=number].pm-wide:nth-of-type(2){width:84px;}
+/* % de retracement del trailing: número corto, no un precio. */
+.pm-row input.pm-pct{width:62px;}
+/* El ✕ de «quitar trailing» no debe parecer activo sin trailing. */
+.pm-row .mini-btn[disabled]{opacity:.45;cursor:default;}
 .pm-row input[type=number]:nth-of-type(2){width:56px;}
 .pm-check input{accent-color:var(--accent);}
 .tp-levels{display:grid;gap:3px;}

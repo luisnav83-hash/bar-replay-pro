@@ -483,6 +483,7 @@
         <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
         <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
         <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
+        <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
         <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
 
         <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
@@ -507,6 +508,15 @@
             <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
             <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
             <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+          </div>
+          <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
+            <span class="pm-label">🌀 Trailing</span>
+            <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
+                   title="Retracement (%) desde el pico que dispara el cierre">
+            <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
+                   title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
+            <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
+            <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
           </div>
           <div id="tpLevelsList" class="tp-levels"></div>
         </div>
@@ -783,6 +793,7 @@
         <tr><td><kbd>Esc</kbd></td><td>Cerrar posición abierta</td></tr>
         <tr><td><kbd>C</kbd></td><td>Cerrar el 50 % de la posición (parcial)</td></tr>
         <tr><td><kbd>E</kbd></td><td>SL al break-even</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Trailing stop on/off (usa el % de la tarjeta)</td></tr>
         <tr><td><kbd>R</kbd></td><td>Reset del replay al inicio</td></tr>
         <tr><td><kbd>Supr</kbd></td><td>Borrar el dibujo seleccionado</td></tr>
         <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Subir / bajar velocidad</td></tr>

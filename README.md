@@ -290,12 +290,20 @@ node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana
 node tests/promediar.test.js    #  76 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **631 comprobaciones, 0 fallos** ✅ · **20 suites** en `test:all`
+```
+Resultado actual (`npm run test:all`): **770 comprobaciones, 0 fallos** ✅ · **21 suites**
 
+> `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
+> siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
+> suite que fallaba se llevaba por delante las siguientes y el informe quedaba a medias.
+> Los dos guiones que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`) se
+> quedan fuera de la batería local porque dependen de la red y del despliegue: se piden con
+> `node tools/run-all.js --publicadas`.
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
 
@@ -332,6 +340,7 @@ omitido en lugar de fallar.
 | lado contrario | Con posición abierta: **invertir** (cierra y abre la nueva) |
 | `C` | Cerrar el **50 %** de la posición abierta (parcial) |
 | `E` | SL al **break-even** (solo si ya hay ganancia) |
+| `V` | **Trailing stop**: activar con el % de la tarjeta / quitar si ya está activo |
 | `R` | Reset del replay |
 | `Supr` | Borrar el dibujo seleccionado |
 | `+` / `-` | Subir / bajar velocidad |
@@ -408,7 +417,7 @@ bar-replay-app/
   Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
   después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
   y los límites pendientes se cancelan, avisando en pantalla.
-- **Promediar entradas y TP escalonado (como Bitunix)**:
+- **Promediar entradas, TP escalonado y trailing (como Bitunix)**:
   - **Add position / promediar**: con una posición abierta, `COMPRAR`/`VENDER` (o
     `➕ Añadir` en la tarjeta de posición) **suma tamaño** al precio actual. La entrada pasa a
     ser el **precio medio ponderado** (`TE.addToPosition`), el notional y el margen se suman y
@@ -431,6 +440,29 @@ bar-replay-app/
     posición que cierra (`TE.addTpLevel`). En `TE.onCandle` se evalúan **antes** del TP de la
     posición y después del SL: cada nivel tocado cierra su fracción y se retira de la lista;
     lo que sigue abierto conserva su SL.
+  - **Trailing stop** (`🌀` en la tarjeta de posición, tecla `V`): el stop no tiene un precio
+    fijo, sino que persigue al **mejor precio alcanzado** (el *pico*) separado siempre el mismo
+    % —el *Callback ratio* del exchange—. `TE.setTrailing({pct, activation, frac})`:
+    - `pct` es el retroceso que dispara; `activation` (opcional, *Activation price*) es el
+      precio a partir del cual empieza a seguir, para que el primer ruido en contra no cierre
+      la posición; `frac` permite que cierre solo una parte (100 % por defecto, como el
+      *Partial TP/SL* pero en el lado del stop).
+    - Con el pico ya definido, el nivel es `pico·(1 − pct)` en longs y `pico·(1 + pct)` en
+      shorts; **el pico solo sube** (baja en shorts) y nunca se afloja.
+    - Se ejecuta **como un stop**: si la vela abre con el nivel cruzado (hueco) se rellena a la
+      apertura, con deslizamiento (`TE._fillPrice`), igual que el SL.
+    - **Criterio con velas OHLC**: el pico se actualiza al *cerrar* la vela, después de evaluar
+      el disparo. Una vela no puede disparar un nivel que ella misma acaba de crear, porque
+      dentro de ella no se sabe si el `high` pasó antes o después del `low`. Es el mismo sesgo
+      pesimista que se usa cuando SL y TP caen en la misma vela, y está fijado por test
+      (`B) el pico sube al cerrar la vela, y la vela no se dispara a sí misma`).
+    - Si el **SL fijo y el trailing** se tocan en la misma vela ejecuta **el más cercano** al
+      precio (en un long, el nivel más alto), que es lo que haría el bróker.
+    - Al promediar, el trailing **se queda donde está**: defiende el pico de la *posición*, no
+      el precio medio nuevo (así lo hacen los exchanges), y el log lo dice. Sobrevive a
+      checkpoints, a `serialize()` y a guardar/cargar sesión.
+    - En el gráfico se ve como línea `TRAIL` morada que se mueve sola; en la tarjeta, como
+      `pico → nivel (distancia %)`, y «arma en …» mientras espera la activación.
   - **Órdenes límite del mismo lado** con posición abierta **promedian** al tocarse (los del
     lado contrario siguen en espera hasta cerrar, como antes).
 - **Arrastre sin ratón perdido**: los handles de SL/TP y de límite se consuelidan al soltar

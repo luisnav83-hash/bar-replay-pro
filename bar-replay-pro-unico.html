@@ -528,6 +528,9 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
 .pm-row input[type=number]{min-height:28px;}
 .pm-row .mini-btn:hover{border-color:var(--accent);background:#1b2740;}
 .pm-row input.pm-wide{width:84px;}
+.pm-row input[type=number].pm-wide:nth-of-type(2){width:84px;}
+.pm-row input.pm-pct{width:62px;}
+.pm-row .mini-btn[disabled]{opacity:.45;cursor:default;}
 .pm-row input[type=number]:nth-of-type(2){width:56px;}
 .pm-check input{accent-color:var(--accent);}
 .tp-levels{display:grid;gap:3px;}
@@ -1162,6 +1165,7 @@ kbd{
         <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
         <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
         <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
+        <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
         <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
 
         <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
@@ -1186,6 +1190,15 @@ kbd{
             <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
             <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
             <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+          </div>
+          <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
+            <span class="pm-label">🌀 Trailing</span>
+            <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
+                   title="Retracement (%) desde el pico que dispara el cierre">
+            <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
+                   title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
+            <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
+            <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
           </div>
           <div id="tpLevelsList" class="tp-levels"></div>
         </div>
@@ -1462,6 +1475,7 @@ kbd{
         <tr><td><kbd>Esc</kbd></td><td>Cerrar posición abierta</td></tr>
         <tr><td><kbd>C</kbd></td><td>Cerrar el 50 % de la posición (parcial)</td></tr>
         <tr><td><kbd>E</kbd></td><td>SL al break-even</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Trailing stop on/off (usa el % de la tarjeta)</td></tr>
         <tr><td><kbd>R</kbd></td><td>Reset del replay al inicio</td></tr>
         <tr><td><kbd>Supr</kbd></td><td>Borrar el dibujo seleccionado</td></tr>
         <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Subir / bajar velocidad</td></tr>
@@ -3037,6 +3051,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       additions: 0,                        // nº de veces que se añadió a esta posición
       tpLevels: [],                        // TP escalonado (Partial TP/SL)
       realizedParcial: 0,                  // PnL ya realizado en cierres parciales
+      trail: null,                         // trailing stop { pct, activation, peak, armed, frac }
     };
     s.position = position;
     s.trades.push(position);
@@ -3120,6 +3135,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       cambio: 'cambio de serie',
       inversion: 'inversión',
       parcial: 'cierre parcial',
+      trail: 'TRAILING STOP',
     })[r] || r;
   };
 
@@ -3163,6 +3179,153 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!sil) U.log(`🛠 TP actualizado a ${p.tp ? U.fmtPrice(p.tp) : 'sin TP'}`, 'warn');
     TE._emit();
     return true;
+  };
+
+  /* ------------------------------ TRAILING STOP ------------------------------
+   * Stop dinámico (el «Trailing Stop» de Bitunix): en lugar de un precio fijo, el
+   * stop se separa un % FIJO del MEJOR precio alcanzado desde que se armó (el
+   * «pico»). Sube con el precio y no baja nunca: lo que gana la posición queda
+   * protegido, y si el precio retrocede ese % se dispara un cierre a mercado.
+   *
+   * Opciones, calcadas del diálogo del exchange:
+   *   · pct        → «Callback ratio»: retracement en % que dispara el cierre.
+   *   · activation → «Activation price»: no empieza a seguir hasta tocar ese precio
+   *                  (sin activación, sigue desde el precio actual).
+   *   · frac       → fracción de la posición que cierra (1 = entera, como el
+   *                  «Partial TP/SL» pero en el lado del stop).
+   *
+   * Criterio de simulación con velas OHLC —no es un capricho, es lo honesto con
+   * este dato—:
+   *   · El pico solo se mueve al CERRAR la vela, y una vela no puede disparar un
+   *     nivel que ella misma acaba de crear: dentro de la vela se desconoce el
+   *     orden real entre el high y el low. Es el mismo sesgo pesimista que aplica
+   *     el motor cuando SL y TP caen en la misma vela.
+   *   · La activación, en cambio, sí se detecta dentro de la vela (toca high/low),
+   *     y el pico arranca en el propio precio de activación (no en el extremo de
+   *     la vela: tampoco sabemos si el extreme pasó después de activar).
+   *   · Se ejecuta como un stop: si la vela ABRE con el nivel cruzado (hueco) se
+   *     rellena a la apertura, deslizamiento incluido (TE._fillPrice).
+   * --------------------------------------------------------------------------- */
+
+  /**
+   * Precio de disparo actual del trailing, o null si aún no está armado
+   * (o si no hay trailing). Long: pico·(1 − pct). Short: pico·(1 + pct).
+   */
+  TE.trailingPrice = function (pos) {
+    const p = pos || TE.state.position;
+    const t = p && p.trail;
+    if (!t || !t.armed || !Number.isFinite(t.peak) || t.peak <= 0) return null;
+    const dir = p.side === 'long' ? 1 : -1;
+    const lvl = dir === 1 ? t.peak * (1 - t.pct / 100) : t.peak * (1 + t.pct / 100);
+    return Number.isFinite(lvl) && lvl > 0 ? lvl : null;
+  };
+
+  /** Todo lo que necesita la interfaz para describir el trailing de la posición. */
+  TE.trailingInfo = function (pos) {
+    const p = pos || TE.state.position;
+    const t = p && p.trail;
+    if (!t) return null;
+    const level = TE.trailingPrice(p);
+    const ref = TE.state.lastPrice || p.entryPrice;
+    return {
+      pct: t.pct, frac: t.frac, peak: t.peak, armed: !!t.armed,
+      activation: t.activation !== null && t.activation !== undefined ? t.activation : null,
+      level,
+      // Distancia del nivel de disparo al precio actual (negativa en un LONG: está por debajo)
+      distPct: level !== null && ref ? ((level - ref) / ref) * 100 : null,
+      // Cuánto le falta al precio para armarlo (solo tiene sentido si aún no está armado)
+      toActivation: t.armed || t.activation === null ? null
+        : ((t.activation - ref) / ref) * 100,
+    };
+  };
+
+  /**
+   * Activa —o reconfigura— el trailing stop de la posición abierta.
+   * @param {{pct:number, activation?:number|null, frac?:number}} params
+   * @param {{silent?:boolean}} opts
+   */
+  TE.setTrailing = function (params, opts) {
+    const s = TE.state;
+    const p = s.position;
+    if (!p) { U.toast('Abre una posición antes de activar el trailing', 'warn'); return null; }
+    const pr = params || {};
+    const o = opts || {};
+    const pct = +pr.pct;
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      U.toast('Retracement no válido: indica un % entre 0 y 100', 'err');
+      return null;
+    }
+    const dir = p.side === 'long' ? 1 : -1;
+    const ref = s.lastPrice || p.entryPrice;
+    // Activación opcional: se admiten '', null y undefined como «sin activación»
+    let act = null;
+    const raw = pr.activation;
+    if (raw !== null && raw !== undefined && raw !== '') {
+      act = +raw;
+      if (!Number.isFinite(act) || act <= 0) {
+        U.toast('Precio de activación no válido', 'err');
+        return null;
+      }
+    }
+    // Si la activación ya está superada, el stop nace armado (un exchange haría lo mismo)
+    const yaCruzada = act !== null && (dir === 1 ? ref >= act : ref <= act);
+    const frac = U.clamp(pr.frac === undefined || pr.frac === null || pr.frac === ''
+      ? 100 : +pr.frac, 1, 100) / 100;
+    p.trail = {
+      pct,
+      activation: act,
+      frac,
+      peak: act === null || yaCruzada ? ref : act,
+      armed: act === null || yaCruzada,
+      since: s.lastTime,
+    };
+    if (!o.silent) {
+      const lv = TE.trailingPrice(p);
+      U.log(`🌀 Trailing ${U.num(pct, 2)} % ${p.trail.armed
+        ? `activo: pico ${U.fmtPrice(p.trail.peak)} → dispara a ${lv ? U.fmtPrice(lv) : '—'}`
+        : `en espera de la activación en ${U.fmtPrice(act)}`}`, 'sys');
+      U.toast(`🌀 Trailing ${U.num(pct, 2)} % · ${p.trail.armed ? 'siguiendo desde ' + U.fmtPrice(p.trail.peak) : 'arma en ' + U.fmtPrice(act)}`, 'ok', 3200);
+    }
+    TE.updateRisk(p);
+    TE._emit();
+    return p.trail;
+  };
+
+  /** Quita el trailing stop de la posición abierta. */
+  TE.removeTrailing = function (opts) {
+    const p = TE.state.position;
+    if (!p || !p.trail) return false;
+    p.trail = null;
+    const sil = !!(opts && opts.silent);
+    if (!sil) { U.log('🌀 Trailing stop retirado', 'warn'); U.toast('Trailing stop quitado', 'info', 1800); }
+    TE._emit();
+    return true;
+  };
+
+  /**
+   * Avanza el trailing al cerrar la vela: arma el stop si la vela toca la
+   * activación y, una vez armado, sube (LONG) o baja (SHORT) el pico con el
+   * extremo favorable de la vela. Devuelve 'armado' | 'movido' | null.
+   */
+  TE._updateTrailing = function (candle) {
+    const p = TE.state.position;
+    if (!p || !p.trail || !candle) return null;
+    const t = p.trail;
+    const dir = p.side === 'long' ? 1 : -1;
+    if (!t.armed) {
+      const tocado = dir === 1 ? candle.high >= t.activation : candle.low <= t.activation;
+      if (!tocado) return null;
+      t.armed = true;
+      t.peak = t.activation;           // el pico arranca en la activación, no en el extremo de la vela
+      U.log(`🌀 Trailing armado en ${U.fmtPrice(t.activation)} · pico ${U.fmtPrice(t.peak)}, ` +
+            `dispara al retroceder un ${U.num(t.pct, 2)} %`, 'ok');
+      return 'armado';
+    }
+    const fav = dir === 1 ? candle.high : candle.low;
+    const nuevo = dir === 1 ? Math.max(t.peak, fav) : Math.min(t.peak, fav);
+    if (!Number.isFinite(nuevo) || nuevo === t.peak) return null;
+    t.peak = nuevo;
+    return 'movido';
   };
 
   /** Recalcula el riesgo usado para el R múltiplo. */
@@ -3253,6 +3416,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const tpNuevo = Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null;
     if (slNuevo !== null) { p.sl = slNuevo; p.initialSl = slNuevo; }
     if (tpNuevo !== null) { p.tp = tpNuevo; p.initialTp = tpNuevo; }
+    // El trailing se queda como estaba: un exchange sigue defendiendo el pico ya
+    // alcanzado de la POSICIÓN, no del precio medio nuevo. Se avisa para que quede
+    // claro (el retroceso % ahora es respecto a otro sitio).
+    if (p.trail) {
+      const tl = TE.trailingPrice(p);
+      U.log(`🌀 El trailing sigue activo: pico ${U.fmtPrice(p.trail.peak)} → dispara a ` +
+            `${tl ? U.fmtPrice(tl) : '—'} (${U.num(p.trail.pct, 2)} % de retroceso)`, 'sys');
+    }
     if (params.reaim === 'medio') {
       // Re-aim opcional: en vez de conservar los precios absolutos, conserva la
       // DISTANCIA PORCENTUAL que había al precio medio anterior. Así el TP/SL
@@ -3696,12 +3867,27 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const slHit = p.sl !== null && (p.side === 'long' ? candle.low <= p.sl : candle.high >= p.sl);
       const tpHit = p.tp !== null && (p.side === 'long' ? candle.high >= p.tp : candle.low <= p.tp);
 
+      // El TRAILING también es un stop: si SL fijo y trailing están tocados en la
+      // misma vela, ejecuta el que esté MÁS CERCA del precio (en un LONG, el nivel
+      // más alto; en un SHORT, el más bajo), que es lo que haría el bróker.
+      const trailLevel = TE.trailingPrice(p);
+      const trailHit = trailLevel !== null && (dir === 1 ? candle.low <= trailLevel : candle.high >= trailLevel);
+      let stop = null;
+      if (slHit || trailHit) {
+        const slPrecio = slHit ? p.sl : null;
+        const trPrecio = trailHit ? trailLevel : null;
+        const elegido = slPrecio === null ? trPrecio
+          : trPrecio === null ? slPrecio
+            : (dir === 1 ? Math.max(slPrecio, trPrecio) : Math.min(slPrecio, trPrecio));
+        stop = { price: elegido, trail: trailHit && elegido === trailLevel };
+      }
+
       if (slHit && tpHit) {
         const first = s.slFirst === 'best' ? 'tp' : 'sl';
-        if (first === 'sl') return TE.closePosition(TE._fillPrice(candle, p.sl, p.side, true), 'sl', candle.time);
+        if (first === 'sl') return TE._hitStop(candle, stop, p);
         return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
       }
-      if (slHit) return TE.closePosition(TE._fillPrice(candle, p.sl, p.side, true), 'sl', candle.time);
+      if (stop) return TE._hitStop(candle, stop, p);
 
       // 2b) TP ESCALONADO (Partial TP/SL): cada nivel tocado cierra su fracción y
       //     deja el resto de la posición vivo con su SL intacto.
@@ -3711,11 +3897,32 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       }
 
       if (tpHit) return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
+
+      // --- 3) El trailing sigue al precio: se arma/mueve al CERRAR la vela (ver
+      //     comentario de la sección TRAILING STOP: el pico no se actualiza antes
+      //     de evaluar el disparo, para no inventarse el orden intra-vela). ---
+      TE._updateTrailing(candle);
     }
 
     TE.updateEquity(candle.close, candle.time);
     TE._emit();
     return null;
+  };
+
+  /**
+   * Ejecuta el stop elegido por onCandle. Con frac < 1 el trailing cierra solo una
+   * parte (Partial TP/SL en el lado del stop) y deja el resto vivo siguiendo el
+   * pico; con frac = 1 cierra la posición entera con motivo «trail».
+   */
+  TE._hitStop = function (candle, stop, p) {
+    const fill = TE._fillPrice(candle, stop.price, p.side, true);
+    if (!stop.trail) return TE.closePosition(fill, 'sl', candle.time);
+    const t = p.trail;
+    const dir = p.side === 'long' ? 1 : -1;
+    U.log(`🌀 Trailing stop: el precio retrocedió un ${U.num(t.pct, 2)} % desde el pico ` +
+          `${U.fmtPrice(t.peak)} y se cierra ${U.num(t.frac * 100, 0)} % en ${U.fmtPrice(fill)}`, 'warn');
+    if (t.frac >= 0.999) return TE.closePosition(fill, 'trail', candle.time);
+    return TE.reducePosition(t.frac, fill, candle.time, 'trail');
   };
 
   /**
@@ -4648,6 +4855,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       if (be !== null && Math.abs(be - pos.entryPrice) / pos.entryPrice > 1e-6) {
         mk(be, '#9aa0aa', 'BE ' + U.fmtPrice(be), 3);
       }
+    }
+    // Trailing stop: línea morada que SE MUEVE sola conforme la posición hace
+    // un nuevo pico. No se pinta mientras esté esperando activación (no hay nivel).
+    if (typeof TE.trailingPrice === 'function') {
+      const tl = TE.trailingPrice(pos);
+      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b388ff', `TRAIL ${U.fmtPrice(tl)}`, 1);
     }
     // Niveles de TP escalonado (Partial TP/SL): uno por línea, con su porcentaje.
     if (pos.tpLevels && pos.tpLevels.length) {
@@ -7039,6 +7252,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         // Cierre parcial de la posición (50%) y SL al break-even
         case 'c': case 'C': App.partialClose(50); break;
         case 'e': case 'E': App.slToBreakEven(); break;
+        // V → trailing stop on/off (t con minúscula ya cambia el tipo de orden)
+        case 'v': case 'V': App.toggleTrailing(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
         case '-': case '_': case 'PageDown': App.bumpSpeed(-1); break;
@@ -7142,6 +7357,21 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const btnBE = $('btnSlBE');
     if (btnBE) btnBE.addEventListener('click', () => App.slToBreakEven());
 
+    // 🌀 Trailing stop: activar / re-ajustar / quitar
+    const btnTrail = $('btnTrailOn');
+    if (btnTrail) btnTrail.addEventListener('click', () => {
+      const pct = parseFloat(($('trailPct') || {}).value);
+      const raw = (($('trailAct') || {}).value || '').trim();
+      if (!Number.isFinite(pct) || pct <= 0) { U.toast('Indica un retracement (%) mayor que 0', 'err'); return; }
+      App.setTrailing(pct, raw === '' ? null : parseFloat(raw));
+    });
+    const btnTrailOff = $('btnTrailOff');
+    if (btnTrailOff) btnTrailOff.addEventListener('click', () => App.trailingOff());
+    const inpTrailPct = $('trailPct');
+    if (inpTrailPct) inpTrailPct.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); const b = $('btnTrailOn'); if (b) b.click(); }
+    });
+
     const btnLvl = $('btnTpLevel');
     if (btnLvl) btnLvl.addEventListener('click', () => App.addTpLevelFromForm());
     const inpLvl = $('tpLvlPrice');
@@ -7209,9 +7439,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /** Redibuja las líneas de posición solo cuando cambian los niveles. */
   UI.syncPositionGraphics = function (p) {
+    // El TRAILING entra en la firma: su nivel de disparo cambia con cada pico, así
+    // que si no se compara, activarlo (o que la vela haga un nuevo máximo) no
+    // repinta nada y la línea TRAIL aparece un paso por detrás o directamente no
+    // aparece hasta que otra cosa mueve la posición.
+    const trail = !p || !p.trail ? 'off'
+      : (p.trail.armed ? 'a' + p.trail.peak : 'e' + p.trail.activation);
     const sig = p
       ? `${p.id}|${p.side}|${p.entryPrice}|${p.qty}|${p.sl}|${p.tp}|${p.leverage}|` +
-        `${(p.tpLevels || []).map((l) => l.price + ':' + l.pct).join(',')}|${(p.parts || []).length}`
+        `${(p.tpLevels || []).map((l) => l.price + ':' + l.pct).join(',')}|${(p.parts || []).length}|${trail}`
       : null;
     if (sig === UI._posSig) return;
     UI._posSig = sig;
@@ -7229,8 +7465,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       tag.className = 'tag flat';
       setText('posPnl', '$0.00'); setPnl('posPnl', 0);
       ['posEntry', 'posSize', 'posNotional', 'posMark', 'posSlDist', 'posTpDist', 'posLiq', 'posRR',
-       'posAvg', 'posBE', 'posDuration', 'posBars']
+       'posAvg', 'posBE', 'posTrail', 'posDuration', 'posBars']
         .forEach((id) => setText(id, '—'));
+      // Sin posición: el ✕ del trailing se apaga y el botón vuelve a «Activar».
+      const offBtn = document.getElementById('btnTrailOff');
+      if (offBtn) offBtn.disabled = true;
+      const onBtn = document.getElementById('btnTrailOn');
+      if (onBtn) onBtn.textContent = 'Activar';
       UI.renderTpLevels(null);
       const mgmt = document.getElementById('posMgmt');
       if (mgmt) mgmt.classList.remove('activo');
@@ -7242,6 +7483,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('posBE', be !== null
       ? `${U.fmtPrice(be)} (${U.fmtPct(((be - p.entryPrice) / p.entryPrice) * 100, 2, true)})`
       : '—');
+    // Estado del trailing en la tarjeta: nivel de disparo si ya sigue el pico, o
+    // cuánto le falta al precio para armarlo si está en espera de activación.
+    const tl = typeof TE.trailingInfo === 'function' ? TE.trailingInfo(p) : null;
+    setText('posTrail', !tl ? '—' : (tl.armed
+      ? `${U.num(tl.pct, 2)} % · pico ${U.fmtPrice(tl.peak)} → ${U.fmtPrice(tl.level)} (${U.fmtPct(tl.distPct, 2, true)})`
+      : `${U.num(tl.pct, 2)} % · arma en ${U.fmtPrice(tl.activation)}`));
+    const offT = document.getElementById('btnTrailOff');
+    if (offT) offT.disabled = !p.trail;
+    const onT = document.getElementById('btnTrailOn');
+    if (onT) onT.textContent = p.trail ? 'Re-ajustar' : 'Activar';
+    if (onT && p.trail) onT.title = 'Redefinir el % y el pico desde el precio actual';
     UI.renderTpLevels(p);
     const mgmtOn = document.getElementById('posMgmt');
     if (mgmtOn) mgmtOn.classList.add('activo');
@@ -8538,6 +8790,55 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       U.toast(`🎯 TP escalonado: ${U.fmtPrice(nivel.price)} cierra ${U.num(nivel.pct * 100, 0)}%`, 'ok', 2600);
     }
     return nivel;
+  };
+
+  /* ─────────────────────────── TRAILING STOP (UI) ─────────────────────────── */
+
+  /**
+   * Activa o reconfigura el trailing stop de la posición abierta desde la tarjeta.
+   * @param {number} pct        retracement en % que dispara el cierre
+   * @param {number|null} act   precio de activación (null = seguir desde ya)
+   * @param {number} [frac]     % de la posición que cierra (100 = entera)
+   */
+  App.setTrailing = function (pct, act, frac) {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
+    const t = TE.setTrailing({ pct, activation: act, frac });
+    if (!t) return null;
+    // El checkpoint de la vela guarda la posición entera (trail incluido), así que
+    // retroceder/reavanzar devuelve también el trailing tal como estaba.
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.syncPositionGraphics(p);
+    UI.refreshAll();
+    return t;
+  };
+
+  /** Desactiva el trailing stop de la posición abierta. */
+  App.trailingOff = function () {
+    const p = TE.state.position;
+    if (!p || !p.trail) { U.toast('No hay ningún trailing activo que quitar', 'info', 1800); return false; }
+    if (!TE.removeTrailing()) return false;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.syncPositionGraphics(p);
+    UI.refreshAll();
+    U.toast('🌀 Trailing quitado: la posición vuelve a su SL fijo', 'info', 2400);
+    return true;
+  };
+
+  /**
+   * Tecla V: alterna. Con trailing activo lo quita; sin él, lo activa con lo que
+   * haya escrito en la tarjeta (por defecto 0.50 % y sin precio de activación).
+   */
+  App.toggleTrailing = function () {
+    const p = TE.state.position;
+    if (!p) { U.toast('Abre una posición para usar el trailing (V)', 'warn', 2200); return false; }
+    if (p.trail) return App.trailingOff();
+    const $ = (id) => document.getElementById(id);
+    const pct = parseFloat(($('trailPct') || {}).value);
+    const raw = (($('trailAct') || {}).value || '').trim();
+    const act = raw === '' ? null : parseFloat(raw);
+    if (raw !== '' && !Number.isFinite(act)) { U.toast('Precio de activación no válido', 'err'); return false; }
+    return !!App.setTrailing(Number.isFinite(pct) && pct > 0 ? pct : 0.5, act);
   };
 
   /** Quita un nivel de TP escalonado. */

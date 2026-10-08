@@ -879,6 +879,8 @@
         // Cierre parcial de la posición (50%) y SL al break-even
         case 'c': case 'C': App.partialClose(50); break;
         case 'e': case 'E': App.slToBreakEven(); break;
+        // V → trailing stop on/off (t con minúscula ya cambia el tipo de orden)
+        case 'v': case 'V': App.toggleTrailing(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
         case '-': case '_': case 'PageDown': App.bumpSpeed(-1); break;
@@ -982,6 +984,21 @@
     const btnBE = $('btnSlBE');
     if (btnBE) btnBE.addEventListener('click', () => App.slToBreakEven());
 
+    // 🌀 Trailing stop: activar / re-ajustar / quitar
+    const btnTrail = $('btnTrailOn');
+    if (btnTrail) btnTrail.addEventListener('click', () => {
+      const pct = parseFloat(($('trailPct') || {}).value);
+      const raw = (($('trailAct') || {}).value || '').trim();
+      if (!Number.isFinite(pct) || pct <= 0) { U.toast('Indica un retracement (%) mayor que 0', 'err'); return; }
+      App.setTrailing(pct, raw === '' ? null : parseFloat(raw));
+    });
+    const btnTrailOff = $('btnTrailOff');
+    if (btnTrailOff) btnTrailOff.addEventListener('click', () => App.trailingOff());
+    const inpTrailPct = $('trailPct');
+    if (inpTrailPct) inpTrailPct.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); const b = $('btnTrailOn'); if (b) b.click(); }
+    });
+
     const btnLvl = $('btnTpLevel');
     if (btnLvl) btnLvl.addEventListener('click', () => App.addTpLevelFromForm());
     const inpLvl = $('tpLvlPrice');
@@ -1049,9 +1066,15 @@
 
   /** Redibuja las líneas de posición solo cuando cambian los niveles. */
   UI.syncPositionGraphics = function (p) {
+    // El TRAILING entra en la firma: su nivel de disparo cambia con cada pico, así
+    // que si no se compara, activarlo (o que la vela haga un nuevo máximo) no
+    // repinta nada y la línea TRAIL aparece un paso por detrás o directamente no
+    // aparece hasta que otra cosa mueve la posición.
+    const trail = !p || !p.trail ? 'off'
+      : (p.trail.armed ? 'a' + p.trail.peak : 'e' + p.trail.activation);
     const sig = p
       ? `${p.id}|${p.side}|${p.entryPrice}|${p.qty}|${p.sl}|${p.tp}|${p.leverage}|` +
-        `${(p.tpLevels || []).map((l) => l.price + ':' + l.pct).join(',')}|${(p.parts || []).length}`
+        `${(p.tpLevels || []).map((l) => l.price + ':' + l.pct).join(',')}|${(p.parts || []).length}|${trail}`
       : null;
     if (sig === UI._posSig) return;
     UI._posSig = sig;
@@ -1069,8 +1092,13 @@
       tag.className = 'tag flat';
       setText('posPnl', '$0.00'); setPnl('posPnl', 0);
       ['posEntry', 'posSize', 'posNotional', 'posMark', 'posSlDist', 'posTpDist', 'posLiq', 'posRR',
-       'posAvg', 'posBE', 'posDuration', 'posBars']
+       'posAvg', 'posBE', 'posTrail', 'posDuration', 'posBars']
         .forEach((id) => setText(id, '—'));
+      // Sin posición: el ✕ del trailing se apaga y el botón vuelve a «Activar».
+      const offBtn = document.getElementById('btnTrailOff');
+      if (offBtn) offBtn.disabled = true;
+      const onBtn = document.getElementById('btnTrailOn');
+      if (onBtn) onBtn.textContent = 'Activar';
       UI.renderTpLevels(null);
       const mgmt = document.getElementById('posMgmt');
       if (mgmt) mgmt.classList.remove('activo');
@@ -1082,6 +1110,17 @@
     setText('posBE', be !== null
       ? `${U.fmtPrice(be)} (${U.fmtPct(((be - p.entryPrice) / p.entryPrice) * 100, 2, true)})`
       : '—');
+    // Estado del trailing en la tarjeta: nivel de disparo si ya sigue el pico, o
+    // cuánto le falta al precio para armarlo si está en espera de activación.
+    const tl = typeof TE.trailingInfo === 'function' ? TE.trailingInfo(p) : null;
+    setText('posTrail', !tl ? '—' : (tl.armed
+      ? `${U.num(tl.pct, 2)} % · pico ${U.fmtPrice(tl.peak)} → ${U.fmtPrice(tl.level)} (${U.fmtPct(tl.distPct, 2, true)})`
+      : `${U.num(tl.pct, 2)} % · arma en ${U.fmtPrice(tl.activation)}`));
+    const offT = document.getElementById('btnTrailOff');
+    if (offT) offT.disabled = !p.trail;
+    const onT = document.getElementById('btnTrailOn');
+    if (onT) onT.textContent = p.trail ? 'Re-ajustar' : 'Activar';
+    if (onT && p.trail) onT.title = 'Redefinir el % y el pico desde el precio actual';
     UI.renderTpLevels(p);
     const mgmtOn = document.getElementById('posMgmt');
     if (mgmtOn) mgmtOn.classList.add('activo');

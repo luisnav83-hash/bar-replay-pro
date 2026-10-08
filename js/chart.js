@@ -486,6 +486,12 @@
         mk(be, '#9aa0aa', 'BE ' + U.fmtPrice(be), 3);
       }
     }
+    // Trailing stop: línea morada que SE MUEVE sola conforme la posición hace
+    // un nuevo pico. No se pinta mientras esté esperando activación (no hay nivel).
+    if (typeof TE.trailingPrice === 'function') {
+      const tl = TE.trailingPrice(pos);
+      if (tl !== null && Number.isFinite(tl)) mk(tl, '#b388ff', `TRAIL ${U.fmtPrice(tl)}`, 1);
+    }
     // Niveles de TP escalonado (Partial TP/SL): uno por línea, con su porcentaje.
     if (pos.tpLevels && pos.tpLevels.length) {
       pos.tpLevels.forEach((l, i) => mk(l.price, '#00e5ff', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
