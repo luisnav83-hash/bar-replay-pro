@@ -408,9 +408,10 @@ Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue
 **910 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las cinco que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1121 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)
-(904 locales + 217 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-08
-con el despliegue en `97623cc`: 12 del buscador + 10 de dibujos + 43 de promediado/TP +
+**1127 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)
+(910 locales + 217 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-08
+con el despliegue en `e2d24b9` — y el `md5` del archivo publicado (`ccb3087e…`) coincide byte
+a byte con el del build local: 12 del buscador + 10 de dibujos + 43 de promediado/TP +
 57 del trailing + 95 de la piel Bitunix)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
