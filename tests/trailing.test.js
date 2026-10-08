@@ -255,12 +255,24 @@ ok(cerca(TE.trailingPrice(TE.state.position), nivelAntes), 'restore() lo devuelv
   await page.waitForFunction('window.App && window.App.candles.length > 0', { timeout: 40000 });
   await page.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 15000 });
   await espera(700);
+  // Puerta de listo DE VERDAD: con la máquina cargada el loader se oculta antes de
+  // que el motor tenga precio de referencia, y los niveles derivados de él salían a
+  // medias (fallaba el test, no la app).
+  await page.waitForFunction(() => Number.isFinite(App.currentPrice()) && App.currentPrice() > 0
+    && Number.isFinite(TE.state.lastPrice) && TE.state.lastPrice > 0, { timeout: 30000, polling: 120 });
+
 
   // A práctica rápida: serie guardada y determinista (con velas live el plan de
   // abajo cambiaría en cada ejecución y el test fallaría sin culpa de la app).
   await page.evaluate(() => { const b = document.getElementById('btnQuick'); if (b) b.click(); });
   await page.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 20000 });
   await espera(500);
+  // Puerta de listo DE VERDAD: con la máquina cargada el loader se oculta antes de
+  // que el motor tenga precio de referencia, y los niveles derivados de él salían a
+  // medias (fallaba el test, no la app).
+  await page.waitForFunction(() => Number.isFinite(App.currentPrice()) && App.currentPrice() > 0
+    && Number.isFinite(TE.state.lastPrice) && TE.state.lastPrice > 0, { timeout: 30000, polling: 120 });
+
 
   const estado = () => page.evaluate(() => {
     const p = TE.state.position;

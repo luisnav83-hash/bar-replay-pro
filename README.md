@@ -285,10 +285,12 @@ node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y l
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
+node tests/pages-promediar.js #  43 comprobaciones del promediado/TP EN LA APP PUBLICADA (solo interfaz)
+node tests/pages-trailing.js  #  57 comprobaciones del trailing stop EN LA APP PUBLICADA (solo interfaz)
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
-node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana
+node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)
 node tests/promediar.test.js    #  76 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
@@ -297,15 +299,25 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`npm run test:all`): **770 comprobaciones, 0 fallos** ✅ · **21 suites**
+Con las cuatro que auditan lo publicado (`node tools/run-all.js --publicadas`):
+**892 comprobaciones, 0 fallos** ✅ · **25 suites** · 1 sin contador (`single.test.js`)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
 > suite que fallaba se llevaba por delante las siguientes y el informe quedaba a medias.
-> Los dos guiones que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`) se
-> quedan fuera de la batería local porque dependen de la red y del despliegue: se piden con
-> `node tools/run-all.js --publicadas`.
+> Las cuatro suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
+> `test:pages-promediar`, `test:pages-trailing`) se quedan fuera de la batería local porque
+> dependen de la red y del despliegue: `node tools/run-all.js --publicadas` las incluye
+> (25 suites, y además se puede filtrar: `node tools/run-all.js --publicadas trailing`).
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
+> Las suites de navegador **regeneran** los `docs/captura-*.png` que documentan el estado
+> actual de la app: si `git status` los lista como modificados después de una batería, es
+> lo esperado (llevan el reloj de la máquina impreso), no un cambio de diseño.
+> Todas las que derivan precios del mercado lo hacen **de `App.candles` en tiempo de
+> ejecución** —nunca a mano— y esperan a que el motor tenga `lastPrice` válido: así no
+> dependen de la velocidad de la máquina (un `wait(600)` fijo fallaba bajo la carga de
+> la batería completa y hacía saltar el test, no la app).
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).

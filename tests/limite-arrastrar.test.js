@@ -61,7 +61,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   // carga las velas guardadas en el propio archivo.
   await page.evaluate(() => { const bq = document.getElementById('btnQuick'); if (bq) bq.click(); });
   await page.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 25000 });
-  await wait(1000);
+  // Y el precio de referencia DE VERDAD: con la máquina cargada (la batería lanza
+  // 20 suites seguidas) el loader se oculta antes de que el motor tenga lastPrice,
+  // y los niveles calculados sobre App.currentPrice() salían a medias.
+  await page.waitForFunction(() => Number.isFinite(App.currentPrice()) && App.currentPrice() > 0
+    && Number.isFinite(TE.state.lastPrice) && TE.state.lastPrice > 0
+    && BR.getIndex() >= 0 && App.candles.length > 0, { timeout: 30000, polling: 120 });
+  await wait(600);
+
+  /** Deja la cuenta limpia: ningún bloque hereda órdenes ni posiciones del anterior. */
+  const limpiar = async () => {
+    await page.evaluate(() => { App.cancelAllOrders(); App.flatten('manual'); });
+    await page.waitForFunction(() => (TE.state.pending || []).length === 0 && !TE.state.position, { timeout: 15000, polling: 100 });
+    await wait(150);
+  };
+  await limpiar();
 
   await page.evaluate(() => {
     document.getElementById('sizeInput').value = '10';
@@ -141,16 +155,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const nivel = Math.round(ref * 0.985 * 100) / 100;         // 1,5% más abajo
     document.getElementById('limitInput').value = String(nivel);
     App.placeLimitOrder('long');
-    return { ref, nivel };
+    const o = (TE.state.pending || [])[0];
+    return { ref, nivel, id: o ? o.id : null };
   });
-  await wait(600);
-  let h = await page.evaluate(() => ({
+  // Se ESPERA a que la orden esté pendiente (no se duerme un rato y ya está)
+  await page.waitForFunction(() => (TE.state.pending || []).length === 1, { timeout: 15000, polling: 100 });
+  await wait(250);
+  const idHandle = 'limit:' + precio0.id;
+  let h = await page.evaluate((hid) => ({
     handles: DT.tradeHandles.map((x) => x.id),
     pendientes: (TE.state.pending || []).length,
-    precio: DT.tradeHandles[0] ? DT.tradeHandles[0].price : null,
-  }));
+    precio: (DT.tradeHandles.find((x) => x.id === hid) || {}).price !== undefined
+      ? DT.tradeHandles.find((x) => x.id === hid).price : null,
+  }), idHandle);
   ok(h.pendientes === 1, `hay una orden pendiente (${h.pendientes})`);
-  ok(h.handles.includes('limit:' + 1), `handle de la orden en el gráfico (${h.handles.join(', ')})`);
+  ok(precio0.id !== null && h.handles.includes(idHandle), `handle de la orden en el gráfico (${h.handles.join(', ')})`);
   ok(Math.abs(h.precio - precio0.nivel) < 1, `la pestaña está en el nivel ${h.precio}`);
 
   /* ───────────── L2/L3) arrastrar la línea mueve el nivel ───────────── */
@@ -158,13 +177,18 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const nuevo = Math.round(precio0.ref * 0.97 * 100) / 100;    // más abajo aún
   const hecho = await arrastrar(precio0.nivel, nuevo);
   ok(hecho, 'el gesto de arrastre se pudo ejecutar sobre la línea');
+  // El nivel llega cuando el gesto termina: se espera al estado, no al reloj
+  await page.waitForFunction((nuevo) => {
+    const o = (TE.state.pending || [])[0];
+    return o && Math.abs(o.limitPrice - nuevo) / nuevo < 0.02;
+  }, { timeout: 8000, polling: 100 }, nuevo).catch(() => {});
   const tras = await precioLinea();
   ok(tras !== null && Math.abs(tras - nuevo) / nuevo < 0.01,
      `el nivel pasó de ${precio0.nivel} a ${tras} (objetivo ${nuevo})`);
   const panel = await page.evaluate(() => ({
     input: parseFloat(document.getElementById('limitInput').value),
     lista: (document.querySelector('#pendingList .pi-price') || {}).textContent,
-    handle: DT.tradeHandles[0] ? DT.tradeHandles[0].price : null,
+    handle: (DT.tradeHandles.find((x) => /^limit:/.test(x.id)) || { price: null }).price,
   }));
   ok(Math.abs(panel.input - tras) / tras < 0.01, `el campo de precio del panel sigue a la línea (${panel.input})`);
   // Se compara EN NÚMEROS: «62,581.85» lleva separador de miles, y un prefijo de
@@ -201,12 +225,26 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ───────────── L5) soltar cruzado ejecuta a mercado ───────────── */
   console.log('\n▸ L5) Soltar por encima del precio lo ejecuta a mercado');
+  await limpiar();                             // sin posición: el cruce abre posición nueva
+  // Una orden propia para arrastrar: limpiar() se llevó la de L1, y arrastrar una
+  // orden inexistente no prueba nada (y antes hacía que este bloque dependiera del
+  // estado que hubiera quedado de los anteriores).
+  const nivelL5 = await page.evaluate(() => {
+    const ref = App.currentPrice();
+    const nivel = Math.round(ref * 0.98 * 100) / 100;
+    document.getElementById('limitInput').value = String(nivel);
+    App.placeLimitOrder('long');
+    return nivel;
+  });
+  await page.waitForFunction(() => (TE.state.pending || []).length === 1, { timeout: 15000, polling: 100 });
+  await wait(250);
   const cruce = await page.evaluate(() => {
     const ref = App.currentPrice();
     // arrastramos el límite LONG POR ENCIMA del precio actual → cruzado
     return { ref, objetivo: Math.round(ref * 1.01 * 100) / 100 };
   });
-  await arrastrar(await precioLinea(), cruce.objetivo);
+  await arrastrar(nivelL5, cruce.objetivo);
+  await page.waitForFunction(() => (TE.state.pending || []).length === 0 || !!TE.state.position, { timeout: 8000, polling: 100 }).catch(() => {});
   const trasCruce = await page.evaluate(() => ({
     pendientes: (TE.state.pending || []).length,
     pos: TE.state.position ? TE.state.position.side : null,
@@ -218,6 +256,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ───────────── L6) SL/TP arrastrables ───────────── */
   console.log('\n▸ L6) SL y TP se arrastran igual (misma mecánica)');
+  await limpiar();                             // sin órdenes pendientes que empañen la lista
   await page.evaluate(() => {
     const ref = App.currentPrice();
     document.getElementById('slInput').value = String(Math.round(ref * 0.99 * 100) / 100);
@@ -251,6 +290,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ───────────── L7) sin posición: el límite no se come al precio ───────────── */
   console.log('\n▸ L7) Con posición abierta el límite espera (no se cuela)');
+  await page.waitForFunction(() => (TE.state.pending || []).length === 0, { timeout: 10000, polling: 100 }).catch(() => {});
   await page.evaluate(() => {
     const ref = App.currentPrice();
     document.getElementById('slInput').value = '';
@@ -269,6 +309,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ───────────── L9) arrastre con el dedo (táctil) ───────────── */
   console.log('\n▸ L9) Con el dedo también (móvil)');
+  await page.waitForFunction(() => (TE.state.pending || []).length === 0, { timeout: 10000, polling: 100 }).catch(() => {});
   const tactil = await page.evaluate(() => {
     // viewport con touch: lo activa el propio test antes de llegar aquí
     return typeof DT._touchPos === 'function';
@@ -283,6 +324,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const nivelAntes = await precioLinea();
   const objetivo = Math.round((await page.evaluate(() => App.currentPrice())) * 0.965 * 100) / 100;
   const arrastrado = await arrastrarTactil(nivelAntes, objetivo);
+  await page.waitForFunction((obj) => {
+    const o = (TE.state.pending || [])[0];
+    return o && Math.abs(o.limitPrice - obj) / obj < 0.02;
+  }, { timeout: 8000, polling: 100 }, objetivo).catch(() => {});
   const nivelDespues = await precioLinea();
   ok(arrastrado && nivelDespues !== null && Math.abs(nivelDespues - nivelAntes) > 1,
      `el dedo mueve el límite de ${nivelAntes} a ${nivelDespues}`);

@@ -27,6 +27,8 @@
     "test:pages": "node tests/pages-buscador.js",
     "test:dibujos": "node tests/dibujos.test.js",
     "test:pages-dibujos": "node tests/pages-dibujos.js",
+    "test:pages-promediar": "node tests/pages-promediar.js",
+    "test:pages-trailing": "node tests/pages-trailing.js",
     "test:enlaces": "node tests/enlaces.test.js",
     "test:temporalidad": "node tests/temporalidad.test.js",
     "test:entradas": "node tests/entradas.test.js",
