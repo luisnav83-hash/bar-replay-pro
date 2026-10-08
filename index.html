@@ -259,11 +259,12 @@
         <span class="lg-item lg-vol">Vol <b id="lgV">—</b></span>
         <span class="lg-item lg-src" id="lgSource"></span>
         <span class="lg-item" id="lgInd"></span>
-      </div>
-
-      <!-- Aviso de velas ocultas -->
-      <div id="hiddenNotice" title="El replay oculta las velas posteriores al punto actual">
-        <span class="lock">🔒</span><span id="hiddenCount">0 velas ocultas</span>
+        <!-- Aviso de velas ocultas: DENTRO de la leyenda para que ocupe su
+             propia línea y no pise nunca el OHLC (antes era absolute y en móvil
+             caía encima de la primera fila). -->
+        <span id="hiddenNotice" title="El replay oculta las velas posteriores al punto actual">
+          <span class="lock">🔒</span><span id="hiddenCount">0 velas ocultas</span>
+        </span>
       </div>
 
       <!-- Crédito de la librería de gráficos -->

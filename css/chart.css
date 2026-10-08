@@ -65,7 +65,10 @@
 
 /* Aviso de velas ocultas */
 #hiddenNotice{
-  position:absolute;top:8px;right:86px;z-index:6;display:flex;align-items:center;gap:6px;
+  /* Va en el flujo de #ohlcLegend (display:flex + flex-wrap): cae en la línea que
+     haga falta y NUNCA encima del OHLC. Ojo: el padre tiene pointer-events:none,
+     aquí se vuelve a activar para que el title (y el cursor) sigan funcionando. */
+  position:static;display:inline-flex;align-items:center;gap:6px;pointer-events:auto;
   background:rgba(255,171,0,.10);border:1px solid rgba(255,171,0,.35);color:var(--warn);
   border-radius:20px;padding:3px 10px;font-size:10.5px;font-family:var(--mono);
 }

@@ -358,6 +358,11 @@ body {
 .bf-lev input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: var(--bg-4); }
 .bf-lev input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--accent); }
 
+/* El crédito de la librería: fuera de la zona del eje de precio (a 8px del borde se
+   solapaba con sus etiquetas) y POR ENCIMA de la franja donde Lightweight Charts
+   pinta las horas del eje temporal (a 20px del pie todavía las pisaba). */
+#tvCredit { right: 96px; bottom: 34px; }
+
 /* segmentedos planos, con el activo en lima */
 .seg {
   display: grid;
@@ -973,6 +978,14 @@ kbd {
 
 /* Móvil angosto: los dos paneles de indicadores no caben a su altura normal. */
 @media (max-width:640px) {
+  #tvCredit { font-size: 8.5px; opacity: .5; }
+  /* La leyenda OHLC en el móvil: letra más pequeña, sin duplicar el origen de los
+     datos (ya está en la fila de estadísticas de arriba) y sin colar nunca por
+     debajo del eje de precio. Con el aviso de velas ocultas dentro, si no se
+     aprieta ocupa 131px de los ~200px que tiene el gráfico. */
+  #ohlcLegend { font-size: 10px; gap: 5px 7px; max-width: calc(100% - 84px); padding: 3px 6px; }
+  #ohlcLegend .lg-src { display: none; }
+    #hiddenNotice { font-size: 9.5px; padding: 2px 8px; }
   /* En el teléfono hay alto de sobra: la franja se estira para que el
      formulario de órdenes muestre precio, tamaño, % rápidos y la barra fija
      de Long/Short sin tener que andar rellenanado dentro de un hueco de 88 px. */

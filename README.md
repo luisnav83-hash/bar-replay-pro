@@ -206,6 +206,18 @@ panel de órdenes mida menos de 20 px de alto: el deslizador de apalancamiento t
 la barra fina por diseño (`height: 3px`) y con el dedo era imposible de agarrar, así
 que ahora la caja del `input[type=range]` mide 22 px y la pista sigue viéndose de 3 px.
 
+Dos piezas del gráfico también estaban en su sitio solo «de casualidad» y se han
+colocado bien: el aviso de **velas ocultas** ya no es un `position:absolute` suelto
+sino un elemento más de la leyenda OHLC (va en su línea y no pisa nunca el `O/H/L/C`,
+que es lo que hacía cuando la leyenda ocupaba dos filas), y el crédito
+«Lightweight Charts™» se aparta de la franja derecha donde el eje pinta sus etiquetas.
+En ≤640 px la leyenda baja a 10 px de letra y deja de repetir el origen de los datos
+(esa información ya está en la fila de estadísticas de arriba), para no comerse 131 px
+de los ~200 px de gráfico que quedan: se queda en ~75 px. `tests/bitunix.test.js`
+mide los rectángulos y no deja solapar ninguna de las tres piezas (5 comprobaciones
+nuevas: aviso dentro de la leyenda, altura de la caja y holgura con el eje, medidos
+también a 1440 px).
+
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
@@ -381,7 +393,7 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/bitunix.test.js      # 126 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+node tests/bitunix.test.js      # 131 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
 node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
@@ -393,7 +405,7 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**905 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
+**910 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las cinco que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1121 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)

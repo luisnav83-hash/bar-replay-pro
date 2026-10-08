@@ -588,9 +588,35 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est2.filas.every((f) => f.h >= 24 && f.dentro),
      `todas las filas del formulario mantienen su alto y se pueden pulsar (${est2.filas.map((f) => f.sel + ' ' + f.h).join(' · ')})`);
 
+  /* Leyenda OHLC y aviso de «velas ocultas». El aviso viaja DENTRO de la caja de
+     la leyenda (su propia línea del flex): así es imposible que pise el OHLC, que
+     era lo que pasaba con el absolute suelto en cuanto la leyenda ocupaba dos
+     líneas. Y ni la leyenda ni el crédito de la librería pueden colarse por debajo
+     del eje de precio, que es la franja derecha del contenedor. */
+  const leyendaSana = () => page.evaluate(() => {
+    const L = document.getElementById('ohlcLegend'), N = document.getElementById('hiddenNotice');
+    const C = document.getElementById('chartWrap'), CR = document.getElementById('tvCredit');
+    const r = (e) => (e ? e.getBoundingClientRect() : null);
+    const lc = r(L), ln = r(N), cw = r(C);
+    const textos = [...L.querySelectorAll('.lg-item')].filter((e) => e.offsetParent !== null).map(r);
+    const pisa = textos.some((b) => !(ln.right <= b.left + 1 || ln.left >= b.right - 1
+      || ln.bottom <= b.top + 1 || ln.top >= b.bottom - 1));
+    const dentro = ln.left >= lc.left - 1 && ln.right <= lc.right + 1 && ln.top >= lc.top - 1 && ln.bottom <= lc.bottom + 1;
+    const holgura = Math.round(cw.right - Math.max(lc.right, r(CR).right));
+    return { pisa, dentro, alto: Math.round(lc.height), chart: Math.round(cw.height), holgura,
+             aviso: document.getElementById('hiddenCount').textContent.trim() };
+  });
+  const leyM = await leyendaSana();
+  ok(!leyM.pisa && leyM.dentro, `en móvil el aviso («${leyM.aviso}») va en su línea de la leyenda, sin pisar el OHLC`);
+  ok(leyM.alto <= leyM.chart * 0.55, `la caja de la leyenda deja ver el gráfico en móvil (${leyM.alto} px de ${leyM.chart} px)`);
+  ok(leyM.holgura >= 24, `leyenda y crédito se quedan fuera del eje de precio (${leyM.holgura} px de holgura)`);
+
   // Evidencia visual: la misma página queda capturada en docs/ para el README.
   await page.setViewport({ width: 1440, height: 900 });
   await espera(500);
+  const leyD = await leyendaSana();
+  ok(!leyD.pisa && leyD.dentro, `a 1440 px el aviso sigue dentro de la leyenda y el gráfico no se pisa (${leyD.alto}/${leyD.chart})`);
+  ok(leyD.holgura >= 24, `el crédito de la librería no pisa el eje de precio (${leyD.holgura} px de holgura)`);
   await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-37-terminal-bitunix.png') });
   await page.setViewport({ width: 390, height: 844 });
   await espera(500);
