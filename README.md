@@ -392,16 +392,20 @@ node tests/single.test.js     # archivo único en navegador real sin red
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
 **904 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
-Con las cuatro que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**892 comprobaciones, 0 fallos** ✅ · **25 suites** · 1 sin contador (`single.test.js`)
+Con las cinco que auditan lo publicado (`node tools/run-all.js --publicadas`):
+**1121 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)
+(904 locales + 217 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-08
+con el despliegue en `97623cc`: 12 del buscador + 10 de dibujos + 43 de promediado/TP +
+57 del trailing + 95 de la piel Bitunix)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
 > suite que fallaba se llevaba por delante las siguientes y el informe quedaba a medias.
-> Las cuatro suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
-> `test:pages-promediar`, `test:pages-trailing`) se quedan fuera de la batería local porque
-> dependen de la red y del despliegue: `node tools/run-all.js --publicadas` las incluye
-> (25 suites, y además se puede filtrar: `node tools/run-all.js --publicadas trailing`).
+> Las cinco suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
+> `test:pages-promediar`, `test:pages-trailing`, `test:pages-bitunix`) se quedan fuera de la
+> batería local porque dependen de la red y del despliegue: `node tools/run-all.js
+> --publicadas` las incluye (27 suites, y además se puede filtrar:
+> `node tools/run-all.js --publicadas bitunix`).
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
 > Las suites de navegador **regeneran** los `docs/captura-*.png` que documentan el estado
