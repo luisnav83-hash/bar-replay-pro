@@ -285,11 +285,15 @@ node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBL
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  26 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
+node tests/limite-arrastrar.test.js #  25 comprobaciones arrastrando límites y SL/TP con ratón y con dedo
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **548 comprobaciones, 0 fallos** ✅ · **20 suites**
+Resultado actual: **552 comprobaciones, 0 fallos** ✅ · **19 suites** en `test:all`
+
+> Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
+> (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -374,6 +378,7 @@ bar-replay-app/
     ├── boot.test.js          # Arranque robusto sin red / sin localStorage (13)
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
+    ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -397,6 +402,13 @@ bar-replay-app/
   Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
   después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
   y los límites pendientes se cancelan, avisando en pantalla.
+- **Órdenes límite arrastrables**: la línea ámbar de cada orden pendiente tiene una pestaña
+  `⏳▲ ⇕` en el borde derecho y se puede **arrastrar** para reubicar el nivel, con la misma
+  mecánica que los handles de SL/TP (`DT.setPendingHandles` → `App.moveLimitOrder`). Con el
+  puntero sobre la línea el cursor cambia a `grab`; el campo de precio del panel y la lista
+  de pendientes siguen el arrastre en vivo. Si al soltar el nivel queda **cruzado** con el
+  precio actual, la orden se ejecuta a mercado (`TE.executeNow`). También con el dedo
+  (`touchstart/move/end`, capturado solo cuando el gesto empieza sobre un handle).
 - **Una posición a la vez**: con posición abierta, las **órdenes límite quedan en espera** y
   se ejecutan al cerrarla (queda anotado en el log y se avisa con un toast).
 - **Invertir**: con una posición abierta, pedir el **lado contrario** (botón o tecla)

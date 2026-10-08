@@ -368,6 +368,62 @@
     return orden;
   };
 
+  /**
+   * Reubica el precio de una orden límite pendiente (arrastrar su línea en el
+   * gráfico, igual que los handles de SL/TP). Solo mueve el nivel: tamaño, SL y
+   * TP de la orden se conservan.
+   * @returns {object|null} la orden modificada, o null si no es válida
+   */
+  TE.setLimitPrice = function (id, price) {
+    const s = TE.state;
+    const o = (s.pending || []).find((x) => x.id === id);
+    const p = +price;
+    if (!o) return null;
+    if (!Number.isFinite(p) || p <= 0) return null;
+    o.limitPrice = p;
+    // La distancia al precio de referencia se recalcula para el panel
+    if (o.refPrice) o.distPct = ((p - o.refPrice) / o.refPrice) * 100;
+    return o;
+  };
+
+  /**
+   * Ejecuta YA una orden pendiente cuyo nivel ha quedado al otro lado del
+   * precio (mismo criterio que al colocarla: un límite cruzado se rellena a
+   * mercado). Se usa al soltar la línea arrastrada.
+   * @returns {object|null} la posición abierta, o null
+   */
+  TE.executeNow = function (id) {
+    const s = TE.state;
+    const i = (s.pending || []).findIndex((o) => o.id === id);
+    if (i < 0) return null;
+    if (s.position) return null;          // una posición a la vez: sigue en espera
+    const ref = s.lastPrice;
+    if (!Number.isFinite(ref) || ref <= 0) return null;
+    const o = s.pending[i];
+    const cruzada = o.side === 'long' ? o.limitPrice >= ref : o.limitPrice <= ref;
+    if (!cruzada) return null;
+    s.pending.splice(i, 1);
+    const pos = TE.openPosition(o.side, {
+      mode: o.mode, size: o.size, entryPrice: ref,
+      sl: o.sl, tp: o.tp, leverage: o.leverage, feePct: o.feePct,
+      time: s.lastTime, origin: 'market', limitPrice: o.limitPrice,
+    });
+    if (pos) {
+      U.log(`⚡ Límite movido a ${U.fmtPrice(o.limitPrice)}: queda cruzado con el precio ` +
+            `(${U.fmtPrice(ref)}), se ejecuta a mercado`, 'warn');
+    }
+    return pos;
+  };
+
+  /** ¿El nivel de una orden pendiente quedaría cruzado por el precio actual? */
+  TE.isLimitCrossed = function (id) {
+    const s = TE.state;
+    const o = (s.pending || []).find((x) => x.id === id);
+    const ref = s.lastPrice;
+    if (!o || !Number.isFinite(ref) || ref <= 0) return false;
+    return o.side === 'long' ? o.limitPrice >= ref : o.limitPrice <= ref;
+  };
+
   /** Cancela una orden pendiente por su id. */
   TE.cancelOrder = function (id) {
     const s = TE.state;

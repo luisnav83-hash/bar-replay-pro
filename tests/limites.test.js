@@ -67,21 +67,52 @@ const ok = (cond, msg) => {
   }));
   ok(modo.tipo === 'limite' && modo.fila, `el modo «⏳ Límite» activa el campo de precio (${modo.boton})`);
 
-  const A = await page.evaluate(() => {
-    const ref = App.currentPrice();
-    document.getElementById('limitInput').value = (ref * 0.996).toFixed(2);
-    document.getElementById('sizeInput').value = '50';
-    App.placeLimitOrder('long');
-    return { pend: TE.pendingCount(), lineas: CM._pendingLines.length, lista: document.querySelectorAll('#pendingList .pending-item').length };
+  // El nivel y el lado NO se fijan a ciegas (un -0,4% sobre el precio de partida
+  // depende del tramo cargado: con una rama que solo sube ese mínimo nunca se
+  // toca y el test fallaría sin que la app tuviera nada mal). Se miran LOS DATOS
+  // que hay en pantalla y se elige el lado cuyo nivel sí se va a alcanzar:
+  //   · LONG  si alguna vela futura perfora el precio (se compra en ese mínimo)
+  //   · SHORT si el tramo sube (se vende por encima, en el primer máximo alto)
+  // El límite queda siempre SIN cruzar al colocarse y SE TOCA dentro del
+  // horizonte que el propio test recorre, con cualquier juego de velas.
+  const plan = await page.evaluate(() => {
+    const i = BR.getIndex(), ref = App.currentPrice();
+    const resto = App.candles.slice(i + 1);
+    const jB = resto.findIndex((c) => c.low < ref * 0.9995);
+    const jS = resto.findIndex((c) => c.high > ref * 1.0005);
+    let lado, nivel, j;
+    if (jB >= 0 && (jS < 0 || jB <= jS)) {
+      j = jB; lado = 'long';
+      nivel = +(resto[j].low * 1.0002).toFixed(2);          // justo por encima del mínimo: se toca
+      if (nivel >= ref) nivel = +(ref * 0.9995).toFixed(2);
+    } else if (jS >= 0) {
+      j = jS; lado = 'short';
+      nivel = +(resto[j].high * 0.9998).toFixed(2);         // justo por debajo del máximo: se toca
+      if (nivel <= ref) nivel = +(ref * 1.0005).toFixed(2);
+    } else {                                                  // datos planos: como antes
+      j = -1; lado = 'long'; nivel = +(ref * 0.996).toFixed(2);
+    }
+    return { lado, nivel, pasos: Math.max(1, Math.min((j < 0 ? 300 : j) + 1, 900)), ref };
   });
+  const A = await page.evaluate((p) => {
+    document.getElementById('limitInput').value = String(p.nivel);
+    document.getElementById('sizeInput').value = '50';
+    App.placeLimitOrder(p.lado);
+    return {
+      pend: TE.pendingCount(), lineas: CM._pendingLines.length,
+      lista: document.querySelectorAll('#pendingList .pending-item').length,
+      lado: p.lado, nivel: TE.state.pending[0] ? TE.state.pending[0].limitPrice : null,
+    };
+  }, plan);
+  console.log(`   (lado elegido por los datos: ${plan.lado} a ${plan.nivel} · se comprueba en ${plan.pasos} velas)`);
   ok(A.pend === 1, 'la orden queda pendiente');
   ok(A.lineas === 1, 'se dibuja su línea en el gráfico');
   ok(A.lista === 1, 'aparece en la lista de órdenes pendientes');
-
+  ok(A.nivel === plan.nivel, `el nivel colocado es el calculado (${A.nivel})`);
   /* ---------------- B) Ejecución automática ---------------- */
   console.log('\n▸ B) Avanzar velas hasta que el precio llegue al nivel');
   let B = null;
-  for (let i = 0; i < 300 && !B; i++) {
+  for (let i = 0; i < plan.pasos + 5 && !B; i++) {
     await page.evaluate(() => App.stepForward());
     B = await page.evaluate(() => {
       const pos = TE.state.position;
@@ -90,7 +121,7 @@ const ok = (cond, msg) => {
         : null;
     });
   }
-  ok(!!B, 'el replay la ejecuta SOLA al alcanzar el nivel');
+  ok(!!B, `el replay la ejecuta SOLA al alcanzar el nivel (${A.lado} @ ${plan.nivel} · ${plan.pasos} velas)`);
   if (B) {
     ok(B.pend === 0 && B.lista === 0, 'desaparece de pendientes al ejecutarse');
     ok(B.entrada <= B.limite + 1e-6, `se ejecuta en el nivel o mejor (${B.entrada.toFixed(2)} ≤ ${B.limite.toFixed(2)})`);

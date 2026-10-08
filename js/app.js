@@ -747,6 +747,48 @@
   App.refreshOrderLines = function () {
     CM.setPendingLines(TE.state.pending || []);
     CM.setPositionLines(TE.state.position);
+    // Pestañas arrastrables sobre cada límite (la misma mecánica que SL/TP)
+    if (global.DT && DT.setPendingHandles) DT.setPendingHandles(TE.state.pending || []);
+  };
+
+  /**
+   * MUEVE una orden límite arrastrando su línea en el gráfico, igual que los
+   * handles de SL/TP de una posición.
+   * @param {number} id    id de la orden pendiente
+   * @param {number} price nuevo nivel (ya con el salto de precio aplicado)
+   * @param {string} phase 'move' (durante el arrastre) | 'end' (al soltar)
+   * @returns {boolean} false si la orden ya no existe o el precio no vale
+   */
+  App.moveLimitOrder = function (id, price, phase) {
+    const o = TE.setLimitPrice(id, price);
+    if (!o) return false;
+
+    App.refreshOrderLines();          // línea del chart + pestaña, en vivo
+    if (UI.syncLimitDrag) UI.syncLimitDrag(o);   // número del panel, sin re-render completo
+
+    if (phase !== 'end') return true;
+
+    // Al soltar: checkpoint (para que retroceder conserve el nivel), panel al día
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.refreshAll();
+    U.playSound('click');
+
+    if (TE.isLimitCrossed(id)) {
+      // Nivel cruzado por el precio: se ejecuta a mercado, como al colocarlo
+      const pos = TE.executeNow(id);
+      if (pos) {
+        App.refreshOrderLines();
+        DT.setTradeHandles(pos);
+        UI.refreshAll();
+        UI.refreshStats(true);
+        U.toast(`🟢 Límite ejecutado a ${U.fmtPrice(pos.entryPrice)}`, 'ok', 2600);
+      }
+      return true;
+    }
+
+    U.log(`🖱️ Orden límite movida a ${U.fmtPrice(o.limitPrice)} ` +
+          `(${U.num(o.distPct || 0, 2)}% del precio)`, 'warn');
+    return true;
   };
 
   /** Cancela una orden límite concreta. */

@@ -510,7 +510,8 @@
         `<span class="pl-vals">${vals || '<span class="pl-off">—</span>'}</span>` +
         ojo +
       `</div>`;
-    }).join('');
+    }).join('') +
+      '<div class="hint hint-tiny">⇕ Arrastra la línea ámbar en el gráfico para mover el nivel, igual que SL/TP.</div>';
 
     // 👁 mostrar/ocultar sin abrir el modal
     cont.querySelectorAll('[data-eye]').forEach((b) => {
@@ -893,8 +894,15 @@
       const el = document.getElementById('tabDrawCount');
       if (el) el.textContent = DT.drawings.length;
     };
-    // Arrastre de los handles de SL/TP en el gráfico
+    // Arrastre de los handles del gráfico: SL/TP de la posición y niveles de las
+    // órdenes límite (estas últimas se delegan en App.moveLimitOrder, que además
+    // ejecuta el límite si al soltarlo queda cruzado con el precio).
     DT.onTradeHandle = (id, price, phase) => {
+      if (typeof id === 'string' && id.indexOf('limit:') === 0) {
+        const oid = +id.slice(6);
+        if (price !== null) App.moveLimitOrder(oid, price, phase === 'end' ? 'end' : 'move');
+        return;
+      }
       if (phase === 'move' && price !== null) {
         if (id === 'sl') TE.setSL(price); else TE.setTP(price);
         UI.refreshPosition();
@@ -906,6 +914,23 @@
     };
     // Al cambiar el tamaño de la ventana, redibujar dibujos
     global.addEventListener('resize', () => { DT.resize(); DT.render(); });
+  };
+
+  /**
+   * Mientras se arrastra una orden límite, actualiza SOLO los textos que cambian
+   * (el campo de precio y la fila de la lista). Un render completo en cada
+   * mousemove mataría el hover del panel.
+   */
+  UI.syncLimitDrag = function (o) {
+    const inp = document.getElementById('limitInput');
+    if (inp && document.activeElement !== inp) inp.value = o.limitPrice.toFixed(2);
+    const items = document.querySelectorAll('#pendingList .pending-item');
+    const i = (TE.state.pending || []).findIndex((x) => x.id === o.id);
+    const it = i >= 0 ? items[i] : null;
+    if (it) {
+      const b = it.querySelector('.pi-price');
+      if (b) b.textContent = U.fmtPrice(o.limitPrice);
+    }
   };
 
   /** Refresco completo. */

@@ -425,6 +425,7 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
 .pi-cancel:hover{background:rgba(255,23,68,.28);color:#fff;}
 .pi-sub{color:var(--text-dim);font-size:10px;margin-top:2px;}
 .pi-eta{color:#ffc857;font-size:10px;margin-top:3px;}
+.hint-tiny{font-size:10px;opacity:.75;margin-top:6px;line-height:1.4;}
 .hint.ok{color:var(--up);}
 .hint.warn{color:var(--warn);}
 .panels-list{display:flex;flex-direction:column;gap:2px;}
@@ -1392,6 +1393,7 @@ kbd{
         <li>Abre posiciones <b>LONG/SHORT</b> con tamaño, apalancamiento, SL y TP (por precio o por %). Las líneas de SL/TP se pueden <b>arrastrar</b> en el gráfico.</li>
         <li>Con una posición abierta, pulsar el lado <b>contrario</b> la cierra a mercado y abre la nueva (<b>inversión</b>): el historial anota el motivo «inversión».</li>
         <li>Solo hay <b>una posición a la vez</b>: si colocas una orden límite con posición abierta, queda <b>en espera</b> y se ejecutará al cerrar (se avisa en el log).</li>
+        <li><b>Mover una orden límite en el gráfico</b>: arrastra su línea ámbar (o la pestaña <kbd>⏳▲ ⇕</kbd> del borde derecho) para cambiar el nivel, igual que <b>SL/TP</b>. Funciona con ratón y con el dedo. Si al soltarla el nivel queda cruzado con el precio, se ejecuta a mercado.</li>
         <li>Revisa resultados en el panel de estadísticas, la curva de capital y el historial de trades.</li>
       </ol>
       <h4>Atajos de teclado</h4>
@@ -3154,6 +3156,62 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return orden;
   };
 
+  /**
+   * Reubica el precio de una orden límite pendiente (arrastrar su línea en el
+   * gráfico, igual que los handles de SL/TP). Solo mueve el nivel: tamaño, SL y
+   * TP de la orden se conservan.
+   * @returns {object|null} la orden modificada, o null si no es válida
+   */
+  TE.setLimitPrice = function (id, price) {
+    const s = TE.state;
+    const o = (s.pending || []).find((x) => x.id === id);
+    const p = +price;
+    if (!o) return null;
+    if (!Number.isFinite(p) || p <= 0) return null;
+    o.limitPrice = p;
+    // La distancia al precio de referencia se recalcula para el panel
+    if (o.refPrice) o.distPct = ((p - o.refPrice) / o.refPrice) * 100;
+    return o;
+  };
+
+  /**
+   * Ejecuta YA una orden pendiente cuyo nivel ha quedado al otro lado del
+   * precio (mismo criterio que al colocarla: un límite cruzado se rellena a
+   * mercado). Se usa al soltar la línea arrastrada.
+   * @returns {object|null} la posición abierta, o null
+   */
+  TE.executeNow = function (id) {
+    const s = TE.state;
+    const i = (s.pending || []).findIndex((o) => o.id === id);
+    if (i < 0) return null;
+    if (s.position) return null;          // una posición a la vez: sigue en espera
+    const ref = s.lastPrice;
+    if (!Number.isFinite(ref) || ref <= 0) return null;
+    const o = s.pending[i];
+    const cruzada = o.side === 'long' ? o.limitPrice >= ref : o.limitPrice <= ref;
+    if (!cruzada) return null;
+    s.pending.splice(i, 1);
+    const pos = TE.openPosition(o.side, {
+      mode: o.mode, size: o.size, entryPrice: ref,
+      sl: o.sl, tp: o.tp, leverage: o.leverage, feePct: o.feePct,
+      time: s.lastTime, origin: 'market', limitPrice: o.limitPrice,
+    });
+    if (pos) {
+      U.log(`⚡ Límite movido a ${U.fmtPrice(o.limitPrice)}: queda cruzado con el precio ` +
+            `(${U.fmtPrice(ref)}), se ejecuta a mercado`, 'warn');
+    }
+    return pos;
+  };
+
+  /** ¿El nivel de una orden pendiente quedaría cruzado por el precio actual? */
+  TE.isLimitCrossed = function (id) {
+    const s = TE.state;
+    const o = (s.pending || []).find((x) => x.id === id);
+    const ref = s.lastPrice;
+    if (!o || !Number.isFinite(ref) || ref <= 0) return false;
+    return o.side === 'long' ? o.limitPrice >= ref : o.limitPrice <= ref;
+  };
+
   /** Cancela una orden pendiente por su id. */
   TE.cancelOrder = function (id) {
     const s = TE.state;
@@ -4388,7 +4446,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   DT.dpr = 1;
   DT.draft = null;          // dibujo en curso {type, points:[...], style}
   DT.drag = null;           // {drawing, handle, startPoint...}
-  DT.tradeHandles = [];     // [{id:'sl'|'tp', price, color}]
+  DT.tradeHandles = [];     // handles arrastrables visibles (posición + límites)
+  DT._posHandles = [];      // handles de SL/TP de la posición abierta
+  DT._pendingHandles = [];  // handles de las órdenes límite pendientes
 
   /* -------- Dibujar manteniendo pulsado (gesto) --------
    * Mantén pulsado ⅓ s sobre el gráfico y dibuja un trazo: al soltar, el gesto
@@ -4427,6 +4487,42 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     window.addEventListener('mousemove', DT._onMove);
     window.addEventListener('mouseup', DT._onUp);
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); DT.cancelDraft(); });
+
+    /* --- TÁCTIL: arrastrar las pestañas (SL / TP / órdenes límite) con el dedo.
+           Solo se captura el gesto si el dedo cae sobre un handle; si no, la
+           orden llega intacta al chart para que siga haciendo scroll y zoom. --- */
+    canvas.addEventListener('touchstart', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const tp = DT._touchPos(e.touches[0]);
+      const th = DT._hitTradeHandle(tp.x, tp.y);
+      if (!th) return;
+      DT._touchDrag = true;
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
+      if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
+      e.preventDefault();
+      e.stopPropagation();
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!DT._touchDrag || !DT.drag || !e.touches || !e.touches.length) return;
+      const tp = DT._touchPos(e.touches[0]);
+      const price = DT._snapPrice(CM.yToPrice(tp.y));
+      if (price !== null) {
+        DT.drag.lastPrice = price;
+        if (DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    const finTactil = () => {
+      if (!DT._touchDrag) return;
+      DT._touchDrag = false;
+      if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, DT.drag.lastPrice, 'end');
+      DT.drag = null;
+      DT.render();
+    };
+    window.addEventListener('touchend', finTactil);
+    window.addEventListener('touchcancel', finTactil);
     // En modo cursor, el canvas solo captura el ratón cuando hay algo bajo él
     canvas.addEventListener('mouseleave', () => { if (DT.tool === 'cursor' && !DT.drag) DT.canvas.style.pointerEvents = 'none'; });
     // Detección de hover en modo cursor (el evento llega desde el canvas del chart)
@@ -4552,18 +4648,33 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* =============================== EVENTOS =============================== */
 
+  /** Posición de un touch relativa al canvas de dibujo. */
+  DT._touchPos = function (t) {
+    const r = DT.canvas.getBoundingClientRect();
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  };
+
+  /** Última posición del ratón sobre el canvas (para el mouseup fuera del área). */
+  let _lastMouse = { x: 0, y: 0 };
+  const p0 = () => _lastMouse;
+
   DT._localPos = function (e) {
     const r = DT.canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  /** Hover en modo cursor: activa el canvas solo si hay un objeto debajo. */
+  /** Hover en modo cursor: activa el canvas si hay un dibujo o una pestaña debajo. */
   DT._onWrapMove = function (e) {
     if (DT.tool !== 'cursor' || DT.drag) return;
     const p = DT._localPos(e);
     const hit = DT._hitTest(p.x, p.y);
-    DT.canvas.style.pointerEvents = hit ? 'auto' : 'none';
-    DT.canvas.style.cursor = hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default';
+    // Las pestañas de SL/TP y de órdenes límite también capturan: sin esto el
+    // canvas quedaba con pointerEvents:none sobre ellas y no se podía empezar
+    // el arrastre (falla el mousedown antes de llegar a _onDown).
+    const th = DT._hitTradeHandle(p.x, p.y);
+    DT.canvas.style.pointerEvents = (hit || th) ? 'auto' : 'none';
+    DT.canvas.style.cursor = th ? 'grab'
+      : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
 
   DT._onDown = function (e) {
@@ -4573,7 +4684,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
     const th = DT._hitTradeHandle(p.x, p.y);
     if (th) {
-      DT.drag = { tradeHandle: th, id: th.id };
+      // lastPrice: el último precio visto durante el arrastre. Al soltar no se
+      // puede recalcular desde una coordenada guardada a medias (DT._lastY no
+      // existía y devolvía el precio de arriba del todo: el log mentía).
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
       DT.canvas.style.cursor = 'grabbing';
       if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
       return;
@@ -4640,11 +4754,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   DT._onMove = function (e) {
     const p = DT._localPos(e);
+    _lastMouse = p;
 
     /* --- Arrastrando un handle de SL/TP --- */
     if (DT.drag && DT.drag.tradeHandle) {
       const price = DT._snapPrice(CM.yToPrice(p.y));
-      if (price !== null && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      if (price !== null) {
+        DT.drag.lastPrice = price;
+        if (DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      }
       return;
     }
 
@@ -4680,7 +4798,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   DT._onUp = function () {
-    if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, CM.yToPrice(DT._lastY || 0), 'end');
+    if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) {
+      const endPrice = DT.drag.lastPrice !== undefined ? DT.drag.lastPrice : DT._snapPrice(CM.yToPrice(p0().y));
+      DT.onTradeHandle(DT.drag.id, endPrice, 'end');
+    }
     if (DT.drag && DT.drag.drawing) DT._emitChange();
     DT.drag = null;
     DT.canvas.style.cursor = DT.tool === 'cursor' ? 'default' : 'crosshair';
@@ -4824,24 +4945,55 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ============================== HANDLES SL/TP ============================== */
 
-  /** Define los handles arrastrables de la posición abierta. */
+  /**
+   * Define los handles arrastrables de la posición abierta (SL / TP).
+   * Acepta null para limpiarlos (posición cerrada).
+   */
   DT.setTradeHandles = function (pos) {
-    DT.tradeHandles = pos && (pos.sl !== null || pos.tp !== null)
+    DT._posHandles = pos && (pos.sl !== null || pos.tp !== null)
       ? [
           ...(pos.sl !== null ? [{ id: 'sl', price: pos.sl, color: '#ff1744', label: 'SL' }] : []),
           ...(pos.tp !== null ? [{ id: 'tp', price: pos.tp, color: '#00e5ff', label: 'TP' }] : []),
         ]
       : [];
+    DT._rebuildHandles();
+  };
+
+  /**
+   * Define los handles de las ÓRDENES LÍMITE pendientes: la misma mecánica de
+   * arrastre que SL/TP, con id 'limit:<id de la orden>' para que el callback
+   * sepa a qué aplicar el precio.
+   */
+  DT.setPendingHandles = function (ordenes) {
+    DT._pendingHandles = (ordenes || []).map((o) => ({
+      id: 'limit:' + o.id,
+      price: o.limitPrice,
+      color: '#ffab00',
+      label: '⏳' + (o.side === 'long' ? '▲' : '▼'),
+    }));
+    DT._rebuildHandles();
+  };
+
+  /** Los dos tipos de handles se dibujan y golpean como una sola lista. */
+  DT._rebuildHandles = function () {
+    DT.tradeHandles = DT._posHandles.concat(DT._pendingHandles);
     DT.render();
   };
 
+  /**
+   * ¿El punto (x,y) cae sobre un handle arrastrable?
+   * - Siempre vale la pestaña del borde derecho (en cualquier herramienta).
+   * - En modo cursor vale además toda la línea horizontal, para poder pincharla
+   *   en cualquier punto del gráfico como en un terminal de trading.
+   */
   DT._hitTradeHandle = function (x, y) {
-    // El handle es una etiqueta pegada al borde derecho del área de dibujo
+    const w = DT.width || 800;
+    const hx = w - 92;
     for (const h of DT.tradeHandles) {
       const hy = DT._yOf(h.price);
       if (hy === null) continue;
-      const hx = (DT.width || 800) - 92;
       if (Math.abs(y - hy) < 9 && x > hx - 26 && x < hx + 60) return h;
+      if (DT.tool === 'cursor' && Math.abs(y - hy) <= 6 && x >= 0 && x <= hx - 26) return h;
     }
     return null;
   };
@@ -5528,14 +5680,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       ctx.save();
       ctx.fillStyle = h.color;
       ctx.globalAlpha = 0.9;
-      const bw = 46, bh = 14;
+      const txt = h.label + ' ⇕';
+      const bw = Math.max(46, Math.ceil((ctx.measureText(txt).width || 24) + 12)), bh = 14;
       const bx = w - 92, by = y - bh / 2;
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 3) : ctx.rect(bx, by, bw, bh);
       ctx.fill();
       ctx.fillStyle = '#0b0c16';
       ctx.font = 'bold 10px ui-monospace, monospace';
-      ctx.fillText(h.label + ' ⇕', bx + 5, y + 3.5);
+      ctx.fillText(txt, bx + 5, y + 3.5);
       ctx.restore();
     });
   };
@@ -6115,7 +6268,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         `<span class="pl-vals">${vals || '<span class="pl-off">—</span>'}</span>` +
         ojo +
       `</div>`;
-    }).join('');
+    }).join('') +
+      '<div class="hint hint-tiny">⇕ Arrastra la línea ámbar en el gráfico para mover el nivel, igual que SL/TP.</div>';
 
     // 👁 mostrar/ocultar sin abrir el modal
     cont.querySelectorAll('[data-eye]').forEach((b) => {
@@ -6498,8 +6652,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const el = document.getElementById('tabDrawCount');
       if (el) el.textContent = DT.drawings.length;
     };
-    // Arrastre de los handles de SL/TP en el gráfico
+    // Arrastre de los handles del gráfico: SL/TP de la posición y niveles de las
+    // órdenes límite (estas últimas se delegan en App.moveLimitOrder, que además
+    // ejecuta el límite si al soltarlo queda cruzado con el precio).
     DT.onTradeHandle = (id, price, phase) => {
+      if (typeof id === 'string' && id.indexOf('limit:') === 0) {
+        const oid = +id.slice(6);
+        if (price !== null) App.moveLimitOrder(oid, price, phase === 'end' ? 'end' : 'move');
+        return;
+      }
       if (phase === 'move' && price !== null) {
         if (id === 'sl') TE.setSL(price); else TE.setTP(price);
         UI.refreshPosition();
@@ -6511,6 +6672,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     };
     // Al cambiar el tamaño de la ventana, redibujar dibujos
     global.addEventListener('resize', () => { DT.resize(); DT.render(); });
+  };
+
+  /**
+   * Mientras se arrastra una orden límite, actualiza SOLO los textos que cambian
+   * (el campo de precio y la fila de la lista). Un render completo en cada
+   * mousemove mataría el hover del panel.
+   */
+  UI.syncLimitDrag = function (o) {
+    const inp = document.getElementById('limitInput');
+    if (inp && document.activeElement !== inp) inp.value = o.limitPrice.toFixed(2);
+    const items = document.querySelectorAll('#pendingList .pending-item');
+    const i = (TE.state.pending || []).findIndex((x) => x.id === o.id);
+    const it = i >= 0 ? items[i] : null;
+    if (it) {
+      const b = it.querySelector('.pi-price');
+      if (b) b.textContent = U.fmtPrice(o.limitPrice);
+    }
   };
 
   /** Refresco completo. */
@@ -7666,6 +7844,48 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   App.refreshOrderLines = function () {
     CM.setPendingLines(TE.state.pending || []);
     CM.setPositionLines(TE.state.position);
+    // Pestañas arrastrables sobre cada límite (la misma mecánica que SL/TP)
+    if (global.DT && DT.setPendingHandles) DT.setPendingHandles(TE.state.pending || []);
+  };
+
+  /**
+   * MUEVE una orden límite arrastrando su línea en el gráfico, igual que los
+   * handles de SL/TP de una posición.
+   * @param {number} id    id de la orden pendiente
+   * @param {number} price nuevo nivel (ya con el salto de precio aplicado)
+   * @param {string} phase 'move' (durante el arrastre) | 'end' (al soltar)
+   * @returns {boolean} false si la orden ya no existe o el precio no vale
+   */
+  App.moveLimitOrder = function (id, price, phase) {
+    const o = TE.setLimitPrice(id, price);
+    if (!o) return false;
+
+    App.refreshOrderLines();          // línea del chart + pestaña, en vivo
+    if (UI.syncLimitDrag) UI.syncLimitDrag(o);   // número del panel, sin re-render completo
+
+    if (phase !== 'end') return true;
+
+    // Al soltar: checkpoint (para que retroceder conserve el nivel), panel al día
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.refreshAll();
+    U.playSound('click');
+
+    if (TE.isLimitCrossed(id)) {
+      // Nivel cruzado por el precio: se ejecuta a mercado, como al colocarlo
+      const pos = TE.executeNow(id);
+      if (pos) {
+        App.refreshOrderLines();
+        DT.setTradeHandles(pos);
+        UI.refreshAll();
+        UI.refreshStats(true);
+        U.toast(`🟢 Límite ejecutado a ${U.fmtPrice(pos.entryPrice)}`, 'ok', 2600);
+      }
+      return true;
+    }
+
+    U.log(`🖱️ Orden límite movida a ${U.fmtPrice(o.limitPrice)} ` +
+          `(${U.num(o.distPct || 0, 2)}% del precio)`, 'warn');
+    return true;
   };
 
   /** Cancela una orden límite concreta. */

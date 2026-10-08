@@ -45,7 +45,9 @@
   DT.dpr = 1;
   DT.draft = null;          // dibujo en curso {type, points:[...], style}
   DT.drag = null;           // {drawing, handle, startPoint...}
-  DT.tradeHandles = [];     // [{id:'sl'|'tp', price, color}]
+  DT.tradeHandles = [];     // handles arrastrables visibles (posición + límites)
+  DT._posHandles = [];      // handles de SL/TP de la posición abierta
+  DT._pendingHandles = [];  // handles de las órdenes límite pendientes
 
   /* -------- Dibujar manteniendo pulsado (gesto) --------
    * Mantén pulsado ⅓ s sobre el gráfico y dibuja un trazo: al soltar, el gesto
@@ -84,6 +86,42 @@
     window.addEventListener('mousemove', DT._onMove);
     window.addEventListener('mouseup', DT._onUp);
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); DT.cancelDraft(); });
+
+    /* --- TÁCTIL: arrastrar las pestañas (SL / TP / órdenes límite) con el dedo.
+           Solo se captura el gesto si el dedo cae sobre un handle; si no, la
+           orden llega intacta al chart para que siga haciendo scroll y zoom. --- */
+    canvas.addEventListener('touchstart', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const tp = DT._touchPos(e.touches[0]);
+      const th = DT._hitTradeHandle(tp.x, tp.y);
+      if (!th) return;
+      DT._touchDrag = true;
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
+      if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
+      e.preventDefault();
+      e.stopPropagation();
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!DT._touchDrag || !DT.drag || !e.touches || !e.touches.length) return;
+      const tp = DT._touchPos(e.touches[0]);
+      const price = DT._snapPrice(CM.yToPrice(tp.y));
+      if (price !== null) {
+        DT.drag.lastPrice = price;
+        if (DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    const finTactil = () => {
+      if (!DT._touchDrag) return;
+      DT._touchDrag = false;
+      if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, DT.drag.lastPrice, 'end');
+      DT.drag = null;
+      DT.render();
+    };
+    window.addEventListener('touchend', finTactil);
+    window.addEventListener('touchcancel', finTactil);
     // En modo cursor, el canvas solo captura el ratón cuando hay algo bajo él
     canvas.addEventListener('mouseleave', () => { if (DT.tool === 'cursor' && !DT.drag) DT.canvas.style.pointerEvents = 'none'; });
     // Detección de hover en modo cursor (el evento llega desde el canvas del chart)
@@ -209,18 +247,33 @@
 
   /* =============================== EVENTOS =============================== */
 
+  /** Posición de un touch relativa al canvas de dibujo. */
+  DT._touchPos = function (t) {
+    const r = DT.canvas.getBoundingClientRect();
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  };
+
+  /** Última posición del ratón sobre el canvas (para el mouseup fuera del área). */
+  let _lastMouse = { x: 0, y: 0 };
+  const p0 = () => _lastMouse;
+
   DT._localPos = function (e) {
     const r = DT.canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  /** Hover en modo cursor: activa el canvas solo si hay un objeto debajo. */
+  /** Hover en modo cursor: activa el canvas si hay un dibujo o una pestaña debajo. */
   DT._onWrapMove = function (e) {
     if (DT.tool !== 'cursor' || DT.drag) return;
     const p = DT._localPos(e);
     const hit = DT._hitTest(p.x, p.y);
-    DT.canvas.style.pointerEvents = hit ? 'auto' : 'none';
-    DT.canvas.style.cursor = hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default';
+    // Las pestañas de SL/TP y de órdenes límite también capturan: sin esto el
+    // canvas quedaba con pointerEvents:none sobre ellas y no se podía empezar
+    // el arrastre (falla el mousedown antes de llegar a _onDown).
+    const th = DT._hitTradeHandle(p.x, p.y);
+    DT.canvas.style.pointerEvents = (hit || th) ? 'auto' : 'none';
+    DT.canvas.style.cursor = th ? 'grab'
+      : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
 
   DT._onDown = function (e) {
@@ -230,7 +283,10 @@
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
     const th = DT._hitTradeHandle(p.x, p.y);
     if (th) {
-      DT.drag = { tradeHandle: th, id: th.id };
+      // lastPrice: el último precio visto durante el arrastre. Al soltar no se
+      // puede recalcular desde una coordenada guardada a medias (DT._lastY no
+      // existía y devolvía el precio de arriba del todo: el log mentía).
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
       DT.canvas.style.cursor = 'grabbing';
       if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
       return;
@@ -297,11 +353,15 @@
 
   DT._onMove = function (e) {
     const p = DT._localPos(e);
+    _lastMouse = p;
 
     /* --- Arrastrando un handle de SL/TP --- */
     if (DT.drag && DT.drag.tradeHandle) {
       const price = DT._snapPrice(CM.yToPrice(p.y));
-      if (price !== null && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      if (price !== null) {
+        DT.drag.lastPrice = price;
+        if (DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
+      }
       return;
     }
 
@@ -337,7 +397,10 @@
   };
 
   DT._onUp = function () {
-    if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, CM.yToPrice(DT._lastY || 0), 'end');
+    if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) {
+      const endPrice = DT.drag.lastPrice !== undefined ? DT.drag.lastPrice : DT._snapPrice(CM.yToPrice(p0().y));
+      DT.onTradeHandle(DT.drag.id, endPrice, 'end');
+    }
     if (DT.drag && DT.drag.drawing) DT._emitChange();
     DT.drag = null;
     DT.canvas.style.cursor = DT.tool === 'cursor' ? 'default' : 'crosshair';
@@ -481,24 +544,55 @@
 
   /* ============================== HANDLES SL/TP ============================== */
 
-  /** Define los handles arrastrables de la posición abierta. */
+  /**
+   * Define los handles arrastrables de la posición abierta (SL / TP).
+   * Acepta null para limpiarlos (posición cerrada).
+   */
   DT.setTradeHandles = function (pos) {
-    DT.tradeHandles = pos && (pos.sl !== null || pos.tp !== null)
+    DT._posHandles = pos && (pos.sl !== null || pos.tp !== null)
       ? [
           ...(pos.sl !== null ? [{ id: 'sl', price: pos.sl, color: '#ff1744', label: 'SL' }] : []),
           ...(pos.tp !== null ? [{ id: 'tp', price: pos.tp, color: '#00e5ff', label: 'TP' }] : []),
         ]
       : [];
+    DT._rebuildHandles();
+  };
+
+  /**
+   * Define los handles de las ÓRDENES LÍMITE pendientes: la misma mecánica de
+   * arrastre que SL/TP, con id 'limit:<id de la orden>' para que el callback
+   * sepa a qué aplicar el precio.
+   */
+  DT.setPendingHandles = function (ordenes) {
+    DT._pendingHandles = (ordenes || []).map((o) => ({
+      id: 'limit:' + o.id,
+      price: o.limitPrice,
+      color: '#ffab00',
+      label: '⏳' + (o.side === 'long' ? '▲' : '▼'),
+    }));
+    DT._rebuildHandles();
+  };
+
+  /** Los dos tipos de handles se dibujan y golpean como una sola lista. */
+  DT._rebuildHandles = function () {
+    DT.tradeHandles = DT._posHandles.concat(DT._pendingHandles);
     DT.render();
   };
 
+  /**
+   * ¿El punto (x,y) cae sobre un handle arrastrable?
+   * - Siempre vale la pestaña del borde derecho (en cualquier herramienta).
+   * - En modo cursor vale además toda la línea horizontal, para poder pincharla
+   *   en cualquier punto del gráfico como en un terminal de trading.
+   */
   DT._hitTradeHandle = function (x, y) {
-    // El handle es una etiqueta pegada al borde derecho del área de dibujo
+    const w = DT.width || 800;
+    const hx = w - 92;
     for (const h of DT.tradeHandles) {
       const hy = DT._yOf(h.price);
       if (hy === null) continue;
-      const hx = (DT.width || 800) - 92;
       if (Math.abs(y - hy) < 9 && x > hx - 26 && x < hx + 60) return h;
+      if (DT.tool === 'cursor' && Math.abs(y - hy) <= 6 && x >= 0 && x <= hx - 26) return h;
     }
     return null;
   };
@@ -1185,14 +1279,15 @@
       ctx.save();
       ctx.fillStyle = h.color;
       ctx.globalAlpha = 0.9;
-      const bw = 46, bh = 14;
+      const txt = h.label + ' ⇕';
+      const bw = Math.max(46, Math.ceil((ctx.measureText(txt).width || 24) + 12)), bh = 14;
       const bx = w - 92, by = y - bh / 2;
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 3) : ctx.rect(bx, by, bw, bh);
       ctx.fill();
       ctx.fillStyle = '#0b0c16';
       ctx.font = 'bold 10px ui-monospace, monospace';
-      ctx.fillText(h.label + ' ⇕', bx + 5, y + 3.5);
+      ctx.fillText(txt, bx + 5, y + 3.5);
       ctx.restore();
     });
   };

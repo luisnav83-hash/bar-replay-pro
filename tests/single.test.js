@@ -1,5 +1,6 @@
 let puppeteer;
-for (const c of ['puppeteer', '/home/user/.cache/pptr/node_modules/puppeteer']) {
+for (const c of ['puppeteer', process.env.PPTR_PATH, '/home/user/.cache/node_modules/puppeteer',
+                  '/home/user/.cache/pptr/node_modules/puppeteer']) {
   try { puppeteer = require(c); break; } catch (e) {}
 }
 if (!puppeteer) { console.log('⚠️  puppeteer no instalado: prueba OMITIDA.'); process.exit(0); }

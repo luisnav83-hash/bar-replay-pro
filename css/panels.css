@@ -129,6 +129,8 @@
 .pi-sub{color:var(--text-dim);font-size:10px;margin-top:2px;}
 .pi-eta{color:#ffc857;font-size:10px;margin-top:3px;}
 /* Pista del precio límite: verde si es un nivel válido, ámbar si se cruza */
+/* Pista secundaria bajo la lista de órdenes pendientes (arrastre de límites) */
+.hint-tiny{font-size:10px;opacity:.75;margin-top:6px;line-height:1.4;}
 .hint.ok{color:var(--up);}
 .hint.warn{color:var(--warn);}
 
