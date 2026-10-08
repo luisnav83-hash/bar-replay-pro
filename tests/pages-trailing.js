@@ -214,9 +214,31 @@ if (!puppeteer) {
   await asegurarPosicion();
   if ((await E()).trail) await clic('#btnTrailOff');
   ok(!(await E()).trail && (await E()).pos === 'long', 'posición LONG viva y sin trailing (quitado con la ✕)');
-  const plan = await p.evaluate(() => {
+  /** Si el paseo ya está cerca del final, no hay nada que planificar: se pide
+   * otra serie de práctica (⚡ es un botón real) y se vuelve a abrir posición.
+   * Sin esto fallaba el TEST por quedarse sin velas por delante, no la app. */
+  const conSala = async (n) => {
+    const queda = () => p.evaluate(() => App.candles.length - BR.getIndex());
+    if ((await queda()) >= n) return false;
+    await clic('#btnQuick');
+    await p.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 30000 });
+    await p.waitForFunction(() => Number.isFinite(App.currentPrice()) && App.currentPrice() > 0
+      && Number.isFinite(TE.state.lastPrice) && TE.state.lastPrice > 0, { timeout: 30000, polling: 120 });
+    await asegurarPosicion();
+    await esp(250);
+    return true;
+  };
+  /* Busca un tramo con «nuevo máximo + retroceso» por delante del cursor. Si no
+     lo hay (el paseo de los bloques anteriores se ha comido las velas), se carga
+     otra serie con ⚡ y se vuelve a intentar: el escenario es del test, no de la
+     app, y si tras tres series sigue sin haber tramo se dice CLARO (un ✗ honesto,
+     nunca un ok() de relleno). */
+  let plan = null, reinicios = 0;
+  for (let intento = 0; intento < 3 && !plan; intento++) {
+    if (await conSala(240)) { reinicios++; console.log('   (sin velas por delante: se ha cargado otra serie de práctica)'); }
+    plan = await p.evaluate(() => {
     const i = BR.getIndex(), c = App.candles, ref = App.currentPrice(), pct = 0.2;
-    for (let j = 2; j < Math.min(c.length - i, 200); j++) {
+    for (let j = 2; j < Math.min(c.length - i, 400); j++) {
       const act = c[i + j].high;
       if (act <= ref * 1.002 || act / ref - 1 > 0.2) continue;              // ni irracional ni repetido
       if (c.slice(i + 1, i + j).some((x) => x.high >= act)) continue;        // que no se toque antes
@@ -226,8 +248,11 @@ if (!puppeteer) {
       }
     }
     return null;
-  });
-  ok(!!plan, plan ? `tramo utilizable: arma en ${plan.act.toFixed(2)} (vela ${plan.j}) y dispara a la ${plan.k}` : 'NO hay tramo utilizable en 200 velas');
+    });
+  }
+  ok(!!plan, plan
+     ? `tramo utilizable: arma en ${plan.act.toFixed(2)} (vela ${plan.j}) y dispara a la ${plan.k}${reinicios ? ` (tras ${reinicios} recarga(s) de serie)` : ''}`
+     : `NO hay tramo utilizable en 400 velas ni tras ${reinicios} recarga(s) de serie de práctica`);
   if (plan) {
     await activarTrail(0.2, plan.act);
     let s6 = await E();

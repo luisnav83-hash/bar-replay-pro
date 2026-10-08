@@ -1367,6 +1367,17 @@ kbd {
     border-bottom: 0;
   }
   #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  #sidebar > .card > .card-body > * { flex: 0 0 auto; }
+  #orderCard > .card-body { max-height: 172px; }
+  #orderCard .order-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    margin: 0;
+    padding: 7px 0 5px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--line-soft);
+  }
   #bookCard { min-width: 268px; max-width: 300px; }
   #bookCard .card-body { max-height: 118px; }
   #sidebar > .card { order: 3; }
@@ -1462,8 +1473,11 @@ kbd {
 @media (max-width:640px) {
   .indPane { height: 52px; }
   #bottomPanel { height: 150px; }
-  #sidebar { max-height: 132px; }
+  #sidebar { max-height: 250px; }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
+  #sidebar > #orderCard > .card-body { max-height: 214px; }
+  #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
 }
 </style>
 </head>

@@ -806,6 +806,24 @@ kbd {
     border-bottom: 0;
   }
   #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  /* Los hijos de un cuerpo con tope de altura NO se deben encoger: son filas de
+     altura propia (segmented, % rápidos, campos) y con `flex-shrink` por defecto
+     se aplastaban a 2 px en móvil y en franja —el botón existía pero no se veía—. */
+  #sidebar > .card > .card-body > * { flex: 0 0 auto; }
+  /* En la franja el formulario no cabe entero, así que la barra de acción se
+     queda FIJA al pie de su tarjeta: «Abrir Long / Abrir Short» están siempre a
+     mano aunque se esté leyendo el TP/SL arriba (en el exchange móvil hace igual
+     con su barra de comprar/vender). */
+  #orderCard > .card-body { max-height: 172px; }
+  #orderCard .order-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    margin: 0;
+    padding: 7px 0 5px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--line-soft);
+  }
   #bookCard { min-width: 268px; max-width: 300px; }
   #bookCard .card-body { max-height: 118px; }
   /* En estrecho lo importante es poder operar: el panel de órdenes pasa el
@@ -941,8 +959,15 @@ kbd {
 
 /* Móvil angosto: los dos paneles de indicadores no caben a su altura normal. */
 @media (max-width:640px) {
+  /* En el teléfono hay alto de sobra: la franja se estira para que el
+     formulario de órdenes muestre precio, tamaño, % rápidos y la barra fija
+     de Long/Short sin tener que andar rellenanado dentro de un hueco de 88 px. */
   .indPane { height: 52px; }
   #bottomPanel { height: 150px; }
-  #sidebar { max-height: 132px; }
+  #sidebar { max-height: 250px; }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
+  /* (1,3,0) para ganar a la regla de arriba, que es (1,2,0). */
+  #sidebar > #orderCard > .card-body { max-height: 214px; }
+  #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
+  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
 }

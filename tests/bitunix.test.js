@@ -206,7 +206,10 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const asks = lee('#bookAsks'), bids = lee('#bookBids');
     const px = App.currentPrice();
     const vela = App.candles[BR.getIndex()];
-    const maxT = Math.max(asks[asks.length - 1].t, bids[bids.length - 1].t);
+    // El máximo de la columna «Total» es el de la fila MÁS LEJANA de cada bloque,
+    // que no tiene por qué ser el último hijo: «lee» ordena por posición en
+    // pantalla y el bloque de ventas va invertido. Se toma el máximo a secas.
+    const maxT = Math.max(...asks.map((r) => r.t), ...bids.map((r) => r.t));
     return {
       asks, bids, px,
       marca: document.getElementById('bookLast').textContent,
@@ -545,6 +548,21 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       stats: (() => { const e = document.getElementById('bfStats'); return { w: Math.round(e.getBoundingClientRect().width), scrollea: e.scrollWidth > e.clientWidth + 2 }; })(),
       long: R('btnLong'), bottom: R('bottomPanel'),
       inputs: [...document.querySelectorAll('#orderCard input[type=number]')].map((i) => Math.round(i.getBoundingClientRect().height)),
+      // Cada FILA del formulario (segmented de modo, tipo, unidad y % rápidos)
+      // tiene que conservar su alto y recibir el puntero: con `max-height` en el
+      // cuerpo y `flex-shrink` por defecto, en móvil se aplastaban a 2 px y el
+      // botón seguía «existiendo» pero era imposible de pulsar.
+      filas: ['#segMarginMode', '#segOrderType', '#segSize', '#quickSize'].map((sel) => {
+        const e = document.querySelector(sel);
+        const h = Math.round(e.getBoundingClientRect().height);
+        // El cuerpo de la tarjeta tiene tope y scroll: hay que TRAER la fila a la
+        // vista antes de medir si recibe el puntero (si no, lo que se toca es la
+        // barra fija de Long/Short, y con razón).
+        e.scrollIntoView({ block: 'center' });
+        const r = e.getBoundingClientRect();
+        const c = document.elementFromPoint(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2));
+        return { sel, h, dentro: !!(c && document.getElementById('orderCard').contains(c)) };
+      }),
       columnasLibro: getComputedStyle(fila).gridTemplateColumns.split(' ').length,
       totalOculto: getComputedStyle(fila.querySelector('.t')).display === 'none',
     };
@@ -557,6 +575,8 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est2.bottom && est2.bottom.y + est2.bottom.h <= 844 + 2, `el panel inferior cabe en el viewport (${est2.bottom.y}+${est2.bottom.h})`);
   ok(est2.inputs.length >= 3 && est2.inputs.every((h) => h >= 24), `los campos del panel de órdenes son táctiles (${est2.inputs.join(',')})`);
   ok(est2.totalOculto, 'a 390 px la columna «Total» del libro se oculta (menos ruido, como en la app)');
+  ok(est2.filas.every((f) => f.h >= 24 && f.dentro),
+     `todas las filas del formulario mantienen su alto y se pueden pulsar (${est2.filas.map((f) => f.sel + ' ' + f.h).join(' · ')})`);
 
   // Evidencia visual: la misma página queda capturada en docs/ para el README.
   await page.setViewport({ width: 1440, height: 900 });

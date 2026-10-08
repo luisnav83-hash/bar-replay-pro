@@ -323,12 +323,23 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(500);
   const nivelAntes = await precioLinea();
   const objetivo = Math.round((await page.evaluate(() => App.currentPrice())) * 0.965 * 100) / 100;
-  const arrastrado = await arrastrarTactil(nivelAntes, objetivo);
-  await page.waitForFunction((obj) => {
-    const o = (TE.state.pending || [])[0];
-    return o && Math.abs(o.limitPrice - obj) / obj < 0.02;
-  }, { timeout: 8000, polling: 100 }, objetivo).catch(() => {});
-  const nivelDespues = await precioLinea();
+  /* El precio→pantalla solo vale cuando el gráfico ya ha escalado la vela nueva:
+     si el dedo cae sobre una coordenada obsoleta no pilla la pestaña y el arrastre
+     no mueve nada (en batería, con la CPU cargada, pasaba). Se espera a dos
+     cuadros y se reintenta una vez; la comprobación de abajo sigue siendo estricta. */
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  let arrastrado = await arrastrarTactil(nivelAntes, objetivo);
+  let nivelDespues = await precioLinea();
+  if (!(arrastrado && nivelDespues !== null && Math.abs(nivelDespues - nivelAntes) > 1)) {
+    console.log('   (el primer gesto no encontró la pestaña: se espera al reescalado y se reintenta)');
+    await page.waitForFunction((obj) => {
+      const o = (TE.state.pending || [])[0];
+      return o && Math.abs(o.limitPrice - obj) / obj < 0.02;
+    }, { timeout: 8000, polling: 100 }, objetivo).catch(() => {});
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    arrastrado = await arrastrarTactil(await precioLinea(), objetivo);
+    nivelDespues = await precioLinea();
+  }
   ok(arrastrado && nivelDespues !== null && Math.abs(nivelDespues - nivelAntes) > 1,
      `el dedo mueve el límite de ${nivelAntes} a ${nivelDespues}`);
   ok(Math.abs(nivelDespues - objetivo) / objetivo < 0.02, `y se detiene en el nivel buscado (${objetivo})`);

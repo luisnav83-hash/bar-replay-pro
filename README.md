@@ -194,6 +194,15 @@ al tema anterior sin tocarlo.
 Regla: **un dato derivado jamás se presenta como real**. Si no hay red, funding, OI y
 long/short pasan a `—` y el libro sigue siendo utilizable porque nunca prometió ser real.
 
+**En el móvil, el panel de órdenes manda.** A ≤640 px la franja del terminal
+crece a 250 px y la barra `Abrir Long / Abrir Short` se queda **fija al pie** de
+la tarjeta: se puede operar sin rellenanar el formulario entero. Y ninguna fila
+del formulario se aplasta: con `max-height` en el cuerpo, el `flex-shrink` por
+defecto dejaba los segmentados a 2 px (botón vivo pero invisible), así que
+`#sidebar > .card > .card-body > *` es `flex: 0 0 auto`. Lo comprueba
+`tests/bitunix.test.js` trayendo cada fila a la vista y mirando qué element
+recibe el puntero.
+
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
@@ -348,7 +357,7 @@ node tests/logic.test.js      # 153 pruebas: indicadores, datos, trading, estad�
 node tests/dom.smoke.js       #  51 comprobaciones en navegador simulado (requiere jsdom)
 node tests/boot.test.js       #  13 comprobaciones de arranque con red bloqueada
 node tests/network.test.js    #  10 comprobaciones de paginación y datos reales de Binance
-node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
+node tests/browser.capture.js #  47 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
 node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin recortes
@@ -365,9 +374,11 @@ node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto herman
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)
-node tests/promediar.test.js    #  78 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+                                #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
+                                #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/bitunix.test.js      # 124 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+node tests/bitunix.test.js      # 125 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
 node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
@@ -379,7 +390,7 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**898 comprobaciones, 0 fallos** ✅ · **22 suites** · 1 sin contador (`single.test.js`,
+**904 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las cuatro que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **892 comprobaciones, 0 fallos** ✅ · **25 suites** · 1 sin contador (`single.test.js`)

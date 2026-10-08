@@ -78,7 +78,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       sl: p && p.sl, tp: p && p.tp,
       liq: p && TE.liquidationPrice(p),
       be: p && TE.breakEvenPrice(p),
-      realized: p && +p.realizedParcial.toFixed(6),
+      realized: p && +(p.realizedParcial || 0).toFixed(6),
       niveles: p ? (p.tpLevels || []).length : 0,
       balance: +s.balance.toFixed(8),
       capital: s.initialCapital,
@@ -281,26 +281,80 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ---------------- F) TP escalonado ---------------- */
   console.log('\n▸ F) TP escalonado (Partial TP/SL)');
+  /* El bloque F mide LOS NIVELES PARCIALES. Las salidas de tamaño entero (SL de
+     break-even puesto en los bloques previos, TP, liquidación) no pueden estar
+     dentro del paseo: si no, lo que se mediría sería un cierre total (motivo 'sl')
+     y no un TP escalonado. Este fichero ya monta el escenario contra el motor
+     (`TE.addTpLevel`, `TE.reducePosition`), así que aquí también se retiran y se
+     comprueba; la variante «solo interfaz» de este mismo contrato vive en
+     tests/pages-promediar.js. */
+  const limpiada = await page.evaluate(() => {
+    const p = TE.state.position;
+    if (!p) return null;
+    const antes = { sl: p.sl, tp: p.tp };
+    p.sl = null; p.tp = null;
+    if (p.tpLevels) p.tpLevels.splice(0);        // y sin niveles heredados de bloques previos
+    return { antes, partes: (p.parts || []).length, qty: p.qty, niveles: p.tpLevels.length };
+  });
+  await espera(250);
+  ok(!!limpiada && limpiada.niveles === 0, `posición preparada para el bloque F (sl/tp previos retirados: ${limpiada ? `${limpiada.antes.sl} / ${limpiada.antes.tp}` : '—'})`);
+  ok(!!limpiada && limpiada.partes >= 1 && limpiada.qty > 0, 'y conserva su historia: sigue siendo la misma posición promediada');
+  /* El bloque F mide los niveles PARCIALES. Si el paseo se va contra el TP de la
+     posición entera, la vela cierra TODO y ya no hay nada que medir (el test
+     fallaba por el escenario, no por la app). Así que primero se corta la ventana
+     en la vela que tocaría ese TP y los niveles se reparten DENTRO de lo que queda
+     seguro; el «lejano» se pone por encima, para que no se ejecute nunca. */
   const planF = await page.evaluate(() => {
     const p = TE.state.position;
+    if (!p) return { usables: false, motivo: 'no hay posición' };
     const i = BR.getIndex();
     const resto = App.candles.slice(i + 1, i + 400);
+    const tp = Number.isFinite(p.tp) && p.tp > 0 ? p.tp : null;
+    const sl = Number.isFinite(p.sl) && p.sl > 0 ? p.sl : null;
+    const liq = TE.liquidationPrice(p);
+    // Primera vela que CERRARÍA la posición entera (por TP, por SL o por
+    // liquidación): el bloque F no puede pisarla, o lo que se mediría sería un
+    // cierre total y no los niveles parciales.
+    const corte = resto.findIndex((c) => (tp !== null && c.high >= tp * 0.9995)
+      || (sl !== null && c.low <= sl * 1.0005) || (Number.isFinite(liq) && c.low <= liq * 1.0005));
+    const util = corte < 0 ? resto : resto.slice(0, corte);
     const base = Math.max(p.entryPrice, App.currentPrice());
-    const maxHigh = Math.max(...resto.map((c) => c.high));
-    const t1 = +(base * 1.001).toFixed(2), t2 = +(base * 1.004).toFixed(2);
-    const j1 = resto.findIndex((c) => c.high >= t1), j2 = resto.findIndex((c) => c.high >= t2);
-    return { t1, t2, j1, j2, maxHigh, base, lejano: +(maxHigh * 1.02).toFixed(2),
-             usables: j1 >= 0 && j2 >= 0 && t2 < maxHigh * 0.999 && j1 < resto.length - 1 };
+    const maxHigh = util.length ? Math.max(...util.map((c) => c.high)) : 0;
+    const minLow = util.length ? Math.min(...util.map((c) => c.low)) : 0;
+    // Margen = lo que hay entre la entrada y el PRIMERO que salte de {techo del
+    // paseo, SL, liquidación}. Con un long el SL/la liq están por debajo, así que
+    // se resta su distancia (no se multiplica Infinity por -1, que daba -Infinity).
+    const suelo = Math.max(sl === null ? -Infinity : sl, Number.isFinite(liq) ? liq : -Infinity);
+    const margen = Math.min(maxHigh - base, Number.isFinite(suelo) ? base - suelo : Infinity);
+    const t1 = +(base + margen * 0.25).toFixed(2), t2 = +(base + margen * 0.55).toFixed(2);
+    const j1 = util.findIndex((c) => c.high >= t1), j2 = util.findIndex((c) => c.high >= t2);
+    const tick = OB.tickOf(base);
+    // Lo que tiene que aguantar es el RECORRIDO que se va a hacer (hasta la vela
+    // donde toca el último nivel), no las 400 siguientes: exigir que en todo el
+    // tramo cargado el mínimo quede a −0,5 % hacía el escenario inviable casi
+    // siempre, y el bloque se saltaba a sí mismo.
+    const pasea = util.slice(0, Math.max(j1, j2) + 1);
+    const piso = pasea.length ? Math.min(...pasea.map((c) => c.low)) : 0;
+    const sinRiesgo = !Number.isFinite(liq) || piso > liq * 1.0005;
+    return { t1, t2, j1, j2, maxHigh, base, minLow, piso, util: util.length,
+             lejano: +(maxHigh + Math.max(tick * 20, margen * 0.5)).toFixed(2),
+             segura: corte < 0 ? util.length : corte,
+             usables: Number.isFinite(margen) && margen > tick * 6
+                      && j1 >= 1 && j2 >= j1 && t2 > t1 + tick * 2 && t1 > base + tick * 4 && t2 < maxHigh
+                      && util.length >= 4 && sinRiesgo && pasea.length >= 2 };
   });
-  console.log(`   (medios: entrada ${planF.base.toFixed(2)} · niveles ${planF.t1.toFixed(2)} y ${planF.t2.toFixed(2)} en las velas ${planF.j1} y ${planF.j2})`);
+  const nf = (v) => (Number.isFinite(v) ? v.toFixed(2) : '—');
+  console.log(`   (medios: entrada ${nf(planF.base)} · niveles ${nf(planF.t1)} y ${nf(planF.t2)} en las velas ${planF.j1} y ${planF.j2})`);
+  if (!planF.usables) console.log(`   (escenario no utilizable: ${planF.motivo || `j1=${planF.j1} j2=${planF.j2} velas=${planF.util}`})`);
+  ok(planF.usables, `hay un tramo seguro donde los niveles parciales se tocan sin tocar el TP entero (velas=${planF.util || 0}, corte en ${planF.segura ?? '—'})`);
   if (planF.usables) {
     await page.evaluate((p) => {
       document.getElementById('tpLvlPrice').value = String(p.t1);
       document.getElementById('tpLvlPct').value = '25';
       document.getElementById('btnTpLevel').click();
       document.getElementById('tpLvlPrice').value = String(p.t2);
-      document.getElementById('tpLvlPct').value = '50';
-      document.getElementById('btnTpLevel').click();
+      document.getElementById('tpLvlPct').value = '25';   // 25 + 25 + 25 + 25: ningún
+      document.getElementById('btnTpLevel').click();      // barrido puede cerrar el 100 %
       document.getElementById('tpLvlPrice').value = String(p.lejano);
       document.getElementById('tpLvlPct').value = '25';
       document.getElementById('btnTpLevel').click();
@@ -333,6 +387,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
        comparando tamaño, lista superviviente e historial, así que no es más
        blanda: es igual de exigente y ya no depende de la suerte de la vela. */
     const ventana = await page.evaluate((n) => {
+      if (!TE.state.position) return null;
       const i = BR.getIndex();
       const velas = App.candles.slice(i + 1, i + 1 + n);
       const maxHigh = Math.max(...velas.map((c) => c.high));
@@ -343,16 +398,22 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     }, avance);
     await avanzar(avance);
     const F3 = await st();
-    ok(F3.niveles === ventana.supervivientes, `los niveles tocados se ejecutan y se retiran de la lista (${F2a.niveles} → ${F3.niveles}; barridos hasta ${ventana.maxHigh.toFixed(2)}, vela compartida: ${ambos})`);
-    ok(cerca(F3.qty, F2a.qty * ventana.factor, 1e-8), `el/los TP parciales cerraron su % (${ventana.tocados} nivel/es → ${F2a.qty.toFixed(6)} → ${F3.qty.toFixed(6)})`);
-    ok(F3.cerradas === F2a.cerradas + ventana.tocados && /parcial/.test(F3.ultimoMotivo), 'cada nivel queda registrado como cierre parcial en el historial');
-    ok(F3.tp === F2a.tp, 'el TP de la posición entera sigue intacto tras los parciales');
+    const f6 = (v) => (Number.isFinite(v) ? v.toFixed(6) : '—');
+    ok(!!ventana, 'el escenario del bloque F tenía posición y niveles que medir');
+    ok(F3.pos === F2a.pos, `la posición sobrevive a los TP parciales (sigue ${F3.pos}: el escalonado fracciona, no vacía)`);
+    ok(!!ventana && F3.niveles === ventana.supervivientes, `los niveles tocados se ejecutan y se retiran de la lista (${F2a.niveles} → ${F3.niveles}; barridos hasta ${ventana.maxHigh.toFixed(2)}, vela compartida: ${ambos})`);
+    ok(!!ventana && cerca(F3.qty, F2a.qty * ventana.factor, 1e-8),
+       `el/los TP parciales cerraron su % (${ventana ? ventana.tocados : '?'} nivel/es → ${f6(F2a.qty)} → ${f6(F3.qty)}; motivos: ${F3.motivos.join(',') || '—'})`);
+    ok(!!ventana && F3.cerradas === F2a.cerradas + ventana.tocados && /parcial/.test(F3.ultimoMotivo), 'cada nivel queda registrado como cierre parcial en el historial');
+    ok(F3.tp === F2a.tp && F3.sl === F2a.sl,
+       'ni el TP ni el SL de la posición entera se tocan durante el barrido de los parciales');
 
     if (!ambos) {
       /* Segunda tanda: la ventana se mide ANTES de avanzar (si no, se medirían
          los niveles ya consumidos y la comparación sería falsa por vacía). */
       const n2 = Math.max(1, planF.j2 - planF.j1 + 1);
       const v2 = await page.evaluate((n) => {
+        if (!TE.state.position) return { supervivientes: 0, factor: 1, tocados: 0, maxHigh: NaN };
         const i = BR.getIndex();
         const velas = App.candles.slice(i + 1, i + 1 + n);
         const maxHigh = Math.max(...velas.map((c) => c.high));
@@ -364,19 +425,22 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       await avanzar(n2);
       const F4 = await st();
       ok(F4.niveles === v2.supervivientes && cerca(F4.qty, F3.qty * v2.factor, 1e-8),
-         `el resto de niveles cerró su % y quedan ${F4.niveles} pendiente(s) (hasta ${v2.maxHigh.toFixed(2)})`);
+         `el resto de niveles cerró su % y quedan ${F4.niveles} pendiente(s) (hasta ${f6(v2.maxHigh)})`);
     } else {
       const F4 = await st();
       ok(F4.niveles === 1, 'queda pendiente solo el nivel lejano');
     }
-    await avanzar(30);
+    await avanzar(Math.max(1, Math.min(30, planF.segura - Math.max(planF.j1, planF.j2) - 1)));
     const F5 = await st();
     ok(F5.niveles === 1 && F5.pos === 'long', 'el nivel lejano no se ejecuta y la posición sigue viva');
-    const realizado = await page.evaluate(() => TE.state.position.realizedParcial);
+    // (se lee con cuidado: si el escenario hubiera cerrado la posición, esto no
+    //  puede reventar el test — tiene que fallar una aserción, no el runner).
+    const realizado = await page.evaluate(() => (TE.state.position ? (TE.state.position.realizedParcial || 0) : NaN));
     ok(Number.isFinite(realizado) && Math.abs(realizado) > 0, `la posición muestra su PnL ya realizado (${realizado.toFixed(2)})`);
   } else {
-    console.log('   (el tramo cargado no ofrece dos niveles separados: se omite la ejecución escalonada)');
-    ok(true, 'plan de niveles no garantizado en estos datos → comprobaciones de ejecución omitidas a conciencia');
+    // Nada de `ok(true)` de relleno: si el escenario no da, ESTE bloque no suma
+    // comprobaciones y ya lo dice la aserción del plan de arriba (que SÍ falla).
+    console.log('   (sin tramo utilizable: las comprobaciones de ejecución escalonada no se cuentan)');
   }
 
   /* ---------------- G) Órdenes límite y promediado ---------------- */
