@@ -151,14 +151,35 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(e.abierta && e.filas === base.filas + 2, `la nueva entrada también se ve como fila viva (filas=${e.filas})`);
   ok(/Inversión/i.test(e.log), 'el log explica la inversión');
 
-  /* ---------------- E3) Mismo lado: avisa y no rompe nada ---------------- */
-  console.log('\n▸ E3) El mismo lado avisa en vez de no hacer nada');
+  /* ---------------- E3) Mismo lado: promedia (añade) en vez de no hacer nada ------- */
+  console.log('\n▸ E3) El mismo lado añade a la posición abierta (promediar entrada)');
+  const e3a = await page.evaluate(() => ({
+    qty: TE.state.position.qty, parts: TE.state.position.parts.length,
+    media: TE.state.position.entryPrice, add: TE.state.position.additions,
+  }));
   await page.click('#btnShort');
   await wait(700);
   const f = await estado();
   ok(f.pos === 'short' && f.cerradas === base.cerradas + 1 && f.filas === base.filas + 2,
      'la posición SHORT sigue viva y no se duplica');
-  ok(/Ya hay una posición abierta/i.test(f.toasts), 'se avisa al usuario con el motivo');
+  const e3b = await page.evaluate(() => ({
+    qty: TE.state.position.qty, parts: TE.state.position.parts.length,
+    add: TE.state.position.additions, media: TE.state.position.entryPrice,
+  }));
+  ok(e3b.qty > e3a.qty && e3b.parts === e3a.parts + 1 && e3b.add === e3a.add + 1,
+     `el mismo lado SUMA tamaño y anade entrada (${e3a.qty.toFixed(6)} → ${e3b.qty.toFixed(6)}, partes ${e3b.parts})`);
+  ok(/Añadido|Promediado/i.test(f.toasts), 'el aviso explica que se ha añadido a la posición');
+  // Y el interruptor manda: apagado, vuelve a ser el aviso de siempre
+  const e3c = await page.evaluate(() => {
+    TE.configure({ averaging: false });
+    const q = TE.state.position.qty;
+    App.placeOrder('short');
+    const toasts = [...document.querySelectorAll('.toast')].map((t) => t.textContent.trim()).join(' | ');
+    TE.configure({ averaging: true });
+    return { q, q2: TE.state.position.qty, toasts };
+  });
+  ok(e3c.q === e3c.q2 && /Ya hay una posición abierta/i.test(e3c.toasts),
+     'con «Promediar entradas» apagado se conserva el aviso clásico y no toca la posición');
 
   /* ---------------- E2b) Inversión con teclado ---------------- */
   console.log('\n▸ E2b) Inversión también con el teclado');

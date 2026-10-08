@@ -477,6 +477,26 @@
     if (pos.sl !== null && pos.sl !== undefined) mk(pos.sl, COLORS.sl, 'SL ' + U.fmtPrice(pos.sl));
     const liq = TE.liquidationPrice(pos);
     if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, 'LIQ ≈ ' + U.fmtPrice(liq), 1);
+
+    // Precio de break-even (comisiones incluidas): la línea que Bitunix pinta en
+    // la tarjeta de posición, para saber dónde dejar el SL una vez en profit.
+    if (typeof TE.breakEvenPrice === 'function') {
+      const be = TE.breakEvenPrice(pos);
+      if (be !== null && Math.abs(be - pos.entryPrice) / pos.entryPrice > 1e-6) {
+        mk(be, '#9aa0aa', 'BE ' + U.fmtPrice(be), 3);
+      }
+    }
+    // Niveles de TP escalonado (Partial TP/SL): uno por línea, con su porcentaje.
+    if (pos.tpLevels && pos.tpLevels.length) {
+      pos.tpLevels.forEach((l, i) => mk(l.price, '#00e5ff', `TP${i + 1} ${U.num(l.pct * 100, 0)}%`, 2));
+    }
+    // Cada entrada promediada queda marcada en tono azul suave.
+    if (pos.parts && pos.parts.length > 1) {
+      pos.parts.forEach((pt, i) => {
+        if (i === 0) return;                       // la primera ya es la línea de entrada
+        mk(pt.entryPrice, '#2979ff88', `#${i + 1} ${U.fmtPrice(pt.entryPrice)}`, 4);
+      });
+    }
   };
 
   /**

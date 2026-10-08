@@ -481,7 +481,35 @@
         <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
         <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
         <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
+        <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
+        <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
         <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
+
+        <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
+        <div class="pos-mgmt" id="posMgmt">
+          <div class="pm-row">
+            <span class="pm-label">➕ Promediar</span>
+            <input type="number" id="avgSize" value="25" min="1" step="1"
+                   title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
+            <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
+            <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
+              <input type="checkbox" id="avgReaim"> re-aim</label>
+          </div>
+          <div class="pm-row">
+            <span class="pm-label">➗ Cerrar parcial</span>
+            <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
+            <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
+            <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
+            <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
+          </div>
+          <div class="pm-row">
+            <span class="pm-label">🎯 TP escalonado</span>
+            <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
+            <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
+            <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+          </div>
+          <div id="tpLevelsList" class="tp-levels"></div>
+        </div>
       </div>
     </div>
 
@@ -652,6 +680,7 @@
       </div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setSound" checked><span>🔊 Sonido al ejecutar órdenes</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setAutoReveal" checked><span>🔎 Auto-scroll al avanzar el replay</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setAveraging" checked><span>➕ Promediar entradas: COMPRAR/VENDER con posición abierta del mismo lado <b>añade</b> a la posición (precio medio ponderado) en vez de avisar</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setGesture" checked><span>✍️ Dibujar manteniendo pulsado (⅓ s y trazar: recta = tendencia, horizontal = soporte, rectángulo, elipse, Fibonacci; garabato = borrar)</span></label></div>
       <div class="modal-note">Los cambios de capital reinician la cuenta. La comisión se cobra al abrir y al cerrar (ida y vuelta).</div>
     </div>
@@ -737,7 +766,9 @@
         <li>Dibuja soportes, canales, Fibonacci… y añade indicadores desde el botón 📈 de la barra superior.</li>
         <li>Abre posiciones <b>LONG/SHORT</b> con tamaño, apalancamiento, SL y TP (por precio o por %). Las líneas de SL/TP se pueden <b>arrastrar</b> en el gráfico.</li>
         <li>Con una posición abierta, pulsar el lado <b>contrario</b> la cierra a mercado y abre la nueva (<b>inversión</b>): el historial anota el motivo «inversión».</li>
-        <li>Solo hay <b>una posición a la vez</b>: si colocas una orden límite con posición abierta, queda <b>en espera</b> y se ejecutará al cerrar (se avisa en el log).</li>
+        <li><b>Promediar entrada</b> (como «Add position» de Bitunix): con posición abierta, pulsar el <b>mismo lado</b> añade tamaño al precio actual → la entrada pasa a ser el <b>precio medio ponderado</b>, se suma el margen y se recalcula la liquidación. Los niveles de <b>TP/SL se conservan</b> (Position TP/SL); marca <b>re-aim</b> en la tarjeta de posición si quieres recolocarlos a la misma distancia porcentual del nuevo medio.</li>
+        <li><b>Gestión de la posición</b> (tarjeta «📈 Posición abierta»): <b>➕ Añadir</b> con el tamaño que quieras, <b>➗ 25 / 50 / 75 %</b> para tomar ganancias parciales (el resto sigue vivo con su SL), <b>🛡 BE</b> para llevar el SL al break-even (precio medio + comisiones) y <b>🎯 TP escalonado</b> para cerrar un % de la posición al tocar cada precio.</li>
+        <li>Solo hay <b>una posición a la vez</b>: si colocas una orden límite del <b>lado contrario</b> con posición abierta, queda <b>en espera</b> y se ejecutará al cerrar (se avisa en el log). Los límites del <b>mismo lado</b> sí se ejecutan y promedian.</li>
         <li><b>Mover una orden límite en el gráfico</b>: arrastra su línea ámbar (o la pestaña <kbd>⏳▲ ⇕</kbd> del borde derecho) para cambiar el nivel, igual que <b>SL/TP</b>. Funciona con ratón y con el dedo. Si al soltarla el nivel queda cruzado con el precio, se ejecuta a mercado.</li>
         <li>Revisa resultados en el panel de estadísticas, la curva de capital y el historial de trades.</li>
       </ol>
@@ -750,6 +781,8 @@
         <tr><td><kbd>S</kbd></td><td>Vender (Short)</td></tr>
         <tr><td><kbd>Mayús</kbd>+<kbd>B</kbd> / <kbd>Mayús</kbd>+<kbd>S</kbd></td><td>Orden límite (Long / Short)</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>Cerrar posición abierta</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Cerrar el 50 % de la posición (parcial)</td></tr>
+        <tr><td><kbd>E</kbd></td><td>SL al break-even</td></tr>
         <tr><td><kbd>R</kbd></td><td>Reset del replay al inicio</td></tr>
         <tr><td><kbd>Supr</kbd></td><td>Borrar el dibujo seleccionado</td></tr>
         <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Subir / bajar velocidad</td></tr>

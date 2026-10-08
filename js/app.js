@@ -657,6 +657,9 @@
       U.log(`🔄 Inversión: se cierra la ${abierta.side.toUpperCase()} para abrir ${side.toUpperCase()}`, 'sys');
       App.flatten('inversion');
     }
+    // Mismo lado con posición abierta y promediado activo → NO es una apertura
+    // nueva: es una entrada que se suma (TE.openPosition deriva a addToPosition).
+    const esPromediado = !!(abierta && abierta.side === side && TE.state.averaging);
 
     // SL / TP: de nivel introducido → distancia → nivel según la dirección
     const dir = side === 'long' ? 1 : -1;
@@ -682,7 +685,10 @@
       DT.setTradeHandles(pos);
       UI.refreshAll();
       UI.refreshStats(true);
-      U.toast(`${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto a ${U.fmtPrice(price)}`, side === 'long' ? 'ok' : 'err', 2200);
+      U.toast(esPromediado
+        ? `➕ Añadido a la ${side.toUpperCase()} · precio medio ${U.fmtPrice(pos.entryPrice)} · ${U.num(pos.qty, 6)} uds`
+        : `${side === 'long' ? '🟢 LONG' : '🔴 SHORT'} abierto a ${U.fmtPrice(price)}`,
+        side === 'long' ? 'ok' : 'err', 2600);
     }
   };
 
@@ -826,6 +832,116 @@
     U.toast(reason === 'inversion' ? '🔄 Posición cerrada para invertir' : 'Posición cerrada manualmente', 'info', 2200);
   };
 
+  /* ========================================================================
+   * GESTIÓN DE LA POSICIÓN — promediar, cerrar parcial y TP escalonado
+   * (lo que en Bitunix son «Add position», el cierre por porcentaje y
+   *  «Partial TP/SL» del menú TP/SL de la posición).
+   * ======================================================================*/
+
+  /**
+   * PROMEDIAR: añade tamaño a la posición abierta al precio actual y mueve el
+   * precio medio de entrada. Es lo que hace también el botón COMPRAR/VENDER
+   * cuando el lado coincide con el de la posición (el motor enruta a
+   * TE.addToPosition), así que este método es el atajo de la tarjeta.
+   * @param {number} sizeVal tamaño según App.sizeMode (% del capital, USD o uds)
+   * @param {object} [opts]  { reaim:boolean, sl, tp, mode }
+   */
+  App.averagePosition = function (sizeVal, opts) {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
+    const o = opts || {};
+    const mediaAntes = p.entryPrice;
+    const nuevo = TE.addToPosition(p.side, {
+      mode: o.mode || App.sizeMode,
+      size: sizeVal,
+      entryPrice: App.currentPrice(),
+      sl: o.sl !== undefined ? o.sl : null,
+      tp: o.tp !== undefined ? o.tp : null,
+      leverage: TE.state.leverage,
+      feePct: TE.state.feePct,
+      time: App.currentTime(),
+      reaim: o.reaim ? 'medio' : null,
+    });
+    if (!nuevo) return null;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+    UI.refreshStats(true);
+    U.toast(`➕ Promediado a ${U.fmtPrice(App.currentPrice())} · precio medio ${U.fmtPrice(mediaAntes)} → ${U.fmtPrice(nuevo.entryPrice)}`, 'info', 3400);
+    return nuevo;
+  };
+
+  /**
+   * CIERRE PARCIAL: realiza el PnL de un porcentaje de la posición y deja el
+   * resto abierto con su SL/TP intactos.
+   * @param {number} pct 1..100
+   */
+  App.partialClose = function (pct) {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
+    const f = U.clamp(+pct || 0, 1, 100) / 100;
+    const row = TE.reducePosition(f, App.currentPrice(), App.currentTime(), 'parcial');
+    if (!row) return null;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+    UI.refreshStats(true);
+    U.toast(`➗ ${U.num(f * 100, 0)}% cerrado · realizado ${U.fmtMoney(row.pnl, true)}`, row.pnl >= 0 ? 'ok' : 'err', 3000);
+    return row;
+  };
+
+  /** SL al break-even (precio medio + comisiones), no al precio de entrada. */
+  App.slToBreakEven = function () {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return false; }
+    const be = TE.breakEvenPrice(p);
+    if (be === null) { U.toast('No se puede calcular el break-even', 'err'); return false; }
+    // Un SL POR ENCIMA del precio (en un LONG) no es una protección: es una orden
+    // de cierre inmediato. Solo tiene sentido proteger cuando ya hay ganancia.
+    const px = App.currentPrice();
+    const enPerdida = p.side === 'long' ? px < be : px > be;
+    if (enPerdida) {
+      U.toast(`La posición está en pérdida: el break-even (${U.fmtPrice(be)}) caería por encima del precio (${U.fmtPrice(px)}) y sería un cierre inmediato. Usa ➗ o Esc para cerrar.`, 'warn', 5200);
+      U.log(`🛡 No se mueve el SL al break-even: con el precio en ${U.fmtPrice(px)} ese stop se ejecutaría al momento`, 'warn');
+      return false;
+    }
+    if (!TE.setSL(be, { force: true })) return false;
+    U.log(`🛡 SL movido al break-even ${U.fmtPrice(be)} (precio medio ${U.fmtPrice(p.entryPrice)} + ` +
+          `comisiones ${(p.openFee || 0).toFixed(2)} USD) · protegido si el precio vuelve ahí`, 'sys');
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App.refreshOrderLines();
+    UI.refreshAll();
+    U.toast(`🛡 SL protegido en el break-even (${U.fmtPrice(be)})`, 'ok', 2800);
+    return true;
+  };
+
+  /** Añade un nivel de TP escalonado desde los campos de la tarjeta. */
+  App.addTpLevelFromForm = function () {
+    const p = TE.state.position;
+    if (!p) { U.toast('Abre una posición antes de fijar TP escalonado', 'warn'); return null; }
+    const precio = parseFloat((document.getElementById('tpLvlPrice') || {}).value);
+    const pct = parseFloat(((document.getElementById('tpLvlPct') || {}).value) || '50');
+    const nivel = TE.addTpLevel(precio, pct);
+    if (nivel) {
+      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      UI.syncPositionGraphics(p);          // fuerza a redibujar las líneas
+      UI.refreshAll();
+      const inp = document.getElementById('tpLvlPrice');
+      if (inp) inp.value = '';
+      U.toast(`🎯 TP escalonado: ${U.fmtPrice(nivel.price)} cierra ${U.num(nivel.pct * 100, 0)}%`, 'ok', 2600);
+    }
+    return nivel;
+  };
+
+  /** Quita un nivel de TP escalonado. */
+  App.removeTpLevel = function (i) {
+    if (!TE.removeTpLevel(i)) return false;
+    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    UI.syncPositionGraphics(TE.state.position);
+    UI.refreshAll();
+    return true;
+  };
+
   /** Reinicia estadísticas, historial y cuenta (mantiene replay y dibujos). */
   App.resetStats = function () {
     TE.resetAccount(TE.state.initialCapital);
@@ -852,6 +968,8 @@
     const slFirst = document.getElementById('setSlFirst').value;
     const sound = document.getElementById('setSound').checked;
     const autoReveal = document.getElementById('setAutoReveal').checked;
+    const chkAvg = document.getElementById('setAveraging');
+    const averaging = chkAvg ? chkAvg.checked : true;
 
     const capitalChanged = Number.isFinite(capital) && capital !== TE.state.initialCapital;
     if (capitalChanged) {
@@ -865,6 +983,7 @@
       leverage: Number.isFinite(lev) ? lev : TE.state.leverage,
       fundingPct: Number.isFinite(funding) ? funding : TE.state.fundingPct,
       slFirst,
+      averaging,
     });
     App.warmup = Number.isFinite(warmup) ? U.clamp(warmup, 0, 2000) : App.warmup;
     App.autoReveal = autoReveal;

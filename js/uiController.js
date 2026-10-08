@@ -342,6 +342,8 @@
           : 'Gesto desactivado', 'info', 2600);
       });
     }
+    const chkAvg0 = document.getElementById('setAveraging');
+    if (chkAvg0) chkAvg0.checked = TE.state.averaging !== false;
     document.getElementById('btnApplySettings').addEventListener('click', () => App.applySettings());
     document.getElementById('btnHardReset').addEventListener('click', () => UI.confirmHardReset());
 
@@ -871,6 +873,9 @@
         case 'p': case 'P': DT.setTool('path'); break;
         case 'Enter': if (DT.draft) { e.preventDefault(); DT.finishDraft(); } break;
         case 'r': case 'R': App.resetReplay(); break;
+        // Cierre parcial de la posición (50%) y SL al break-even
+        case 'c': case 'C': App.partialClose(50); break;
+        case 'e': case 'E': App.slToBreakEven(); break;
         case 'Delete': case 'Backspace': DT.deleteSelected(); break;
         case '+': case '=': case 'PageUp': App.bumpSpeed(1); break;
         case '-': case '_': case 'PageDown': App.bumpSpeed(-1); break;
@@ -897,6 +902,7 @@
     // Arrastre de los handles del gráfico: SL/TP de la posición y niveles de las
     // órdenes límite (estas últimas se delegan en App.moveLimitOrder, que además
     // ejecuta el límite si al soltarlo queda cruzado con el precio).
+    UI.initPositionManagement();
     DT.onTradeHandle = (id, price, phase) => {
       if (typeof id === 'string' && id.indexOf('limit:') === 0) {
         const oid = +id.slice(6);
@@ -904,10 +910,24 @@
         return;
       }
       if (phase === 'move' && price !== null) {
-        if (id === 'sl') TE.setSL(price); else TE.setTP(price);
+        // En silencio: el arrastre produce decenas de eventos, solo el último
+        // debe dejar rastro en el registro.
+        if (id === 'sl') TE.setSL(price, { silent: true }); else TE.setTP(price, { silent: true });
         UI.refreshPosition();
       }
       if (phase === 'end') {
+        // Al soltar se CONSOLIDA el nivel con la validación normal: si el último
+        // movimiento quedó invalidado (p. ej. un SL sobre la entrada), aquí se
+        // rechaza con su aviso y el log refleja el valor FINAL, no el del gesto.
+        const pos = TE.state.position;
+        if (pos && price !== null) {
+          const actual = id === 'sl' ? pos.sl : pos.tp;
+          if (actual === null || Math.abs(actual - price) > 1e-9) {
+            if (id === 'sl') TE.setSL(price); else TE.setTP(price);
+          } else {
+            U.log(`🛠 ${id.toUpperCase()} ajustado a ${U.fmtPrice(price)} arrastrando`, 'warn');
+          }
+        }
         U.log(`🖱️ ${id.toUpperCase()} ajustado en el gráfico a ${U.fmtPrice(price)}`, 'warn');
         U.playSound('click');
       }
@@ -931,6 +951,58 @@
       const b = it.querySelector('.pi-price');
       if (b) b.textContent = U.fmtPrice(o.limitPrice);
     }
+  };
+
+  /**
+   * Controles de gestión de la posición (promediar / cerrar parcial / TP
+   * escalonado), en la propia tarjeta «📈 Posición abierta».
+   */
+  UI.initPositionManagement = function () {
+    const $ = (id) => document.getElementById(id);
+
+    const btnAvg = $('btnAverage');
+    if (btnAvg) btnAvg.addEventListener('click', () => {
+      const size = parseFloat(($('avgSize') || {}).value);
+      if (!Number.isFinite(size) || size <= 0) { U.toast('Indica un tamaño mayor que 0 para promediar', 'err'); return; }
+      const chk = $('avgReaim');
+      App.averagePosition(size, { reaim: !!(chk && chk.checked) });
+    });
+
+    const card = $('positionCard');
+    if (card) card.addEventListener('click', (e) => {
+      const partial = e.target.closest('[data-partial]');
+      if (partial) { App.partialClose(parseFloat(partial.dataset.partial)); return; }
+      const rm = e.target.closest('[data-rm-level]');
+      if (rm) { App.removeTpLevel(rm.dataset.rmLevel); return; }
+    });
+
+    const btnBE = $('btnSlBE');
+    if (btnBE) btnBE.addEventListener('click', () => App.slToBreakEven());
+
+    const btnLvl = $('btnTpLevel');
+    if (btnLvl) btnLvl.addEventListener('click', () => App.addTpLevelFromForm());
+    const inpLvl = $('tpLvlPrice');
+    if (inpLvl) inpLvl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); App.addTpLevelFromForm(); }
+    });
+  };
+
+  /** Lista de niveles de TP escalonado de la posición abierta. */
+  UI.renderTpLevels = function (p) {
+    const cont = document.getElementById('tpLevelsList');
+    if (!cont) return;
+    const lvs = (p && p.tpLevels) || [];
+    if (!lvs.length) {
+      cont.innerHTML = '<div class="hint hint-tiny">Sin niveles. Añade uno para tomar ganancias por partes: cada nivel cierra su % y el resto sigue vivo con su SL.</div>';
+      return;
+    }
+    const dir = p.side === 'long' ? 1 : -1;
+    cont.innerHTML = lvs.map((l, i) => {
+      const pctPrecio = ((l.price - p.entryPrice) / p.entryPrice) * 100 * dir;
+      return `<div class="tp-lvl"><span class="tp-dot">${i + 1}</span>` +
+             `<b>${U.fmtPrice(l.price)}</b><span class="tp-meta">${U.num(l.pct * 100, 0)}% · ${U.fmtPct(pctPrecio, 2, true)}</span>` +
+             `<button class="mini-btn" data-rm-level="${i}" title="Quitar este nivel">✖</button></div>`;
+    }).join('');
   };
 
   /** Refresco completo. */
@@ -974,7 +1046,10 @@
 
   /** Redibuja las líneas de posición solo cuando cambian los niveles. */
   UI.syncPositionGraphics = function (p) {
-    const sig = p ? `${p.id}|${p.side}|${p.entryPrice}|${p.sl}|${p.tp}|${p.leverage}` : null;
+    const sig = p
+      ? `${p.id}|${p.side}|${p.entryPrice}|${p.qty}|${p.sl}|${p.tp}|${p.leverage}|` +
+        `${(p.tpLevels || []).map((l) => l.price + ':' + l.pct).join(',')}|${(p.parts || []).length}`
+      : null;
     if (sig === UI._posSig) return;
     UI._posSig = sig;
     CM.setPositionLines(p);
@@ -990,10 +1065,23 @@
       tag.textContent = 'FLAT';
       tag.className = 'tag flat';
       setText('posPnl', '$0.00'); setPnl('posPnl', 0);
-      ['posEntry', 'posSize', 'posNotional', 'posMark', 'posSlDist', 'posTpDist', 'posLiq', 'posRR', 'posDuration', 'posBars']
+      ['posEntry', 'posSize', 'posNotional', 'posMark', 'posSlDist', 'posTpDist', 'posLiq', 'posRR',
+       'posAvg', 'posBE', 'posDuration', 'posBars']
         .forEach((id) => setText(id, '—'));
+      UI.renderTpLevels(null);
+      const mgmt = document.getElementById('posMgmt');
+      if (mgmt) mgmt.classList.remove('activo');
       return;
     }
+    const nPartes = (p.parts || []).length;
+    setText('posAvg', `${nPartes} entrada${nPartes === 1 ? '' : 's'}` + (p.additions ? ` (+${p.additions})` : ''));
+    const be = TE.breakEvenPrice(p);
+    setText('posBE', be !== null
+      ? `${U.fmtPrice(be)} (${U.fmtPct(((be - p.entryPrice) / p.entryPrice) * 100, 2, true)})`
+      : '—');
+    UI.renderTpLevels(p);
+    const mgmtOn = document.getElementById('posMgmt');
+    if (mgmtOn) mgmtOn.classList.add('activo');
     const pnl = TE.unrealized(price);
     tag.textContent = p.side === 'long' ? 'LONG' : 'SHORT';
     tag.className = 'tag ' + p.side;
@@ -1210,7 +1298,12 @@
       const eq = TE.state.balance;
       parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
     }
-    if (TE.state.position) parts.push('posición abierta: cierra antes de abrir otra');
+    const pAb = TE.state.position;
+    if (pAb) {
+      parts.push(TE.state.averaging
+        ? `${pAb.side === 'long' ? 'LONG' : 'SHORT'} abierta a ${U.fmtPrice(pAb.entryPrice)}: el mismo lado PROMEDIA, el contrario invierte`
+        : 'posición abierta: cierra antes de abrir otra (activa «Promediar entradas» en Ajustes)');
+    }
     hint.textContent = parts.length ? parts.join(' · ') : 'Sin SL/TP definidos (puedes añadirlos por precio o con los atajos rápidos).';
   };
 

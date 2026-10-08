@@ -93,6 +93,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     return true;
   };
 
+  /** Últimas ~12 entradas del log, para comprobar que una acción quedó anotada. */
+  const logRecente = () => page.evaluate(() => [...document.querySelectorAll('.log-line')].slice(-12).map((l) => l.textContent).join('\n'));
+
   /** Última entrada del log (se añaden al final, como divs .log-line). */
   const ultimoLog = () => page.evaluate(() => {
     const l = document.getElementById('logList');
@@ -158,8 +161,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     handle: DT.tradeHandles[0] ? DT.tradeHandles[0].price : null,
   }));
   ok(Math.abs(panel.input - tras) / tras < 0.01, `el campo de precio del panel sigue a la línea (${panel.input})`);
-  ok(panel.lista && panel.lista.replace(/\D/g, '').slice(0, 5) === String(Math.round(tras)).slice(0, 5),
-     `la lista de pendientes muestra el nuevo nivel (${panel.lista})`);
+  // Se compara EN NÚMEROS: «62,581.85» lleva separador de miles, y un prefijo de
+  // dígitos redondeados falla por un centavo según caiga la fracción.
+  const numLista = parseFloat(String(panel.lista || '').replace(/,/g, ''));
+  ok(Number.isFinite(numLista) && Math.abs(numLista - tras) / tras < 0.001,
+     `la lista de pendientes muestra el nuevo nivel (${panel.lista} vs ${tras})`);
   ok(Math.abs(panel.handle - tras) < 1, 'la pestaña arrastrable se reposiciona con el nivel');
 
   console.log('\n▸ L3) El log anota el precio REAL al soltar');
@@ -223,10 +229,16 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const slActual = await page.evaluate(() => TE.state.position.sl);
   const slNuevo = Math.round(slActual * 0.995 * 100) / 100;
   await arrastrar(slActual, slNuevo);
+  // El ratón sintético de este montaje no entrega siempre el mouseup a la ventana
+  // (y en un navegador real pasa igual si se suelta fuera de la ventana). Se
+  // comprueba aquí que PERDER EL FOCO cierra el arrastre y consolida el nivel.
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await wait(200);
   const slTras = await page.evaluate(() => ({ sl: TE.state.position.sl }));
   const logSl = await ultimoLog();
+  ok(await page.evaluate(() => DT.drag === null), 'el arrastre queda cerrado al perder el foco (no se queda pegado al cursor)');
   ok(Math.abs(slTras.sl - slNuevo) / slNuevo < 0.02, `SL arrastrado de ${conSl.sl} a ${slTras.sl}`);
-  ok(/SL ajustado en el gráfico/i.test(logSl), `el SL arrastrado queda anotado («${logSl.slice(0, 58)}»)`);
+  ok(/SL ajustado en el gráfico/i.test(await logRecente()), `el SL arrastrado queda anotado («${logSl.slice(0, 58)}»)`);
   const precioLogSl = numEn(logSl, 'a');
   ok(Number.isFinite(precioLogSl) && Math.abs(precioLogSl - slTras.sl) / slTras.sl < 0.01,
      `el log del SL dice el precio del estado (${precioLogSl} ≈ ${slTras.sl.toFixed(2)})`);

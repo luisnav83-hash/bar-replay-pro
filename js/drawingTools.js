@@ -85,6 +85,12 @@
     canvas.addEventListener('dblclick', DT._onDblClick);
     window.addEventListener('mousemove', DT._onMove);
     window.addEventListener('mouseup', DT._onUp);
+    // Si el botón se suelta FUERA de la ventana (o se pierde el foco en mitad del
+    // arrastre), el navegador no siempre entrega el mouseup: sin esto la pestaña
+    // de SL/TP o de la orden límite se queda pegada al cursor y el siguiente
+    // movimiento sigue moviendo el nivel. Al perder el foco se cierra el gesto.
+    window.addEventListener('blur', () => { if (DT.drag) DT._onUp(); });
+    window.addEventListener('pointercancel', () => { if (DT.drag) DT._onUp(); });
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); DT.cancelDraft(); });
 
     /* --- TÁCTIL: arrastrar las pestañas (SL / TP / órdenes límite) con el dedo.

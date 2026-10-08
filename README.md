@@ -284,13 +284,14 @@ node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camin
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
-node tests/entradas.test.js     #  26 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
-node tests/limite-arrastrar.test.js #  25 comprobaciones arrastrando límites y SL/TP con ratón y con dedo
+node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
+node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón y con dedo
+node tests/promediar.test.js    #  73 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **552 comprobaciones, 0 fallos** ✅ · **19 suites** en `test:all`
+Resultado actual: **628 comprobaciones, 0 fallos** ✅ · **20 suites** en `test:all`
 
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
@@ -326,6 +327,8 @@ omitido en lugar de fallar.
 | `T` | Alternar entre orden a **mercado** y **límite** |
 | `Esc` | Cerrar posición (y cancelar dibujo/cerrar modales) |
 | lado contrario | Con posición abierta: **invertir** (cierra y abre la nueva) |
+| `C` | Cerrar el **50 %** de la posición abierta (parcial) |
+| `E` | SL al **break-even** (solo si ya hay ganancia) |
 | `R` | Reset del replay |
 | `Supr` | Borrar el dibujo seleccionado |
 | `+` / `-` | Subir / bajar velocidad |
@@ -402,6 +405,31 @@ bar-replay-app/
   Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
   después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
   y los límites pendientes se cancelan, avisando en pantalla.
+- **Promediar entradas y TP escalonado (como Bitunix)**:
+  - **Add position / promediar**: con una posición abierta, `COMPRAR`/`VENDER` (o
+    `➕ Añadir` en la tarjeta de posición) **suma tamaño** al precio actual. La entrada pasa a
+    ser el **precio medio ponderado** (`TE.addToPosition`), el notional y el margen se suman y
+    la **liquidación se recalcula sobre el total**. Cada tandada queda en `position.parts`
+    (se dibuja su precio en el gráfico) y el número de promediados en `position.additions`.
+    Los niveles de **TP/SL se conservan** —es el comportamiento *Position TP/SL*, donde la
+    cantidad ejecutada se ajusta sola al cambiar el tamaño—; la casilla **re-aim** los
+    recoloca a la misma distancia porcentual del nuevo precio medio. Con el promediado
+    **desactivado** (Ajustes → `➕ Promediar entradas`) se vuelve al aviso clásico.
+  - **Cierre parcial**: `➗ 25 / 50 / 75 %` o la tecla `C` realizan el PnL de una fracción
+    (`TE.reducePosition`) y dejan el resto vivo con su SL/TP. Cada parcial es una fila en el
+    historial con `parcial: true` y motivo `cierre parcial`, y **descuenta su parte** de la
+    comisión de apertura, de modo que `balance = capital + Σ PnL` sigue cuadrando al cerrar.
+  - **Break-even**: `TE.breakEvenPrice()` resuelve el PnL neto cero
+    (`x = (openFee + media·q·dir) / (q·(dir − fee))`), así que **no** coincide con el precio
+    medio: incluye comisiones. `🛡 BE` o `E` llevan el SL ahí (`TE.setSL(x, {force:true})`);
+    si la posición está en pérdida se **niega** y lo explica, porque un SL por encima del
+    precio en un long sería un cierre inmediato.
+  - **Partial TP/SL**: `🎯 TP escalonado` acepta varios precios, cada uno con el % de la
+    posición que cierra (`TE.addTpLevel`). En `TE.onCandle` se evalúan **antes** del TP de la
+    posición y después del SL: cada nivel tocado cierra su fracción y se retira de la lista;
+    lo que sigue abierto conserva su SL.
+  - **Órdenes límite del mismo lado** con posición abierta **promedian** al tocarse (los del
+    lado contrario siguen en espera hasta cerrar, como antes).
 - **Órdenes límite arrastrables**: la línea ámbar de cada orden pendiente tiene una pestaña
   `⏳▲ ⇕` en el borde derecho y se puede **arrastrar** para reubicar el nivel, con la misma
   mecánica que los handles de SL/TP (`DT.setPendingHandles` → `App.moveLimitOrder`). Con el

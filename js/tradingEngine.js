@@ -30,6 +30,7 @@
     feePct: 0.1,             // % por lado (apertura y cierre)
     fundingPct: 0,           // % por vela sobre el notional (opcional)
     slFirst: 'worst',        // 'worst' | 'best'
+    averaging: true,         // permitir AÑADIR a una posición abierta (promediar entrada)
     position: null,          // posición abierta
     pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
     trades: [],              // historial (abiertas + cerradas)
@@ -49,6 +50,7 @@
     if (opts.feePct !== undefined) s.feePct = +opts.feePct;
     if (opts.fundingPct !== undefined) s.fundingPct = +opts.fundingPct;
     if (opts.slFirst !== undefined) s.slFirst = opts.slFirst;
+    if (opts.averaging !== undefined) s.averaging = !!opts.averaging;
   };
 
   /** Reinicia la cuenta al capital inicial y borra el historial. */
@@ -107,7 +109,16 @@
    */
   TE.openPosition = function (side, params) {
     const s = TE.state;
-    if (s.position) { U.toast('Ya hay una posición abierta. Ciérrala antes de abrir otra.', 'warn'); return null; }
+    if (s.position) {
+      // MISMO LADO con el promediado activo → se AÑADE a la posición abierta, como
+      // el «Add position» de Bitunix: precio medio ponderado, tamaño y margen
+      // sumados, y los niveles de TP/SL de la posición se conservan.
+      if (s.averaging && s.position.side === side && params.allowAverage !== false) {
+        return TE.addToPosition(side, params);
+      }
+      U.toast('Ya hay una posición abierta. Ciérrala antes de abrir otra, o activa «Promediar entradas» en Ajustes.', 'warn', 4200);
+      return null;
+    }
 
     const entryPrice = +params.entryPrice;
     if (!Number.isFinite(entryPrice) || entryPrice <= 0) { U.toast('Precio de entrada no válido', 'err'); return null; }
@@ -175,6 +186,12 @@
       initialSl: sl, initialTp: tp,
       origin: params.origin || 'market',   // 'market' (a mercado) | 'limite'
       limitPrice: params.limitPrice !== undefined ? params.limitPrice : null,
+      // --- Gestión de posición (estilo Bitunix) ---
+      parts: [{ entryPrice, qty, notional, fee, time: params.time || s.lastTime,
+                origin: params.origin || 'market' }],   // cada entrada/promediado
+      additions: 0,                        // nº de veces que se añadió a esta posición
+      tpLevels: [],                        // TP escalonado (Partial TP/SL)
+      realizedParcial: 0,                  // PnL ya realizado en cierres parciales
     };
     s.position = position;
     s.trades.push(position);
@@ -257,37 +274,48 @@
       end: 'fin del replay',
       cambio: 'cambio de serie',
       inversion: 'inversión',
+      parcial: 'cierre parcial',
     })[r] || r;
   };
 
   /* ------------------------- Modificación de SL/TP ------------------------- */
 
-  TE.setSL = function (price) {
+  TE.setSL = function (price, opts) {
     const p = TE.state.position;
     if (!p) return false;
+    const o = opts || {};
+    const forzar = !!o.force, sil = !!o.silent;
     if (price === null || price === undefined || !Number.isFinite(+price)) { p.sl = null; }
     else {
-      if (p.side === 'long' && price >= p.entryPrice) { U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
-      if (p.side === 'short' && price <= p.entryPrice) { U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
+      // El break-even de un LONG queda POR ENCIMA de la entrada (es un stop que
+      // solo protege ganancias), así que esa validación se omite con {force:true}
+      if (!forzar) {
+        if (p.side === 'long' && price >= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
+        if (p.side === 'short' && price <= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
+      }
       p.sl = +price;
     }
     TE.updateRisk(p);
-    U.log(`🛠 SL actualizado a ${p.sl ? U.fmtPrice(p.sl) : 'sin SL'}`, 'warn');
+    // {silent:true} se usa al ARRASTRAR el nivel: un log por cada mousemove
+    // llenaría el registro de líneas inútiles (y los avisos, la pantalla).
+    if (!sil) U.log(`🛠 SL actualizado a ${p.sl ? U.fmtPrice(p.sl) : 'sin SL'}`, 'warn');
     TE._emit();
     return true;
   };
 
-  TE.setTP = function (price) {
+  TE.setTP = function (price, opts) {
     const p = TE.state.position;
     if (!p) return false;
+    const o = opts || {};
+    const sil = !!o.silent;
     if (price === null || price === undefined || !Number.isFinite(+price)) { p.tp = null; }
     else {
-      if (p.side === 'long' && price <= p.entryPrice) { U.toast('TP inválido: debe estar por encima de la entrada', 'warn'); return false; }
-      if (p.side === 'short' && price >= p.entryPrice) { U.toast('TP inválido: debe estar por debajo de la entrada', 'warn'); return false; }
+      if (p.side === 'long' && price <= p.entryPrice) { if (!sil) U.toast('TP inválido: debe estar por encima de la entrada', 'warn'); return false; }
+      if (p.side === 'short' && price >= p.entryPrice) { if (!sil) U.toast('TP inválido: debe estar por debajo de la entrada', 'warn'); return false; }
       p.tp = +price;
     }
     TE.updateRisk(p);
-    U.log(`🛠 TP actualizado a ${p.tp ? U.fmtPrice(p.tp) : 'sin TP'}`, 'warn');
+    if (!sil) U.log(`🛠 TP actualizado a ${p.tp ? U.fmtPrice(p.tp) : 'sin TP'}`, 'warn');
     TE._emit();
     return true;
   };
@@ -295,6 +323,264 @@
   /** Recalcula el riesgo usado para el R múltiplo. */
   TE.updateRisk = function (p) {
     p.riskUsd = p.sl !== null ? Math.abs(p.entryPrice - p.sl) * p.qty : null;
+  };
+
+  /* ============ PROMEDIADO Y CIERRE PARCIAL (como lo hace Bitunix) ============
+   *
+   * Bitunix gestiona una posición abierta con dos acciones en su panel de
+   * posición: «Add position» (añadir tamaño, moviendo el PRECIO MEDIO de
+   * entrada) y el menú TP/SL con «Position TP/SL» / «Partial TP/SL». Las reglas
+   * que replica esta implementación:
+   *
+   *  · Al añadir, la entrada pasa a ser la MEDIA PONDERADA por tamaño; el
+   *    notional y el margen se suman y el precio de liquidación se recalcula
+   *    sobre el total.
+   *  · Los niveles de TP/SL de la posición NO se mueven al promediar: son de la
+   *    posición entera («Position TP/SL»: la cantidad ejecutada se ajusta sola
+   *    al cambiar el tamaño de la posición).
+   *  · Opcionalmente se pueden fijar nuevos TP/SL en la misma orden de
+   *    promediado (Bitunix permite llevarlos en el formulario al añadir).
+   *  · «Partial TP/SL»: se pueden poner varios precios de TP, cada uno cerrando
+   *    un % de la posición; lo que sigue abierto conserva su SL.
+   *  · El precio de break-even NO es el precio medio: incluye comisiones.
+   * ============================================================================*/
+
+  /**
+   * Añade tamaño a la posición abierta (promediar entrada).
+   * @param {'long'|'short'} side  debe coincidir con el de la posición
+   * @param {object} params {mode,size,entryPrice,sl,tp,leverage,feePct,time}
+   * @returns {object|null} la posición actualizada
+   */
+  TE.addToPosition = function (side, params) {
+    const s = TE.state;
+    const p = s.position;
+    if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
+    if (p.side !== side) {
+      U.toast('Promediar solo añade a la posición en SU misma dirección; para invertir usa el lado contrario', 'warn', 4200);
+      return null;
+    }
+    const entryPrice = +params.entryPrice;
+    if (!Number.isFinite(entryPrice) || entryPrice <= 0) { U.toast('Precio de entrada no válido', 'err'); return null; }
+
+    const feePct = params.feePct !== undefined ? +params.feePct : p.feePct;
+    const leverage = Math.max(1, +(params.leverage || p.leverage || 1));
+
+    // Tamaño de la nueva tandada: mismos modos que al abrir (% del capital, USD o unidades)
+    let notional = 0, qty = 0;
+    if (params.mode === 'pct') {
+      notional = s.balance * (U.clamp(+params.size || 0, 0, 100) / 100) * leverage;
+    } else if (params.mode === 'notional') {
+      notional = Math.max(0, +params.size || 0);
+    } else {
+      qty = Math.max(0, +params.size || 0);
+      notional = qty * entryPrice;
+    }
+    if (!qty) qty = notional / entryPrice;
+    if (notional <= 0 || !Number.isFinite(qty) || qty <= 0) { U.toast('Tamaño no válido para promediar', 'err'); return null; }
+
+    // Solo se puede usar el MARGEN LIBRE (el comprometido por la posición sigue siéndolo)
+    const margenNuevo = notional / leverage;
+    const libre = s.balance - TE.marginUsed();
+    if (margenNuevo > libre + 1e-9) {
+      U.toast(`Margen libre insuficiente para promediar: hacen falta ${U.fmtMoney(margenNuevo)} y quedan ${U.fmtMoney(Math.max(0, libre))}`, 'err', 4600);
+      return null;
+    }
+
+    const prevQty = p.qty, prevEntry = p.entryPrice;
+    const media = (prevEntry * prevQty + entryPrice * qty) / (prevQty + qty);
+    const fee = notional * (feePct / 100);
+    s.balance -= fee;
+    s.feesPaid += fee;
+
+    p.parts.push({ entryPrice, qty, notional, fee, time: params.time || s.lastTime, origin: params.origin || 'market' });
+    p.qty = prevQty + qty;
+    p.entryPrice = media;
+    p.notional = p.qty * media;
+    p.leverage = leverage;
+    p.openFee = (p.openFee || 0) + fee;
+    p.fees = (p.fees || 0) + fee;
+    p.additions = (p.additions || 0) + 1;
+    if ((params.time || s.lastTime) < p.entryTime) p.entryTime = params.time || s.lastTime;
+
+    // TP/SL: por defecto SE CONSERVAN (Position TP/SL). Si la orden de promediado
+    // trae niveles nuevos, sustituyen a los de la posición entera.
+    const slNuevo = Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null;
+    const tpNuevo = Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null;
+    if (slNuevo !== null) { p.sl = slNuevo; p.initialSl = slNuevo; }
+    if (tpNuevo !== null) { p.tp = tpNuevo; p.initialTp = tpNuevo; }
+    if (params.reaim === 'medio') {
+      // Re-aim opcional: en vez de conservar los precios absolutos, conserva la
+      // DISTANCIA PORCENTUAL que había al precio medio anterior. Así el TP/SL
+      // siguen «igual de lejos» del nuevo precio medio tras promediar.
+      const dir = p.side === 'long' ? 1 : -1;
+      if (slNuevo === null && p.sl !== null) {
+        const d = Math.abs(p.sl - prevEntry) / prevEntry;
+        p.sl = media * (1 - dir * d);
+      }
+      if (tpNuevo === null && p.tp !== null) {
+        const d = Math.abs(p.tp - prevEntry) / prevEntry;
+        p.tp = media * (1 + dir * d);
+      }
+    }
+    TE.updateRisk(p);
+
+    if (p.sl !== null && ((p.side === 'long' && p.sl >= media) || (p.side === 'short' && p.sl <= media))) {
+      U.log(`⚠️ Tras promediar, el SL (${U.fmtPrice(p.sl)}) ha quedado al otro lado del precio medio (${U.fmtPrice(media)}): se ejecutará en cuanto toque la vela`, 'warn');
+    }
+
+    U.playSound('open');
+    U.log(`➕ Promediado ${p.side.toUpperCase()} @ ${U.fmtPrice(entryPrice)} · ${U.num(qty, 6)} uds · ` +
+          `nuevo precio medio ${U.fmtPrice(media)} · total ${U.num(p.qty, 6)} uds (${U.fmtMoney(p.notional)}) · ` +
+          `entrada ${p.parts.length}/${p.parts.length === 1 ? 'única' : p.parts.length} · comisión ${U.fmtMoney(fee)}`, 'warn');
+    TE.updateEquity(entryPrice, params.time);
+    TE._emit();
+    return p;
+  };
+
+  /**
+   * Cierra una FRACCIÓN de la posición realizando su PnL (0 < frac < 1).
+   * La parte de comisión de apertura proporcional se carga a ESTE registro, así
+   * que el resto de la posición la paga al cerrarse: el total de la hoja de
+   * resultados sigue cuadrando con el balance.
+   * @returns {object|null} el registro cerrado (o la posición cerrada si frac ≥ 1)
+   */
+  TE.reducePosition = function (frac, price, time, reason = 'parcial') {
+    const s = TE.state;
+    const p = s.position;
+    if (!p) { U.toast('No hay posición abierta', 'warn'); return null; }
+    const f = +frac;
+    if (!Number.isFinite(f) || f <= 0) return null;
+    if (f >= 0.999) return TE.closePosition(price, reason === 'parcial' ? 'manual' : reason, time);
+
+    const dir = p.side === 'long' ? 1 : -1;
+    const qtyClose = p.qty * f;
+    const px = Number.isFinite(+price) ? +price : s.lastPrice;
+    const gross = (px - p.entryPrice) * qtyClose * dir;
+    const exitFee = Math.abs(px * qtyClose) * (p.feePct / 100);
+    const openShare = (p.openFee || 0) * f;
+
+    s.balance += gross - exitFee;
+    s.feesPaid += exitFee;
+
+    const row = {
+      id: ++s.seq,
+      side: p.side,
+      status: 'closed',
+      parcial: true,
+      entryPrice: p.entryPrice, exitPrice: px,
+      qty: qtyClose, notional: qtyClose * p.entryPrice,
+      leverage: p.leverage, feePct: p.feePct,
+      entryTime: p.entryTime, exitTime: time !== undefined ? time : s.lastTime,
+      entryBalance: s.balance,
+      grossPnl: gross,
+      fees: exitFee + openShare,
+      pnl: gross - exitFee - openShare,
+      bars: p.bars || 0,
+      reason,
+      sl: p.sl, tp: p.tp, initialSl: p.initialSl, initialTp: p.initialTp,
+      mfe: (p.mfe || 0) * f, mae: (p.mae || 0) * f,
+      riskUsd: p.sl !== null ? Math.abs(p.entryPrice - p.sl) * qtyClose : null,
+      additions: p.additions || 0,
+      parts: p.parts.length,
+    };
+    row.pnlPct = row.entryBalance > 0 ? (row.pnl / row.entryBalance) * 100 : 0;
+    row.pnlPctPrice = row.entryPrice > 0 ? ((px - row.entryPrice) / row.entryPrice) * 100 * dir : 0;
+    row.rMultiple = row.riskUsd ? row.pnl / row.riskUsd : null;
+    s.trades.push(row);
+
+    // Lo que sigue abierto
+    p.qty -= qtyClose;
+    p.notional = p.qty * p.entryPrice;
+    p.openFee = (p.openFee || 0) - openShare;
+    p.fees = (p.fees || 0) + exitFee;
+    p.realizedParcial = (p.realizedParcial || 0) + row.pnl;
+    TE.updateRisk(p);
+    s.lastPrice = px;
+
+    U.playSound(gross >= 0 ? 'win' : 'loss');
+    U.log(`➗ Cierre parcial ${U.num(f * 100, 0)}% @ ${U.fmtPrice(px)} · realizado ${U.fmtMoney(row.pnl, true)} · ` +
+          `quedan ${U.num(p.qty, 6)} uds al precio medio ${U.fmtPrice(p.entryPrice)}`, gross >= 0 ? 'ok' : 'bad');
+
+    TE.updateEquity(px, row.exitTime);
+    TE._emit();
+    return row;
+  };
+
+  /**
+   * Precio de break-even de la posición: el punto donde el PnL NETO es cero,
+   * contando la comisión de apertura ya pagada y la de cierre. (Bitunix subraya
+   * que break-even ≠ precio de entrada por este motivo.)
+   */
+  TE.breakEvenPrice = function (p) {
+    const pos = p || TE.state.position;
+    if (!pos || !pos.qty) return null;
+    const dir = pos.side === 'long' ? 1 : -1;
+    const fee = (pos.feePct || 0) / 100;
+    // PnL neto cero: (x − media)·q·dir − x·q·fee − openFee = 0
+    const den = pos.qty * (dir - fee);
+    if (!Number.isFinite(den) || Math.abs(den) < 1e-12) return null;
+    const x = ((pos.openFee || 0) + pos.entryPrice * pos.qty * dir) / den;
+    return Number.isFinite(x) && x > 0 ? x : null;
+  };
+
+  /** Añade un nivel de TP escalonado (Partial TP/SL): cierra `pct`% al tocarlo. */
+  TE.addTpLevel = function (price, pct) {
+    const p = TE.state.position;
+    if (!p) { U.toast('Abre una posición antes de fijar niveles de TP', 'warn'); return null; }
+    const pr = +price;
+    const f = U.clamp(+pct || 0, 1, 100) / 100;
+    if (!Number.isFinite(pr) || pr <= 0) { U.toast('Precio de TP no válido', 'err'); return null; }
+    const dir = p.side === 'long' ? 1 : -1;
+    if (dir === 1 && pr <= p.entryPrice) { U.toast('En LONG el TP debe estar por encima del precio medio', 'warn'); return null; }
+    if (dir === -1 && pr >= p.entryPrice) { U.toast('En SHORT el TP debe estar por debajo del precio medio', 'warn'); return null; }
+    p.tpLevels = p.tpLevels || [];
+    if (p.tpLevels.some((l) => Math.abs(l.price - pr) < 1e-9)) { U.toast('Ese nivel de TP ya existe', 'warn'); return null; }
+    const nivel = { price: pr, pct: f };
+    p.tpLevels.push(nivel);
+    p.tpLevels.sort((a, b) => (dir === 1 ? a.price - b.price : b.price - a.price));
+    U.log(`🎯 TP escalonado añadido: ${U.fmtPrice(pr)} cierra ${U.num(f * 100, 0)}% de la posición`, 'sys');
+    TE._emit();
+    return nivel;
+  };
+
+  /** Quita un nivel de TP escalonado por su índice. */
+  TE.removeTpLevel = function (i) {
+    const p = TE.state.position;
+    if (!p || !p.tpLevels || !p.tpLevels.length) return false;
+    const idx = +i;
+    if (!(idx >= 0 && idx < p.tpLevels.length)) return false;
+    const [q] = p.tpLevels.splice(idx, 1);
+    U.log(`🗑 Nivel de TP ${U.fmtPrice(q.price)} retirado`, 'warn');
+    TE._emit();
+    return true;
+  };
+
+  /**
+   * Evalúa el TP escalonado dentro de una vela: cada nivel tocado cierra su
+   * fracción. Se ejecutan todos los que quepan en la vela (de menos a más
+   * favorable), que es lo que harían las órdenes condicionales del bróker.
+   */
+  TE._checkTpLevels = function (candle) {
+    const s = TE.state;
+    let hits = 0;
+    for (;;) {
+      const p = s.position;
+      if (!p || !p.tpLevels || !p.tpLevels.length) break;
+      const dir = p.side === 'long' ? 1 : -1;
+      let i = -1;
+      for (let k = 0; k < p.tpLevels.length; k++) {
+        const tocado = dir === 1 ? candle.high >= p.tpLevels[k].price : candle.low <= p.tpLevels[k].price;
+        if (tocado) { i = k; break; }
+      }
+      if (i < 0) break;
+      const lv = p.tpLevels.splice(i, 1)[0];
+      const antes = p.qty;
+      TE.reducePosition(lv.pct, TE._fillPrice(candle, lv.price, p.side, false), candle.time, 'parcial');
+      if (!s.position || s.position.qty === antes) break;   // cerró todo o no hubo cambios
+      hits++;
+    }
+    if (hits) U.log(`🎯 ${hits} nivel${hits > 1 ? 'es' : ''} de TP escalonado ejecutado${hits > 1 ? 's' : ''}`, 'ok');
+    return hits;
   };
 
   /* ----------------------------- Replay hooks ----------------------------- */
@@ -472,7 +758,11 @@
     const abiertas = [];
     for (let i = s.pending.length - 1; i >= 0; i--) {
       const o = s.pending[i];
-      if (s.position) break;   // con una posición abierta las órdenes esperan
+      // Con una posición abierta los órdenes ESPERAN, salvo que sean del mismo
+      // lado y el promediado esté activo: en ese caso se ejecutan y AÑADEN a la
+      // posición (así funciona «Add position» con orden límite en Bitunix).
+      const promedia = !!(s.averaging && s.position && s.position.side === o.side);
+      if (s.position && !promedia) break;
       const alcanzada = o.side === 'long' ? candle.low <= o.limitPrice : candle.high >= o.limitPrice;
       if (!alcanzada) continue;
 
@@ -567,6 +857,14 @@
         return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
       }
       if (slHit) return TE.closePosition(TE._fillPrice(candle, p.sl, p.side, true), 'sl', candle.time);
+
+      // 2b) TP ESCALONADO (Partial TP/SL): cada nivel tocado cierra su fracción y
+      //     deja el resto de la posición vivo con su SL intacto.
+      if (p.tpLevels && p.tpLevels.length) {
+        TE._checkTpLevels(candle);
+        if (!s.position) { TE.updateEquity(candle.close, candle.time); TE._emit(); return null; }
+      }
+
       if (tpHit) return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
     }
 
@@ -646,7 +944,16 @@
 
     if (cp.hasPos && cp.pos) {
       const clone = JSON.parse(JSON.stringify(cp.pos));
-      if (cp.tradesLen > 0 && s.trades.length >= cp.tradesLen) s.trades[cp.tradesLen - 1] = clone;
+      // La fila «viva» del historial ES el propio objeto de la posición. Se busca
+      // por id en vez de asumir que es la última: con cierres parciales hay filas
+      // cerradas DESPUÉS de la posición abierta, y sustituir por posición se las
+      // comía (el balance volvía, pero el PnL realizado del histórico no).
+      let k = -1;
+      for (let i = s.trades.length - 1; i >= 0; i--) {
+        if (s.trades[i] && s.trades[i].id === clone.id) { k = i; break; }
+      }
+      if (k >= 0) s.trades[k] = clone;
+      else if (cp.tradesLen > 0 && s.trades.length >= cp.tradesLen) s.trades[cp.tradesLen - 1] = clone;
       else s.trades.push(clone);
       s.position = clone;
     } else {
@@ -686,6 +993,7 @@
         feePct: TE.state.feePct,
         fundingPct: TE.state.fundingPct,
         slFirst: TE.state.slFirst,
+        averaging: TE.state.averaging,
         feesPaid: TE.state.feesPaid,
         lastPrice: TE.state.lastPrice,
         lastTime: TE.state.lastTime,
@@ -705,6 +1013,17 @@
     TE.state.pending = data.pending || [];
     TE.state.trades = data.trades || [];
     TE.state.equitySeries = data.equitySeries || [];
+    // Mientras una posición vive, SU FILA del historial es el mismo objeto (así lo
+    // tratan openPosition/closePosition). Al restaurar desde JSON son dos copias
+    // distintas: sin este re-enlace, cerrar después de cargar una sesión dejaba
+    // una fila «abierta» fantasma en la hoja y el PnL nunca aparecía (y el balance
+    // dejaba de cuadrar). Se vuelve a apuntar la fila a la posición restaurada.
+    const p = TE.state.position;
+    if (p) {
+      const k = TE.state.trades.findIndex((t) => t && t.id === p.id);
+      if (k >= 0) TE.state.trades[k] = p;
+      else TE.state.trades.push(p);
+    }
     TE._emit();
   };
 
