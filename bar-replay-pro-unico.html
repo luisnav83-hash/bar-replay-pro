@@ -1391,6 +1391,7 @@ kbd{
         <li>Dibuja soportes, canales, Fibonacci… y añade indicadores desde el botón 📈 de la barra superior.</li>
         <li>Abre posiciones <b>LONG/SHORT</b> con tamaño, apalancamiento, SL y TP (por precio o por %). Las líneas de SL/TP se pueden <b>arrastrar</b> en el gráfico.</li>
         <li>Con una posición abierta, pulsar el lado <b>contrario</b> la cierra a mercado y abre la nueva (<b>inversión</b>): el historial anota el motivo «inversión».</li>
+        <li>Solo hay <b>una posición a la vez</b>: si colocas una orden límite con posición abierta, queda <b>en espera</b> y se ejecutará al cerrar (se avisa en el log).</li>
         <li>Revisa resultados en el panel de estadísticas, la curva de capital y el historial de trades.</li>
       </ol>
       <h4>Atajos de teclado</h4>
@@ -7650,6 +7651,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.refreshAll();
     if (orden) {
       U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
+      // Con una posición abierta el motor deja los límites en espera (solo hay
+      // una posición a la vez). Se avisa para que no parezca una orden ignorada.
+      if (TE.state.position) {
+        U.log(`ℹ️ Hay una ${TE.state.position.side.toUpperCase()} abierta: la orden límite ` +
+              `esperará a que la cierres para poder ejecutarse`, 'sys');
+        U.toast('Hay una posición abierta: el límite entrará en vigor al cerrarla', 'warn', 4200);
+      }
     }
     return orden;
   };

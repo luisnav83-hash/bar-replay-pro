@@ -98,6 +98,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(800);
   const b = await estado();
   ok(b.pend === 1, `Mayús+S deja una orden límite pendiente (${b.pend})`);
+
+  // Con posición abierta el límite no se ignora: queda EN ESPERA y se AVISA.
+  await limpiar();
+  await page.evaluate(() => App.placeOrder('long'));
+  await wait(700);
+  await page.evaluate(() => {
+    document.getElementById('limitInput').value = (App.currentPrice() * 1.01).toFixed(2);
+    App.placeLimitOrder('short');
+  });
+  await wait(800);
+  const b2 = await estado();
+  ok(b2.pend === 1 && b2.pos === 'long', 'con posición abierta el límite queda en espera (no se pierde)');
+  ok(/esperará a que la cierres/i.test(b2.log), 'el log explica que entrará en vigor al cerrar la posición');
+  await page.evaluate(() => { App.cancelAllOrders(); });
+  await wait(300);
   ok(errs.length === 0, `sin errores de JavaScript (${errs.length}${errs.length ? ' → ' + errs[0] : ''})`);
 
   /* ---------------- E5) Límite cruzada → a mercado, avisando ---------------- */

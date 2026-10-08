@@ -732,6 +732,13 @@
     UI.refreshAll();
     if (orden) {
       U.toast(`⏳ Orden límite ${side === 'long' ? 'de compra' : 'de venta'} a ${U.fmtPrice(limite)}`, 'ok', 2600);
+      // Con una posición abierta el motor deja los límites en espera (solo hay
+      // una posición a la vez). Se avisa para que no parezca una orden ignorada.
+      if (TE.state.position) {
+        U.log(`ℹ️ Hay una ${TE.state.position.side.toUpperCase()} abierta: la orden límite ` +
+              `esperará a que la cierres para poder ejecutarse`, 'sys');
+        U.toast('Hay una posición abierta: el límite entrará en vigor al cerrarla', 'warn', 4200);
+      }
     }
     return orden;
   };

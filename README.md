@@ -284,12 +284,12 @@ node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camin
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
-node tests/entradas.test.js     #  24 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
+node tests/entradas.test.js     #  26 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
 node tests/single.test.js     # archivo único en navegador real sin red
 ```
 
-Resultado actual: **546 comprobaciones, 0 fallos** ✅ · **20 suites**
+Resultado actual: **548 comprobaciones, 0 fallos** ✅ · **20 suites**
 
 > Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
 > solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
@@ -373,7 +373,7 @@ bar-replay-app/
     ├── browser.capture.js    # Navegador real (Chromium) + capturas (43)
     ├── boot.test.js          # Arranque robusto sin red / sin localStorage (13)
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
-    ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (24)
+    ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -397,6 +397,8 @@ bar-replay-app/
   Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
   después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
   y los límites pendientes se cancelan, avisando en pantalla.
+- **Una posición a la vez**: con posición abierta, las **órdenes límite quedan en espera** y
+  se ejecutan al cerrarla (queda anotado en el log y se avisa con un toast).
 - **Invertir**: con una posición abierta, pedir el **lado contrario** (botón o tecla)
   cierra la actual y abre la nueva; el historial anota el motivo «inversión». Pedir el
   mismo lado avisa y no toca la posición.
