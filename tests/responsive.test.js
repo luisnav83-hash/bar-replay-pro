@@ -59,14 +59,48 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const m = await page.evaluate(() => {
       const R = (id) => { const e = document.getElementById(id); return e ? e.getBoundingClientRect() : null; };
       const wrap = R('chartWrap'), rp = R('replayBar'), ws = R('workspace'), ca = R('chartArea');
-      const panes = [...document.querySelectorAll('.indPane')].filter((e) => e.offsetHeight > 0).map((e) => e.getBoundingClientRect());
-      const paneBottom = panes.length ? Math.max(...panes.map((x) => x.bottom)) : 0;
+      const pa0 = R('paneArea');
+      const ind = [...document.querySelectorAll('.indPane')].filter((e) => e.offsetHeight > 0);
+      const panes = ind.map((e) => e.getBoundingClientRect());
+      /* El último panel puede sobresalir de la caja de `#paneArea` A PROPÓSITO (en el
+         teléfono la escalera se desplaza en vertical). Un `getBoundingClientRect()` de un
+         hijo desbordado sigue midiendo fuera, pero ahí no se pinta nada: lo que importa es
+         lo que se ve, así que el borde de abajo se toma de la caja que recorta. Sin esto,
+         el contrato «los paneles no tapan la barra de replay» daba rojo por un píxel
+         invisible — y bajarlo habría sido tapar el defecto, no arreglarlo. */
+      const recorte = pa0 ? pa0.bottom : Infinity;
+      const paneBottom = panes.length ? Math.max(...panes.map((x) => Math.min(x.bottom, recorte))) : 0;
       const play = R('btnPlay');
       return {
         chart: Math.round(wrap.height), panes: panes.length,
         fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
         sobrePaneles: Math.max(0, Math.round(wrap.bottom - (R('paneArea') || { bottom: wrap.bottom }).bottom)),
         solape: paneBottom > rp.top + 2 ? Math.round(paneBottom - rp.top) : 0,
+        // La caja de la escalera, en cambio, SÍ tiene que quedar por encima del replay.
+        areaFuera: pa0 ? Math.max(0, Math.round(pa0.bottom - rp.top)) : 0,
+        scrolleaArea: pa0 ? pa0.scrollHeight > pa0.clientHeight + 2 : false,
+        // Lo que de verdad pinta cada panel de indicador (su canvas).
+        huecoMin: ind.length ? Math.min(...ind.map((e) => {
+          const cv = e.querySelector('canvas'); return cv ? Math.round(cv.getBoundingClientRect().height) : 999;
+        })) : 999,
+        // El eje de tiempo: ni duplicado (principal + panel) ni perdido.
+        /* Dónde se PINTA el eje, medido en el lienzo —no preguntando a la librería, que en
+           v4 no expone `timeScale().getOptions()`: lo que pregunta por la opción devolvía
+           `undefined` y el recuento de ejes salía 0 (fue el primer intento de este
+           assert). La franja que le falta al canvas dentro de su contenedor ES el eje. */
+        eje: (() => {
+          const franja = (cont, sel) => {
+            const c = document.getElementById(cont) || document.querySelector(sel);
+            if (!c) return -1;
+            const cv = c.tagName === 'CANVAS' ? c : c.querySelector('canvas');
+            if (!cv) return -1;
+            return Math.round(c.getBoundingClientRect().height - cv.getBoundingClientRect().height);
+          };
+          const f = { principal: franja('chartWrap', null), rsi: franja('chartRsi'), macd: franja('chartMacd'), atr: franja('chartAtr') };
+          const conEje = Object.keys(f).filter((k) => f[k] >= 10);
+          return { en: (window.CM && CM._ejeEn) || '?', hueco: (window.CM && CM._ejeHueco) || 0,
+                   conEje, franja: f, visibles: conEje.length };
+        })(),
         ovx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
         recorteInterno: Math.round(Math.max(0, ca.bottom - ws.bottom)) + Math.round(Math.max(0, ws.bottom - R('bottomPanel').top)),
         sliderEscala: (() => { const r = document.getElementById('progressRange');
@@ -89,7 +123,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
        (390×844 con el andamio compactado: 190 px medidos de gráfico). */
     const etiqueta = `${w}×${h}`;
     ok(m.chart >= 120 && m.chart === m.fila, `${etiqueta}: el gráfico conserva ${m.chart}px en el PEOR caso de escalera (fila ${m.fila}px, suelo 120px)`);
-    ok(m.solape === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay`);
+    ok(m.solape === 0 && m.areaFuera === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay (${m.scrolleaArea ? 'el último desborda su caja y se desplaza —recortado, no pintado—' : 'sin desbordar'})`);
+    ok(m.huecoMin >= 12, `${etiqueta}: ningún panel de indicadores pinta en menos de ${m.huecoMin} px de gráfico (el hueco mínimo exigido es 12; el defecto arreglado era 2 px)`);
+    ok(m.eje.visibles === 1 && m.eje.conEje[0] === m.eje.en
+       && (m.eje.en === 'principal' ? m.eje.hueco < 48 : m.eje.hueco >= 48),
+       `${etiqueta}: el eje de tiempo se pinta una sola vez y en «${m.eje.en}» (franja de ${m.eje.franja[m.eje.conEje[0]]} px; el panel de abajo tiene ${m.eje.hueco} px de hueco, umbral 48 — con menos, el panel se queda sin gráfico: era el defecto)`);
     ok(m.sobrePaneles === 0, `${etiqueta}: y el gráfico no pinta encima de los paneles de indicadores (${m.sobrePaneles}px)`);
     ok(m.ovx === 0, `${etiqueta}: sin desbordamiento horizontal (${m.ovx}px)`);
     ok(m.recorteInterno === 0, `${etiqueta}: nada se recorta entre el gráfico y el panel inferior`);
@@ -449,6 +487,132 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(RB.inalcanzables.length === 0,
      RB.inalcanzables.length ? `detrás del swipe hay velocidades que no se alcanzan: ${RB.inalcanzables.join(' ')}`
        : `las velocidades que no caben (${RB.sc[0]} px de contenido en ${RB.sc[1]}) quedan a un gesto de la barra: todas se pulsan en algún punto del deslizamiento`);
+
+  /* ═══════════ LA ESCALERA DE INDICADORES EN EL TELÉFONO ═══════════
+     Medido antes de tocar (390×844, 414×896, 360×640): cada panel medía 44 px, la
+     cabecera 24 y el eje de tiempo se pintaba DENTRO del panel de abajo, que se quedaba
+     con 2 px de gráfico —el RSI y el MACD eran decorativos— (en escritorio tampoco se
+     salvaba: 12 px a 1440×900 y 2 px a 1400×560 / 900×700). Dos cambios: el eje se pinta
+     donde haya hueco (CM._reparteEje, umbral 48 px de contenedor) y los paneles pasan a
+     58 px con la escalera topada a su fila de siempre, de modo que lo que sobre se
+     desplaza en vez de comérselo el gráfico o la cabecera. Y la trampa que cazó el primer
+     intento: `#paneArea` es `flex-direction:column`, así que con `max-height` los hijos
+     ENCOGÍAN a 36 px (8 px de canvas) en lugar de desbordar —el arreglo fue
+     `flex:0 0 auto`, el mismo que hizo falta en la barra de replay—. */
+  console.log('\n▸ La escalera de indicadores en el teléfono (390×844)');
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await page.evaluate(() => {
+    App.indicators.rsi.on = true; App.indicators.macd.on = true;
+    App.applyIndicators(App.indicators, true);
+  });
+  await wait(800);
+  const ESC = await page.evaluate(async () => {
+    const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+    const g = (id) => document.getElementById(id);
+    const pa = g('paneArea');
+    const R = (e) => { const r = e.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height, t: r.top, b: r.bottom, l: r.left, r: r.right }; };
+    const q = R(pa);
+    const pisa = (e) => { const r = R(e); if (!r.h) return 'oculto';
+      const el = document.elementFromPoint(r.x + r.w / 2, r.y + r.h / 2);
+      return el && (e === el || e.contains(el) || el.contains(e)) ? 'si' : 'no'; };
+    const franja = (cont) => { const c = g(cont); if (!c) return -1;
+      const cv = c.querySelector('canvas'); if (!cv) return -1;
+      return Math.round(c.getBoundingClientRect().height - cv.getBoundingClientRect().height); };
+    const paneles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetHeight > 0)
+      .map((e) => {
+        const cont = e.querySelector('.pane-chart'), cv = e.querySelector('canvas'), x = e.querySelector('.pane-close');
+        return { id: e.id, h: Math.round(R(e).h), inline: e.style.height || '—',
+          head: Math.round(R(e.querySelector('.pane-head')).h),
+          cont: cont ? Math.round(R(cont).h) : 0,
+          canvas: cv ? Math.round(R(cv).h) : 0,
+          recortado: R(e).b > q.b + 0.5, pisaCerrar: x ? pisa(x) : 'sin botón',
+          // La cabecera: ¿una línea? ¿los valores enteros, sin ellipsis?
+          headH: Math.round(R(e.querySelector('.pane-head')).h),
+          headScroll: e.querySelector('.pane-head').scrollHeight,
+          valCorte: (() => { const v = e.querySelector('.pane-val');
+            return v ? v.scrollWidth - v.clientWidth : 0; })(),
+          titleCorte: (() => { const v = e.querySelector('.pane-title');
+            return v ? v.scrollWidth - v.clientWidth : 0; })() };
+      });
+    /* Cada botón ✕ tiene que ser pulsable en ALGÚN punto del deslizamiento —no en la foto
+       de reposo, que es justo lo que el desplazamiento cambia: en reposo se ven el PnL y el
+       RSI y el MACD queda debajo; al bajar, al revés—. Es el mismo contrato que se exigió a
+       los chips de velocidad de la barra de replay, por el mismo motivo. */
+    const max = pa.scrollHeight - pa.clientHeight;
+    const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden'));
+    const alcanzable = visibles.map((e) => pisa(e.querySelector('.pane-close')) === 'si');
+    for (let s = 0.25; s <= 1.001 && max > 0; s += 0.25) {
+      pa.scrollTop = Math.round(max * s); await esperar(120);
+      visibles.forEach((e, k) => { if (pisa(e.querySelector('.pane-close')) === 'si') alcanzable[k] = true; });
+    }
+    const alFinal = visibles.map((e) => pisa(e.querySelector('.pane-close')));
+    const fueraAlFinal = visibles.filter((e) => { const r = R(e); return r.b > R(pa).b + 0.5 || r.t < R(pa).t - 0.5; }).map((e) => e.id);
+    pa.scrollTop = 0; await esperar(120);
+    const asa = g('pnlPaneResize'), wrap = g('chartWrap'), ca = g('chartArea');
+    return { paneles, max, alto: Math.round(q.h), caja: pa.clientHeight, contenido: pa.scrollHeight,
+      ov: getComputedStyle(pa).overflowY, scrollea: pa.scrollHeight > pa.clientHeight + 2,
+      alFinal, fueraAlFinal, asa: asa ? Math.round(R(asa).h) : 0,
+      chart: Math.round(R(wrap).h), fila: Math.round(parseFloat(getComputedStyle(ca).gridTemplateRows.split(' ')[1] || '0')),
+      // OJO: el R() de arriba llama `t` y `b` a top y bottom —pedir `.top` daba NaN.
+      area: Math.round(R(pa).h), areaBot: Math.round(R(pa).b), rpTop: Math.round(R(g('replayBar')).t),
+      names: visibles.map((e) => e.id.replace('pane', '')), alcanzable,
+      docH: document.documentElement.scrollHeight, vh: window.innerHeight,
+      ovx: document.documentElement.scrollWidth - window.innerWidth,
+      eje: { en: CM._ejeEn, hueco: CM._ejeHueco, principal: franja('chartWrap'), macd: franja('chartMacd'), rsi: franja('chartRsi') },
+      debug: PC._debugComprime || null };
+  });
+  const ind = ESC.paneles.filter((p) => p.id !== 'panePnl');
+  const pnl = ESC.paneles.find((p) => p.id === 'panePnl') || {};
+  /* Los números de este bloque son LOS DEL CSS MEDIDO, y la banda del PnL es la misma que
+     fija tests/pnl-chart.test.js (60-100): si alguien vuelve a tocar la escalera del
+     teléfono, las dos suites se pisan y el reparto deja de ser arbitrario en una de ellas. */
+  ok(ind.length === 2 && ind.every((p) => p.h >= 56 && p.canvas >= 30) && pnl.h >= 60 && pnl.h <= 100,
+     `cada indicador del teléfono mide ${ind.map((p) => p.h + ' px de panel con ' + p.canvas + ' de gráfico').join(' y ')}, con el PnL a ${pnl.h} px —los dos caben en los 117 de la escalera sin recortar nada— (antes: 44 de panel y 2 px de velas, el indicador no se veía)`);
+  ok(ind.every((p) => p.inline === '—') && ESC.debug && ESC.debug.apretados === 0,
+     `y ese alto lo pone el CSS, no la compresión: sin \`style.height\` en los paneles y \`PC.comprimeEscalera\` informando ${ESC.debug ? ESC.debug.apretados : '?'} paneles apretados (en el teléfono la escalera se desplaza, no se aplasta)`);
+  ok(ESC.chart === ESC.fila && ESC.chart >= 180 && ESC.alto <= 118 && ESC.rpTop >= ESC.areaBot - 1,
+     `el gráfico no paga la escalera: ${ESC.chart} px de caja == fila ${ESC.fila}, la escalera topada a ${ESC.alto} px (termina en y ${ESC.areaBot}) y la barra de replay empieza justo debajo (y ${ESC.rpTop})`);
+  ok(ESC.scrollea && ESC.ov === 'auto' && ESC.max > 0,
+     `lo que no cabe de la escalera se desplaza por dentro: ${ESC.contenido} px de contenido en ${ESC.caja} de caja (desliza ${ESC.max} px), con overflow-y:auto`);
+  ok(ESC.alcanzable.every((x) => x === true) && ESC.alFinal.concat(ESC.fueraAlFinal).length >= 0,
+     `los ✕ de ${ESC.names.join(', ')} son pulsables en algún punto del deslizamiento (${ESC.alcanzable.map((x, k) => ESC.names[k] + (x ? ':sí' : ':NO')).join(' ')}); abajo del todo quedan ${ESC.fueraAlFinal.length ? 'fuera ' + ESC.fueraAlFinal.join(',') : 'ninguno'}`);
+  ok(ESC.paneles.some((p) => p.recortado) && ESC.paneles.filter((p) => !p.recortado).length >= 2,
+     `en reposo se ven ${ESC.paneles.filter((p) => !p.recortado).map((p) => p.id.replace('pane', '')).join(' y ')} con ${ESC.paneles.filter((p) => p.recortado).map((p) => p.id.replace('pane', ''))} por debajo del borde —cortado, no perdido—`);
+  ok(ESC.eje.en === 'principal' && ESC.eje.principal >= 10 && ESC.eje.macd < 10 && ESC.eje.rsi < 10,
+     `el eje de tiempo se pinta en el gráfico principal (franja de ${ESC.eje.principal} px) y ninguno de los dos paneles lo paga (${ESC.eje.rsi} y ${ESC.eje.macd} px), porque su hueco era de ${ESC.eje.hueco} px con umbral 48`);
+  ok(ESC.asa >= 18 && ESC.paneles.filter((p) => !p.recortado).every((p) => p.pisaCerrar === 'si'),
+     `el asa del PnL mide ${ESC.asa} px de alto (antes 12) y la ✕ de los paneles a la vista se puede pulsar (${ESC.paneles.filter((p) => !p.recortado).map((p) => p.id.replace('pane', '') + ':' + p.pisaCerrar).join(' ')})`);
+  ok(ESC.paneles.every((p) => p.headScroll <= p.headH + 1 && p.valCorte <= 0 && p.titleCorte <= 0),
+     `las cabeceras caben en su línea: ${ESC.paneles.map((p) => p.id.replace('pane', '') + ' ' + p.headH + '/' + p.headScroll + 'px, corte ' + p.valCorte + 'px').join(' · ')} (el MACD partía sus valores a dos líneas y la segunda se pintaba encima de su propio gráfico)`);
+  ok(ESC.docH === ESC.vh && ESC.ovx === 0,
+     `y el documento del teléfono sigue sin deslizar: ${ESC.docH} = ${ESC.vh} de viewport, ${ESC.ovx} px de scroll horizontal`);
+  /* Se devuelve la app al estado de antes de este bloque: las tres capturas que se toman
+     debajo (44, 45 y 08) corresponden a la escalera por defecto. */
+  await page.evaluate(() => {
+    App.indicators.rsi.on = false; App.indicators.macd.on = false;
+    App.applyIndicators(App.indicators, true);
+    const pa = document.getElementById('paneArea'); if (pa) pa.scrollTop = 0;
+  });
+  await wait(520);
+
+  /* Captura de la escalera del teléfono, abierta hasta el último panel: los dos
+     indicadores con su gráfico de 32 px y la ✕ alcanzable. */
+  await page.evaluate(() => {
+    App.indicators.rsi.on = true; App.indicators.macd.on = true;
+    App.applyIndicators(App.indicators, true);
+  });
+  await wait(700);
+  await page.evaluate(() => { const pa = document.getElementById('paneArea'); pa.scrollTop = pa.scrollHeight; });
+  await wait(260);
+  await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-47-escalera-movil.png') });
+  await page.evaluate(() => {
+    App.indicators.rsi.on = false; App.indicators.macd.on = false;
+    App.applyIndicators(App.indicators, true);
+    const pa = document.getElementById('paneArea'); pa.scrollTop = 0;
+  });
+  await wait(520);
+
   /* Captura de la barra de replay en el teléfono: se ve el deslizador con la perilla en su
      sitio (el bloque de arriba deja el replay en el 20 %), el contador y el estado, y la
      cola de velocidades saliendo por el borde —es decir, deslizable, no perdida—. */

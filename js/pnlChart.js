@@ -283,6 +283,23 @@
   PC.comprimeEscalera = function () {
     const area = el('chartArea'), wrap = el('chartWrap'), pa = el('paneArea'), p = el('panePnl');
     if (!area || !wrap || !pa) return 0;
+    /* En el teléfono la escalera NO se aprieta: se desplaza (ver el `max-height` de
+       `#paneArea` en el bloque ≤640 de css/bitunix.css). Comprimir aquí solo reproducía el
+       defecto que se venía a arreglar: con `MIN_PANE` a 40 px y 24 de cabecera, al panel le
+       quedaban 15 px de gráfico —y 2 px mientras el eje de tiempo viviera dentro—. Se
+       limpian los `style.height` que hubiera dejado una ventana ancha, para que el CSS del
+       teléfono mande de verdad (un inline olvidado gana a la escalera de CSS: ya rompió
+       una vez el mini de la tarjeta de posición). */
+    if (esEstrecho()) {
+      let limpio = false;
+      [...pa.querySelectorAll('.indPane')].forEach((e) => {
+        if (e !== p && e.style.height) { e.style.height = ''; limpio = true; }
+      });
+      if (wrap.style.minHeight) { wrap.style.minHeight = ''; limpio = true; }
+      if (limpio) void pa.offsetHeight;
+      PC._debugComprime = { apretados: 0, alto: 'n/a', suelo: 'css (teléfono: se desplaza)' };
+      return 0;
+    }
     const alto = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
     const fila = (id) => alto(el(id));
     const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetParent !== null);
@@ -368,6 +385,11 @@
   PC.ajustaEscalera = function () {
     const plegado = PC._plieguePnL();
     PC.comprimeEscalera();
+    /* Y el eje de tiempo se reparte DESPUÉS del reparto: es la misma decisión en los dos
+       sentidos (si los paneles se apretaron, el eje se va al gráfico principal; si
+       recuperaron su alto, vuelve abajo). `CM._reparteEje` mide el contenedor, no el
+       canvas, así que no se realimenta. */
+    try { CM._reparteEje(); } catch (e) {}
     return plegado;
   };
 

@@ -359,6 +359,56 @@ de la barra —comprobar solo el derecho, como hacía la primera sonda, dejaba p
 vertical por abajo—, y cada chip de velocidad se declara alcanzable solo si se puede pulsar en
 **algún** punto del deslizamiento, no en la foto de reposo.
 
+**La escalera de indicadores: el eje de tiempo se pinta donde hay hueco.** Medido en 390×844
+antes de tocar: cada panel medía 44 px, su cabecera 24 y el gráfico del panel se quedaba en
+**2 px** —porque el eje de tiempo (las etiquetas de hora, entre 26 y 28 px de franja) se
+pintaba *dentro* del panel más bajo, y el único sitio que le quedaba era el hueco del
+indicador—. No era cosa del móvil: a 1440×900 el MACD pintaba 12 px, y a 1400×560, 900×700 y
+1000×780, 2 px. El criterio pasa a ser de **hueco, no de posición** (`CM._reparteEje`,
+`js/chart.js`): el eje se queda en el panel de abajo solo si a ese panel le quedan ≥ 48 px de
+gráfico; si no, se pinta en el chart principal —el sitio que la app ya usa cuando no hay
+ningún panel abierto— y los paneles conservan su hueco entero. En el teléfono, con paneles de
+56 px, eso significa 30 px de RSI/MACD reales (antes 2) y un eje bajo las velas.
+
+**Y en el teléfono la escalera se desplaza, no se aplasta.** Los paneles suben de 44 a 56 px
+con el PnL a 60, y la escalera se topa a la fila que ya tenía (117 px) con `overflow-y:auto`:
+lo que no cabe se alcanza deslizando en vez de comérselo el gráfico. La cuenta es la que fija
+los números: 60 + 56 = 116 ≤ 117, así que **la escalera por defecto cabe entera y no hace
+falta deslizar nada**; con dos indicadores abiertos, el tercero está a 56 px de deslizamiento.
+Con la escalera por defecto, el gráfico del teléfono queda en **252 px** de fila (era 189 al
+empezar el hilo del móvil y 43 cuando este trabajo comenzó). Dos reglas que no son ornamentales:
+`#paneArea` es `display:flex;flex-direction:column`, así que a los hijos hay que ponerles
+`flex:0 0 auto` —sin eso, con el `max-height` puesto los paneles **encogían a 36 px (8 px de
+gráfico)** en lugar de desbordar: el mismo defecto con otro disfraz, y el mismo que obligó a
+`flex:0 0 auto` en la barra de replay—; y la compresión de `PC.comprimeEscalera` **se salta el
+teléfono** (y limpia los `style.height` que hubiera dejado una ventana ancha), porque su
+trabajo allí lo hace el desplazamiento.
+
+**Destapado al medir la propia captura:** la cabecera del MACD no cabía en una línea a 390 px
+(82 de título + 268 de valores + 22 de ✕ + 10 de huecos), partía sus valores en dos líneas y
+la segunda se pintaba **encima del gráfico del panel**. Con la letra a 10 px, el hueco a 5 y
+los **parámetros fuera de la cabecera** (`#rsiParams`, `#macdParams`, `#atrParams`: son fijos y
+están en el panel de ajustes, mientras los valores son lo único que cambia) son 345 px en 389:
+una línea, cero ellipsis. El `text-overflow:ellipsis` se deja puesto como degradado limpio, y
+el contrato exige que no se use: se comprueba `scrollWidth <= clientWidth` en los tres anchos.
+El asa del PnL pasa de 12 a 18 px y la ✕ de cada panel, de 20×13 a 22×20: tamaño de dedo.
+
+Lo comprueban `tests/responsive.test.js` (bloque «La escalera de indicadores en el teléfono»,
+10 comprobaciones: alto y hueco pintado por panel, cap de la fila, deslizamiento hasta el
+último panel, eje pintado una sola vez y en el sitio que corresponde, cabeceras de una línea sin
+corte y dianas del asa y la ✕) **más dos por cada una de las diez tallas** del bucle general
+(`huecoMin >= 12` y el eje), 30 en total: la suite pasa de 103 a 133. Y
+`tests/pages-bitunix.js` (115 → 120 sobre lo publicado).
+**Una nota sobre el `solape`, que casi se arregla mal:** el contrato «los paneles no tapan la
+barra de replay» medía el `getBoundingClientRect()` del último panel, y en cuanto la escalera
+pudo desbordar ese número sigue midiendo fuera *aunque ahí no se pinta nada* —el primer rojo
+pedía bajar el cap—. La comprobación correcta es contra **la caja que recorta**
+(`min(panel.bottom, area.bottom)`), y se añadió aparte que la caja entera termine por encima
+del replay. Y para medir dónde se pinta el eje no se pregunta a la librería (v4 no expone
+`timeScale().getOptions()`: la primera versión del assert contaba **0 ejes** y daba rojo en
+las diez tallas): se mide la franja que le falta al canvas dentro de su contenedor, que es el
+eje.
+
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
@@ -481,6 +531,12 @@ cola de velocidades, saliendo por el borde, a un gesto de distancia—:
 
 ![Barra de replay en el móvil](docs/captura-46-barra-replay-movil.png)
 
+**La escalera de indicadores en el teléfono** (390×844), abierta hasta el último panel: RSI y
+MACD con 30 px de gráfico cada uno —antes, 2 px—, sus cabeceras a una línea con los valores
+enteros y el eje de tiempo pintado bajo las velas:
+
+![Escalera de indicadores en el móvil](docs/captura-47-escalera-movil.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -568,12 +624,14 @@ node tests/network.test.js    #  10 comprobaciones de paginación y datos reales
 node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  103 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  133 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
                               #   + el bloque «Avanzado» del teléfono, medido pulsando
                               #   + la barra de replay del teléfono: cuatro bordes por control,
                               #     swipe hasta cada velocidad e ida y vuelta del deslizador
+                              #   + la escalera del teléfono: hueco pintado por panel, cap con
+                              #     deslizamiento, eje en un solo sitio y cabeceras sin corte
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
 node tests/limites.test.js    #  14 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
@@ -989,6 +1047,26 @@ bar-replay-app/
   px). Y se probó el atajo de poner la fila del workspace en `auto` sin compactar nada:
   **no sirve**, con dos filas `auto` que piden 363 + 248 el contenedor de 504 las recorta
   a 256 + 248, idéntico a lo de antes (lo dice el comentario de `css/bitunix.css` §10).
+- **Lo que mide un contrato tiene que ser lo que se PINTA (2026-10-09), y el mismo defecto
+  apareció dos veces en la misma tarde.** Al topar la escalera del teléfono con
+  `#paneArea{max-height:117px;overflow-y:auto}`, los paneles no desbordaron: **encogieron** a
+  36 px (8 de gráfico), porque `#paneArea` es `flex-direction:column` y los hijos tienen
+  `flex-shrink:1` por defecto → `flex:0 0 auto`. Es literalmente la corrección que había
+  necesitado media hora antes la barra de replay (`.rb-progress` a `width:0` por el mismo
+  mecanismo), y la detecta el mismo tipo de comprobación: el alto del *canvas*, no el del
+  contenedor. Las tres mediciones que hubo que reescribir en este bloque, todas por lo mismo:
+  (1) el `solape` contra el `getBoundingClientRect()` de un panel desbordado —fuera de la caja
+  que lo recorta no se pinta nada: se mide `min(hijo, caja)` y, aparte, que la caja termine por
+  encima del replay—; (2) preguntar «¿dónde está el eje?» a la librería, cuando
+  `timeScale().getOptions()` no existe en v4 (contaba 0 ejes y el rojo salía en las diez tallas
+  por un assert tonto, no por un defecto) —se mide la franja que le falta al canvas, que ES el
+  eje—; (3) un bloque de test que mutaba el estado de los indicadores y dejaba el gráfico 56 px
+  más alto para los asserts de más abajo (`pages-bitunix.js` comparaba el antes y el después de
+  abrir «Avanzado» y el comparado ya no era el mismo): **un bloque que toca el estado lo
+  devuelve**, y se comprueba que lo devolvió. Y la lección de fondo del eje: cuando un elemento
+  reparte un hueco fijo (24 px de cabecera, ~26 de eje), «el panel mide 44 px» no dice nada de
+  lo que se ve —lo que se ve son 2 px—; los contratos de este proyecto miden desde entonces el
+  hueco pintado, no la caja pedida.
 - **La barra de replay del teléfono, y la escala del deslizador (2026-10-09).** Dos defectos
   que estaban en TODAS las pantallas y uno que solo se veía en el móvil. (1) El
   `<input type="range">` de posición llevaba `max="100"` mientras `UI.refreshReplayBar`
