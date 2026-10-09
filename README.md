@@ -590,7 +590,8 @@ node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto herman
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)
-node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+node tests/promediar.test.js    #  82 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+                              #   (82 u 84: un caso se omite solo si en la serie de hoy no hay un -1 % futuro)
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
@@ -620,17 +621,31 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1095 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1115 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1393 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1095 locales + 298 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `5c7cf26` — y el `md5` del archivo publicado (`3edf55ce…`, 944 481 B)
-coincide byte a byte con el del build local: 12 del buscador + 10 de dibujos +
-46 de promediado/TP + 57 del trailing + **108 de la piel Bitunix** (4 comprobaciones nuevas:
-la barra superior del teléfono medida sobre lo publicado —ni un dato con ellipsis—) +
-65 del marcaje de PnL)
+**1420 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1115 locales + 305 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `44d36ed`. Aquí no basta con que la batería esté verde: se comprueba que
+lo servido ES lo construido, midiendo el `md5` en la URL pública contra el fichero local —
+`bar-replay-pro-unico.html` `66a490e9…` (947 533 B), `index.html` `47646e33`,
+`css/bitunix.css` `cf8d2b9f`, `js/uiController.js` `0163b026` y la captura nueva
+`docs/captura-46-barra-replay-movil.png` `99ad1af5`: los cinco, byte a byte iguales—).
+Desglose de las seis publicadas: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
+57 del trailing + **115 de la piel Bitunix** (7 comprobaciones nuevas: la barra de replay del
+teléfono medida sobre lo publicado —deslizador pisable de 20 px, línea de posición dentro de la
+barra y no debajo, escala del `<input>` 0..1000 y la perilla siguiendo al replay con el foco
+puesto—) + 65 del marcaje de PnL
 
+- Nota de la misma fecha sobre `test:pnl` (`tests/pnl-chart.test.js`, dos rojos **deterministas**,
+  reproducidos con este incremento aparcado con `git stash` —así se descartó que los metiera él—):
+  el bloque que busca «un tramo con PnL en los dos lados» aceptaba tramos donde el precio **tocaba**
+  el otro lado en una mecha, mientras la curva de PnL se pinta con el **cierre** de cada vela. Con
+  los datos de hoy eso daba una búsqueda satisfecha en la vela 854, un paseo que agotaba las 120
+  velas y un `min` de curva 0,00 exacto (el de la entrada), o sea: un rojo que acusaba al marcaje
+  de algo que la app no prometía. El criterio del escenario se cambió a cierres —mide lo mismo que
+  la comprobación— y el cruce aparece en 45 velas: 151/151. Un rojo hay que empezarlo por saber
+  **qué medía exactamente** la comprobación, no por apagarlo.
 - Nota de una de estas corridas (2026-10-09): `pages-promediar.js` dio un rojo **dentro de
   la batería entera** y verde en solitario. No era la app: el paseo del nivel usaba la tecla
   `→` y «⚡ Práctica rápida» reanudaba el autoplay por su cuenta, así que teclado y reloj
