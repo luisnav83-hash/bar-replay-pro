@@ -740,7 +740,9 @@ que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1478 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
 (1157 locales + 321 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-10
-con el despliegue en `8555a78`. Aquí no basta con que la batería esté verde: se comprueba que
+con el despliegue en `8555a78` (el commit siguiente, `830bebb`, solo tocó `README.md`, las
+capturas y un comentario de test: los siete ficheros de código servidos son byte a byte los de
+`8555a78`, que es lo que la lista de abajo comprueba). Aquí no basta con que la batería esté verde: se comprueba que
 lo servido ES lo construido, midiendo el `md5` en la URL pública contra el fichero local —
 `bar-replay-pro-unico.html` `9ee75a56…` (951 845 B), `index.html` `47646e33`,
 `css/bitunix.css` `ab76f49b`, `css/chart.css` `dd086d92`, `js/chart.js` `20df4968`,
