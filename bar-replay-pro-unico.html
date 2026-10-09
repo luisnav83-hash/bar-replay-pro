@@ -1356,6 +1356,12 @@ kbd {
 #btnBookLive { letter-spacing: .3px; }
 #btnBookLive.on { color: var(--up); border-color: rgba(37, 202, 147, .45); }
 #btnBookLive.off { color: var(--tx-4); }
+#btnOrderAvanzado { display: none; align-items: center; gap: 4px; height: 18px; padding: 0 6px;
+                    border: 1px solid var(--line); border-radius: 2px; background: var(--bg-3, #17171c);
+                    color: var(--txt-2, #8b8e96); font: 600 9px/1 var(--font-ui, ui-sans-serif);
+                    letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+#btnOrderAvanzado .ar { font-size: 9px; line-height: 1; }
+#btnOrderAvanzado:hover { color: var(--txt-1, #e6e7ea); border-color: var(--line-2, #2a2a32); }
 @media (max-width: 1000px) {
   :root { --stats-h: 34px; --toolbar-h: 30px; }
   #topbar { min-height: 0; }
@@ -1515,7 +1521,36 @@ kbd {
     #chartArea { min-height: 350px; }
   }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
-  #sidebar > #orderCard > .card-body { max-height: 214px; }
+  #sidebar > #orderCard > .card-body { max-height: none; overflow-y: auto; overscroll-behavior: contain;
+                                      padding: 4px 8px 3px; gap: 2px; scrollbar-width: thin; }
+  #orderCard .ord-segs { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+  #orderCard .ord-segs > .seg { flex: 1 1 auto; min-width: 0; }
+  #orderCard .field { flex-direction: row; align-items: center; gap: 6px; }
+  #orderCard .field .field-label { font-size: 9px; white-space: nowrap; }
+  #orderCard .field .input-row { flex: 1 1 auto; min-width: 0; }
+  #orderCard .order-actions .btn { height: 34px; font-size: 12px; }
+  #orderCard .order-actions { gap: 6px; }
+  #orderCard .bf-cost { min-height: 22px; margin-top: 0; padding-top: 0; gap: 6px; font-size: 9px; align-items: center; }
+  #orderCard .bf-cost .bf-flat { height: 24px; padding: 0 7px; font-size: 9px; }
+  #orderCard > .card-head { flex: 0 0 auto; height: 28px; gap: 5px; padding: 0 6px; }
+  #orderCard > .card-body { flex: 1 1 auto; min-height: 0; }
+  #orderCard .bf-margin-row { min-height: 22px; }
+  #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
+  #orderCard .field { min-height: 26px; }
+  #orderCard .field input { height: 24px; }
+  #orderCard .bf-slide-quick { min-height: 24px; }
+  #orderCard .bf-slide-quick button { height: 22px; }
+  #orderCard .ord-segs { min-height: 24px; }
+  #orderCard #orderHint { display: none; }
+  #orderCard #limitHint { display: none; }
+  #orderCard .bf-fee-row:has(> .visually-hidden) { grid-template-columns: minmax(0, 1fr); }
+  #orderCard > .card-body .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  #orderAvanzado { display: flex; flex-direction: column; gap: 4px; }
+  #orderCard.adv-cerrado #orderAvanzado { display: none; }
+  #btnOrderAvanzado { display: inline-flex; height: 22px; }
+  #orderCard { position: relative; }
+  #orderCard.desborda::after { content: ""; position: absolute; left: 1px; right: 1px; bottom: 0; height: 14px;
+                               pointer-events: none; background: linear-gradient(180deg, rgba(20,20,24,0), var(--bg-2, #141418)); }
   #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
   #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
 }
@@ -1953,6 +1988,9 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
     <div class="card bf-order" id="orderCard">
       <div class="card-head"><span class="card-title">Nueva orden</span>
         <span class="tag tag-muted" id="tagPrice">—</span>
+        <button class="bf-adv" id="btnOrderAvanzado" aria-expanded="false" aria-controls="orderAvanzado"
+                title="Apalancamiento, stop loss y take profit (en el teléfono es donde no caben)">
+          Avanzado <span class="ar" aria-hidden="true">⌄</span></button>
       </div>
       <div class="card-body">
         <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
@@ -1968,9 +2006,20 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
           </div>
         </div>
-        <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
-          <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
-          <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+        <!-- Las dos filas de segmentados (tipo de orden y unidad del tamaño) van en la
+             MISMA línea en el teléfono (css/bitunix.css, bloque ≤640): son 28 px + 4 de
+             gap que el formulario necesita para no esconder nada. El precio límite baja a
+             su fila propia porque solo aparece en modo «Límite». -->
+        <div class="ord-segs">
+          <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
+            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
+            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+          </div>
+          <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
+            <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
+            <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
+            <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
+          </div>
         </div>
 
         <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
@@ -1994,12 +2043,6 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
         </div>
 
-        <div class="seg" id="segSize">
-          <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
-          <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
-          <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
-        </div>
-
         <label class="field full">
           <span class="field-label" id="sizeLabel">Tamaño (% del equity)</span>
           <span class="input-row">
@@ -2011,6 +2054,14 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
         <div class="bf-slide-quick" id="quickSize" role="group" aria-label="Fracción del disponible">
           <button class="q0" data-pct="0">0</button><button class="q1" data-pct="25">25</button><button class="q2" data-pct="50">50</button><button class="q3" data-pct="75">75</button><button class="q4 active" data-pct="100">100</button>
         </div>
+
+        <!-- «AVANZADO» DEL TELÉFONO: apalancamiento/comisión, SL/TP y sus atajos: 124 px
+             que Bitunix en el teléfono también esconde tras un desplegable. Se pliega con
+             el botón de la cabecera (js/uiController.js, recuerda el estado en
+             `ST «ordenAvanzado»`) y SOLO por ancho: fuera del bloque ≤640 de la CSS no
+             hay ninguna regla que oculte estas tres filas, así que en escritorio se ven
+             siempre y el botón ni aparece. -->
+        <div class="ord-adv" id="orderAvanzado">
 
         <div class="grid-2 bf-fee-row">
           <!-- Control HEREDADO del tema anterior: sigue existiendo porque
@@ -2055,6 +2106,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           <button class="chip" data-tppct="1">TP 1%</button>
           <button class="chip" data-tppct="2">TP 2%</button>
           <button class="chip" data-tppct="4">TP 4%</button>
+        </div>
         </div>
 
         <div class="order-actions">
@@ -9110,6 +9162,83 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.getElementById('btnCancelOrders').addEventListener('click', () => App.cancelAllOrders());
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
+    UI.initOrdenAvanzado();
+  };
+
+  /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
+     Por qué existe: medido en 390×844, el cuerpo del formulario pedía 510 px dentro de
+     una caja de 214 —once controles (los % rápidos del tamaño, el apalancamiento, el
+     precio de SL y TP, los seis atajos y el «Cerrar todo») vivían fuera del recorte y se
+     alcanzaban a scroll dentro de una caja sin ninguna señal de que hubiera más abajo—.
+     Bitunix hace lo mismo en el teléfono: deja precio, tamaño, % rápidos y los botones
+     de Long/Short, y esconde el resto tras un desplegable.
+
+     Cómo está montado, para que no se vuelva a colar un bug de los de antes:
+       · El estado vive en el `aria-expanded` del botón; la clase `adv-cerrado` en
+         `#orderCard` (la que oculta) y `ord-av-abierto` en `document.body` (la que deja
+         crecer la franja y poner el documento en modo desplazamiento) se derivan SIEMPRE
+         de ahí en `pinta()`. Un `hidden` puesto a mano en el div, o un `style` en la
+         franja, serían dos fuentes de verdad y la segunda tarde o temprano manda una.
+       · El CSS solo oculta dentro de `@media (max-width:640px)`: en escritorio estas tres
+         filas se ven siempre, así que plegar o desplegar aquí es inofensivo y el botón ni
+         se pinta. Ninguna suite de escritorio (entradas, límites, promediado, trailing)
+         cambia de comportamiento.
+       · Al cambiar el alto de la franja hay que volver a repartir la escalera
+         (`PC.ajustaEscalera`) y sincronizar los lienzos (`CM._syncPanes`); si no, el
+         gráfico se queda pintado con la altura del estado anterior. */
+  UI.initOrdenAvanzado = function () {
+    const btn = document.getElementById('btnOrderAvanzado');
+    const adv = document.getElementById('orderAvanzado');
+    const card = document.getElementById('orderCard');
+    if (!btn || !adv || !card || btn.dataset.pcAdv) return false;
+    btn.dataset.pcAdv = '1';
+    const abierto = () => btn.getAttribute('aria-expanded') === 'true';
+    const cuerpo = card.querySelector('.card-body');
+    /* El cuerpo de la tarjeta tiene su propio deslizador (css/bitunix.css, ≤640:
+       `overflow-y:auto` + `min-height:0`), así que abrir «Avanzado» o pasar a modo
+       «Límite» (su fila de precio más los siete atajos) NUNCA le roba altura al gráfico
+       ni deja controles fuera del mundo: lo que no cabe se alcanza deslizando la
+       tarjeta. Lo único que hay que mantener aquí es la SEÑAL de que desliza —sin ella,
+       un pie cortado a media fila parece un dibujo roto—. */
+    const marcaDesborde = () => {
+      if (!cuerpo) return;
+      card.classList.toggle('desborda', cuerpo.scrollHeight - cuerpo.clientHeight > 1);
+    };
+    const pinta = () => {
+      card.classList.toggle('adv-cerrado', !abierto());
+      const ar = btn.querySelector('.ar');
+      if (ar) ar.textContent = abierto() ? '⌃' : '⌄';
+      marcaDesborde();
+    };
+    btn.addEventListener('click', () => {
+      btn.setAttribute('aria-expanded', abierto() ? 'false' : 'true');
+      if (window.ST && ST.set) ST.set('ordenAvanzado', abierto());
+      pinta();
+      // El hueco del gráfico se reparte otra vez (PC) y las escalas se resincronizan:
+      // al cambiar el alto de la franja, el panel del PnL y los indicadores cambian de
+      // tamaño y Lightweight Charts no se entera solo.
+      if (window.PC && PC.ajustaEscalera) PC.ajustaEscalera();
+      if (window.CM && CM.main && CM._syncPanes) {
+        try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) { /* aún sin gráfico */ }
+      }
+    });
+    // Se recuerda la preferencia (abierta o cerrada) porque el teléfono se usa a ratos:
+    // si la persona trabaja con SL/TP, no debería tener que abrir el panel cada vez.
+    if (window.ST && ST.get) {
+      const g = ST.get('ordenAvanzado', null);
+      if (g === true || g === false) btn.setAttribute('aria-expanded', g ? 'true' : 'false');
+    }
+    pinta();
+    // `#limitRow` lo muestra y lo oculta OTRO módulo (escribe `style.display` y no avisa):
+    // el `ResizeObserver` sobre el cuerpo de la tarjeta es la forma de enterarse sin tocar
+    // ese código. Como el alto casi siempre cambia con la fila, basta con él; se enganchan
+    // también los botones de tipo de orden por si el cambio de alto queda en 0 px.
+    if ('ResizeObserver' in window) new ResizeObserver(() => marcaDesborde()).observe(cuerpo);
+    [...document.querySelectorAll('#segOrderType .seg-btn')].forEach((b) => b.addEventListener('click', () => {
+      requestAnimationFrame(marcaDesborde);
+    }));
+    window.addEventListener('resize', () => requestAnimationFrame(marcaDesborde));
+    return true;
   };
 
   /* ------------------------------ Panel inferior ------------------------------ */

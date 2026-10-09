@@ -231,6 +231,83 @@
     document.getElementById('btnCancelOrders').addEventListener('click', () => App.cancelAllOrders());
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
+    UI.initOrdenAvanzado();
+  };
+
+  /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
+     Por qué existe: medido en 390×844, el cuerpo del formulario pedía 510 px dentro de
+     una caja de 214 —once controles (los % rápidos del tamaño, el apalancamiento, el
+     precio de SL y TP, los seis atajos y el «Cerrar todo») vivían fuera del recorte y se
+     alcanzaban a scroll dentro de una caja sin ninguna señal de que hubiera más abajo—.
+     Bitunix hace lo mismo en el teléfono: deja precio, tamaño, % rápidos y los botones
+     de Long/Short, y esconde el resto tras un desplegable.
+
+     Cómo está montado, para que no se vuelva a colar un bug de los de antes:
+       · El estado vive en el `aria-expanded` del botón; la clase `adv-cerrado` en
+         `#orderCard` (la que oculta) y `ord-av-abierto` en `document.body` (la que deja
+         crecer la franja y poner el documento en modo desplazamiento) se derivan SIEMPRE
+         de ahí en `pinta()`. Un `hidden` puesto a mano en el div, o un `style` en la
+         franja, serían dos fuentes de verdad y la segunda tarde o temprano manda una.
+       · El CSS solo oculta dentro de `@media (max-width:640px)`: en escritorio estas tres
+         filas se ven siempre, así que plegar o desplegar aquí es inofensivo y el botón ni
+         se pinta. Ninguna suite de escritorio (entradas, límites, promediado, trailing)
+         cambia de comportamiento.
+       · Al cambiar el alto de la franja hay que volver a repartir la escalera
+         (`PC.ajustaEscalera`) y sincronizar los lienzos (`CM._syncPanes`); si no, el
+         gráfico se queda pintado con la altura del estado anterior. */
+  UI.initOrdenAvanzado = function () {
+    const btn = document.getElementById('btnOrderAvanzado');
+    const adv = document.getElementById('orderAvanzado');
+    const card = document.getElementById('orderCard');
+    if (!btn || !adv || !card || btn.dataset.pcAdv) return false;
+    btn.dataset.pcAdv = '1';
+    const abierto = () => btn.getAttribute('aria-expanded') === 'true';
+    const cuerpo = card.querySelector('.card-body');
+    /* El cuerpo de la tarjeta tiene su propio deslizador (css/bitunix.css, ≤640:
+       `overflow-y:auto` + `min-height:0`), así que abrir «Avanzado» o pasar a modo
+       «Límite» (su fila de precio más los siete atajos) NUNCA le roba altura al gráfico
+       ni deja controles fuera del mundo: lo que no cabe se alcanza deslizando la
+       tarjeta. Lo único que hay que mantener aquí es la SEÑAL de que desliza —sin ella,
+       un pie cortado a media fila parece un dibujo roto—. */
+    const marcaDesborde = () => {
+      if (!cuerpo) return;
+      card.classList.toggle('desborda', cuerpo.scrollHeight - cuerpo.clientHeight > 1);
+    };
+    const pinta = () => {
+      card.classList.toggle('adv-cerrado', !abierto());
+      const ar = btn.querySelector('.ar');
+      if (ar) ar.textContent = abierto() ? '⌃' : '⌄';
+      marcaDesborde();
+    };
+    btn.addEventListener('click', () => {
+      btn.setAttribute('aria-expanded', abierto() ? 'false' : 'true');
+      if (window.ST && ST.set) ST.set('ordenAvanzado', abierto());
+      pinta();
+      // El hueco del gráfico se reparte otra vez (PC) y las escalas se resincronizan:
+      // al cambiar el alto de la franja, el panel del PnL y los indicadores cambian de
+      // tamaño y Lightweight Charts no se entera solo.
+      if (window.PC && PC.ajustaEscalera) PC.ajustaEscalera();
+      if (window.CM && CM.main && CM._syncPanes) {
+        try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) { /* aún sin gráfico */ }
+      }
+    });
+    // Se recuerda la preferencia (abierta o cerrada) porque el teléfono se usa a ratos:
+    // si la persona trabaja con SL/TP, no debería tener que abrir el panel cada vez.
+    if (window.ST && ST.get) {
+      const g = ST.get('ordenAvanzado', null);
+      if (g === true || g === false) btn.setAttribute('aria-expanded', g ? 'true' : 'false');
+    }
+    pinta();
+    // `#limitRow` lo muestra y lo oculta OTRO módulo (escribe `style.display` y no avisa):
+    // el `ResizeObserver` sobre el cuerpo de la tarjeta es la forma de enterarse sin tocar
+    // ese código. Como el alto casi siempre cambia con la fila, basta con él; se enganchan
+    // también los botones de tipo de orden por si el cambio de alto queda en 0 px.
+    if ('ResizeObserver' in window) new ResizeObserver(() => marcaDesborde()).observe(cuerpo);
+    [...document.querySelectorAll('#segOrderType .seg-btn')].forEach((b) => b.addEventListener('click', () => {
+      requestAnimationFrame(marcaDesborde);
+    }));
+    window.addEventListener('resize', () => requestAnimationFrame(marcaDesborde));
+    return true;
   };
 
   /* ------------------------------ Panel inferior ------------------------------ */

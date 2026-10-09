@@ -560,7 +560,11 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       franja: { w: Math.round(sb.getBoundingClientRect().width), h: Math.round(sb.getBoundingClientRect().height), scrollea: sb.scrollWidth > sb.clientWidth + 2 },
       stats: (() => { const e = document.getElementById('bfStats'); return { w: Math.round(e.getBoundingClientRect().width), scrollea: e.scrollWidth > e.clientWidth + 2 }; })(),
       long: R('btnLong'), bottom: R('bottomPanel'),
-      inputs: [...document.querySelectorAll('#orderCard input[type=number]')].map((i) => Math.round(i.getBoundingClientRect().height)),
+      // Solo los campos VISIBLES: con el bloque «Avanzado» plegado (≤640), SL, TP y la
+      // comisión heredada están `display:none` y medirían 0 px —no es un área táctil
+      // pequeña, es un campo que no está en pantalla (lo que se exige es que al abrirlo
+      // ocupe lo suyo, y eso lo comprueba `tests/responsive.test.js`).
+      inputs: [...document.querySelectorAll('#orderCard input[type=number]')].filter((i) => i.offsetParent !== null).map((i) => Math.round(i.getBoundingClientRect().height)),
       // Área táctil: ningún control VISIBLE del panel de órdenes puede medir menos
       // de 20px de alto. El deslizador de apalancamiento medía 3px (la barra fina
       // por diseño), y en el móvil era imposible de agarrar con el dedo.
@@ -593,7 +597,24 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est2.stats.scrollea && est2.stats.w <= 390, 'la fila de estadísticas se desplaza en horizontal en vez de solaparse');
   ok(est2.franja.h <= 290 && est2.franja.scrollea, `la franja del terminal es una fila desplazable de ${est2.franja.h} px`);
   ok(est2.bottom && est2.bottom.y + est2.bottom.h <= 844 + 2, `el panel inferior cabe en el viewport (${est2.bottom.y}+${est2.bottom.h})`);
-  ok(est2.inputs.length >= 3 && est2.inputs.every((h) => h >= 24), `los campos del panel de órdenes son táctiles (${est2.inputs.join(',')})`);
+  /* Con el bloque «Avanzado» plegado (≤640) los ÚNICOS campos numéricos en pantalla son
+     el del tamaño y el del precio límite: exigir «≥3 campos» aquí era contar campos que
+     no existen a la vista. Se comprueban las dos mitades, que es lo que de verdad promete
+     el arreglo: los visibles son táctiles y, al abrir el bloque, los plegados salen con
+     su alto. La otra mitad la mide `tests/responsive.test.js` (SL/TP se enfocan y se
+     escriben tras deslizar la tarjeta). */
+  ok(est2.inputs.length >= 2 && est2.inputs.every((h) => h >= 24), `los campos visibles del panel de órdenes son táctiles (${est2.inputs.join(',')})`);
+  const advAbierto = await page.evaluate(async () => {
+    const g = (id) => document.getElementById(id);
+    const card = g('orderCard'), estabaCerrado = card.classList.contains('adv-cerrado');
+    if (estabaCerrado) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
+    const vis = [...document.querySelectorAll('#orderCard input[type=number]')].filter((i) => i.offsetParent !== null);
+    const r = { n: vis.length, hs: vis.map((i) => Math.round(i.getBoundingClientRect().height)), ids: vis.map((i) => i.id) };
+    if (estabaCerrado) { g('btnOrderAvanzado').click(); await new Promise((r2) => setTimeout(r2, 320)); }
+    return r;
+  });
+  ok(advAbierto.n >= 4 && advAbierto.hs.every((h) => h >= 24),
+     `al abrir «Avanzado» entran SL, TP y la comisión con alto táctil (${advAbierto.hs.join(',')} en ${advAbierto.n} campos: ${advAbierto.ids.join('/')})`);
   ok(est2.totalOculto, 'a 390 px la columna «Total» del libro se oculta (menos ruido, como en la app)');
   ok(est2.controles.length === 0,
      est2.controles.length ? `controles del formulario demasiado bajos para el dedo: ${est2.controles.map((c) => `${c.id}=${c.h}px`).join(', ')}`
