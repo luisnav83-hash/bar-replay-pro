@@ -146,24 +146,47 @@
    tiempo compartido, así que aquí solo hace falta poner la altura del contenedor.
    El alto elegido se guarda en el navegador; el doble clic lo devuelve al suyo. */
   const ALTO_MIN = 56, ALTO_MAX = 420, ALTO_KEY = 'pnlPaneAlto';
+  /* Suelo del gráfico EN EL TELÉFONO: las velas no se aprietan por debajo de esto ni a
+     golpe de arrastre. Va de la mano del `#chartWrap{min-height:120px}` de
+     css/bitunix.css (§986): si uno cambia, cambia el otro (y las pruebas lo miden). */
+  const SUELO_GRAFICO = 120;
   PC.ALTO_MIN = ALTO_MIN; PC.ALTO_MAX = ALTO_MAX;
+
+  /** El teléfono es el único sitio donde el alto hay que peleárselo con la escalera. */
+  const esEstrecho = () => !!(global.matchMedia && matchMedia('(max-width:640px)').matches);
 
   const altoGuardado = () => { const v = (global.ST && ST.get) ? ST.get(ALTO_KEY, null) : null; return isNum(v) ? v : null; };
 
   /**
-   * Recorta el alto a lo que cabe: ni menos del mínimo, ni más del 45 % del área de
-   * gráfico. El 45 % no es un capricho: medido en 390×844, el andamio deja al
-   * #chartArea 256 px (barra de dibujo 30 + fila del gráfico + escalera 145 + barra
-   * de replay 38) y el cuerpo NO es desplazable en el móvil (body overflow:hidden,
-   * docH == 844 == viewport), así que no hay «más abajo» adonde ir: si el panel de
-   * PnL pasara del 45 % la escalera se comería el gráfico entero. Con este techo la
-   * fila de las velas baja de 43 a 20 px como peor caso y el lienzo conserva sus
-   * 150 px de contrato.
+   * Techo del arrastre, calculado contra el HUECO REAL (no contra un porcentaje
+   * bonito). Medido en 390×844 antes de compactar el andamio del móvil: topbar 190 +
+   * workspace 504 (área de gráfico 256 + franja de órdenes 248) + registro 150, y
+   * dentro del área 30 de barra de dibujo + la fila del gráfico + 145 de escalera + 38
+   * de replay → a las velas les quedaban 43 px de fila y #chartWrap, por su min-height,
+   * se PINTABA ENCIMA de su propia escalera. Con el techo por hueco eso ya no puede
+   * pasar: el panel no pasa de lo que sobra tras dejarle al gráfico su suelo de CSS.
+   * En ancho se mantiene la regla de siempre (45 % del área), que es la que está
+   * validada por contrato en las otras suites.
    */
+  PC.techoAlto = function () {
+    const area = el('chartArea'), wrap = el('chartWrap');
+    if (!area) return ALTO_MAX;
+    const h = Math.round(area.getBoundingClientRect().height);
+    if (!h) return ALTO_MAX;
+    if (!esEstrecho()) return Math.max(ALTO_MIN + 40, Math.round(h * 0.45));
+    const fila = (id) => { const e = el(id); return e ? Math.round(e.getBoundingClientRect().height) : 0; };
+    const pa = el('paneArea'), p = el('panePnl');
+    // Lo que la escalera tiene pagado FUERA del panel de PnL (el RSI a 52 px en el
+    // teléfono probado): mientras se ve, ese dinero no está disponible para estirar.
+    const otros = pa ? [...pa.querySelectorAll('.indPane')].filter((e) => e !== p && !e.classList.contains('hidden') && e.offsetParent !== null)
+                          .reduce((t, e) => t + Math.round(e.getBoundingClientRect().height), 0) : 0;
+    const suelo = Math.max(SUELO_GRAFICO, Math.round(parseFloat(getComputedStyle(wrap || p).minHeight) || 0) || SUELO_GRAFICO);
+    return Math.max(ALTO_MIN, Math.min(ALTO_MAX, h - fila('drawToolbar') - fila('replayBar') - otros - SUELO_GRAFICO));
+  };
+
+  /** Recorta el alto pedido al hueco que hay: ni por debajo del suelo, ni sobre el techo. */
   function altoTopa(v) {
-    const area = el('chartArea');
-    const tope = area ? Math.max(ALTO_MIN + 40, Math.round(area.getBoundingClientRect().height * 0.45)) : ALTO_MAX;
-    return Math.round(Math.max(ALTO_MIN, Math.min(Math.min(ALTO_MAX, tope), v)));
+    return Math.round(Math.max(ALTO_MIN, Math.min(ALTO_MAX, PC.techoAlto(), v)));
   }
 
   PC.alto = function () {
@@ -182,6 +205,7 @@
     if (!p) return null;
     const h = altoTopa(v);
     p.style.height = h + 'px';
+    PC.ajustaEscalera();   // el pliegue de la escalera se decide en un solo sitio
     PC._alto = h;
     const asa = el('pnlPaneResize');
     if (asa) asa.setAttribute('aria-valuenow', String(h));
@@ -192,6 +216,9 @@
 
   /** Al arrancar: si hay alto guardado, se respeta (recortado a lo que quepa hoy). */
   PC.initAlto = function () {
+    // El alto POR DEFECTO del panel (el de su escalón de CSS, sin estilo en línea) es la
+    // frontera del pliegue: se mide ANTES de aplicar nada guardado.
+    PC._pnlDefecto = PC.alto();
     const h = altoGuardado();
     // OJO: si no hay nada guardado NO se pone un alto inline «para tenerlo medido»:
     // un style.height en el panel gana por encima de la escalera de alturas de
@@ -199,7 +226,34 @@
     // sus píxeles por contrato (lo cazó tests/browser.capture.js: 229 px en vez de 240
     // en la vista previa embebida de 1280x700). Solo manda un alto cuando la persona
     // lo eligió (o había guardado).
-    if (h !== null) PC.setAlto(h, false); else PC._alto = null;
+    if (h !== null) PC.setAlto(h, false); else { PC._alto = null; PC.ajustaEscalera(); }
+  };
+
+  /**
+   * En el teléfono, la escalera se ve de UNA en UNA mientras el PnL esté estirado por
+   * encima de su alto de CSS: en 390×844 no hay 844 px para velas grandes, PnL grande
+   * y RSI a la vez. Es el sitio que el arrastre PIDE PRESTADO, y se devuelve solo (al
+   * volver al alto de defecto, con el doble clic o girando el teléfono).
+   * En escritorio no se pliega nada: allí el reparto es de verdad flexible y el
+   * contrato del gráfico (≥240 px) lo vigilan otras suites.
+   */
+  PC.ajustaEscalera = function () {
+    const area = el('chartArea'), wrap = el('chartWrap'), pa = el('paneArea'), p = el('panePnl');
+    if (!pa) return false;
+    const h = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
+    const otros = [...pa.querySelectorAll('.indPane')].filter((e) => e !== p && !e.classList.contains('hidden'));
+    if (!area || !wrap || !p || p.classList.contains('hidden') || !otros.length || !esEstrecho()) {
+      pa.classList.remove('pnl-solo');
+      return false;
+    }
+    // ÚNICO motivo de plegar: el usuario estiró el PnL por encima de su alto de CSS.
+    // No se pliega «porque no cabe»: medido, en 390×844 la fila del gráfico con la
+    // escalera entera es de 129 px, tres por debajo del min-height del CSS viejo —
+    // ridículo para pagar con un panel de RSI desapareciendo. Lo que sí se ajustó fue el
+    // suelo del gráfico (120 px), para que ese caso límite no pinte encima de nada.
+    const solo = PC._alto !== null && h(p) > (PC._pnlDefecto || 0);
+    pa.classList.toggle('pnl-solo', solo);
+    return solo;
   };
 
   /** Asa: puntero (ratón, lápiz y dedo) + teclado + doble clic para volver al defecto. */
@@ -237,6 +291,8 @@
     asa.addEventListener('dblclick', () => {
       p.style.height = '';            // quita lo puesto a mano: manda otra vez el CSS
       PC._alto = null;
+      PC._pnlDefecto = PC.alto();
+      PC.ajustaEscalera();                        // y la escalera, entera otra vez
       if (global.ST && ST.set) ST.set(ALTO_KEY, null);
       PC.place();
     });
@@ -251,7 +307,9 @@
     // Ventana que cambia de tamaño: el alto se recorta a lo que quepa, sin reescribir
     // lo guardado (si mañana vuelve a haber sitio, la preferencia sigue ahí).
     window.addEventListener('resize', () => {
-      if (PC._alto !== null) PC.setAlto(PC._alto, false);
+      // Girar el teléfono cambia de escalón de CSS: el defecto se vuelve a medir cuando
+      // no hay alto elegido a mano (si lo hay, setAlto ya recorta al hueco de hoy).
+      if (PC._alto === null) { PC._pnlDefecto = PC.alto(); PC.ajustaEscalera(); } else PC.setAlto(PC._alto, false);
       PC.paintMini();   // el mini se dibuja en píxeles del dispositivo: con un resize
                        // (o un cambio de móvil a mesa) hay que rehacerlo, el CSS solo
                        // estira el <canvas> y la línea se veía borrosa

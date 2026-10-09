@@ -684,8 +684,13 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // Captura del incremento: la tabla del historial con su columna nueva, con la fila
   // ABIERTA (mini-en-vivo) y un trade CERRADO (recorrido sellado) viéndose a la vez.
+  // OJO: se RECORDA y se DEVUELVE la pestaña activa — si esto se queda en «Historial»,
+  // todo lo que mida después la tarjeta de la posición sale en 0 px (pestaña oculta)
+  // y la comprobación pasa sin mirar nada, que es la peor forma de pasar.
   await page.evaluate(() => {
     if (!TE.state.position) { document.getElementById('sizeInput').value = '18'; document.getElementById('btnLong').click(); }
+    const activa = document.querySelector('.tab.active');
+    window.__tabAntes = activa ? activa.dataset.tab : 'posiciones';
     const b = document.querySelector('.tab[data-tab="trades"]');
     if (b) b.click();
   });
@@ -708,6 +713,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.mouse.move(4, 4);   // fuera de la tabla: si no, el tooltip del hover sale en la foto
   await espera(250);
   const caja42b = await fotoDe('tradesTable', 'captura-42-recorrido-en-el-historial.png');
+  await page.evaluate(() => { const b = document.querySelector('.tab[data-tab="' + (window.__tabAntes || 'posiciones') + '"]'); if (b) b.click(); });
+  await espera(250);
   ok(caja42.visible && caja42b.width > 500 && caja42b.height > 90,
      `captura del incremento escrita (docs/captura-42-recorrido-en-el-historial.png, ${caja42b.width}×${caja42b.height} px, columna a la vista: ${caja42.visible})`);
 
@@ -811,13 +818,27 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(Mo.enTarjeta && Mo.enFila, `el mini vive en la fila de la tarjeta de la posición (nota «${Mo.nota}»)`);
   // El asa tiene que responder al DEDO (mismos handlers de puntero) y, sobre todo, no
   // puede convertir el arrastre en scroll de la página.
-  const toque1 = await page.evaluate(() => {
-    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
-    const pie = document.getElementById('panePnl').getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
-             alto: PC.alto(), sy: window.scrollY, ox: window.scrollX, pie: Math.round(pie.bottom),
-             fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1])) };
-  });
+  // Se mide TODO el reparto del #chartArea, no solo el panel: lo que este incremento
+  // arregló es que la CAJA del gráfico coincidiera con su FILA de grid (antes la caja
+  // medía 200 px por su min-height mientras la fila era de 43, y el gráfico se pintaba
+  // ENCIMA de su propia escalera). Esos son los números que se comprueban abajo.
+  const geo = () => {
+    const area = document.getElementById('chartArea'), wrap = document.getElementById('chartWrap');
+    const pa = document.getElementById('paneArea'), asa = document.getElementById('pnlPaneResize');
+    const r = area.getBoundingClientRect(), q = wrap.getBoundingClientRect(), s2 = pa.getBoundingClientRect();
+    const filas = getComputedStyle(area).gridTemplateRows.split(' ').map((x) => Math.round(parseFloat(x)));
+    const rsi = document.getElementById('paneRsi');
+    return { x: Math.round(asa.getBoundingClientRect().left + asa.getBoundingClientRect().width / 2),
+             y: Math.round(asa.getBoundingClientRect().top + asa.getBoundingClientRect().height / 2),
+             pane: PC.alto(), lienzo: Math.round(q.height), fila: filas[1], escalera: Math.round(s2.height),
+             area: Math.round(r.height), toolbar: filas[0], replay: filas[3],
+             solape: Math.max(0, Math.round(q.bottom - s2.top)), pie: Math.round(s2.bottom),
+             rsi: rsi ? getComputedStyle(rsi).display : 'sin-panel', plegada: pa.classList.contains('pnl-solo'),
+             suelo: Math.round(parseFloat(getComputedStyle(wrap).minHeight) || 0),
+             techo: PC.techoAlto(), sy: window.scrollY, ox: window.scrollX,
+             g: (window.ST && ST.get('pnlPaneAlto', null)) };
+  };
+  const toque1 = await page.evaluate(geo);
   const cdpT = await page.target().createCDPSession();
   await cdpT.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: toque1.x, y: toque1.y }] });
   for (let i = 1; i <= 4; i++) {
@@ -826,47 +847,42 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   await cdpT.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await espera(500);
-  const toque2 = await page.evaluate(() => ({
-    alto: PC.alto(), sy: window.scrollY, ox: window.scrollX, g: ST.get('pnlPaneAlto', null),
-    lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
-    fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1])),
-    fuera: (() => { const a = document.getElementById('chartArea').getBoundingClientRect(), p = document.getElementById('paneArea').getBoundingClientRect();
-      return Math.max(0, Math.round(p.bottom - a.bottom), Math.round(a.top - p.top)); })(),
-    pie: Math.round(document.getElementById('panePnl').getBoundingClientRect().bottom),
-    dentro: (() => { const a = document.getElementById('chartArea').getBoundingClientRect(), p = document.getElementById('panePnl').getBoundingClientRect();
-      return p.top >= a.top - 1 && p.bottom <= a.bottom + 1; })(),
-    area: Math.round(document.getElementById('chartArea').getBoundingClientRect().height),
-  }));
-  ok(toque2.alto > toque1.alto, `el arrastre con el dedo estira el panel (${toque1.alto} → ${toque2.alto} px)`);
-  ok(toque2.alto === Math.min(toque1.alto + 40, Math.max(96, Math.round(toque2.area * 0.45))),
-     `y para en el tope del móvil (45 % del área de ${toque2.area} px)`);
-  ok(toque2.sy === toque1.sy && toque2.ox === toque1.ox,
-     `el gesto no acaba en scroll de la página (scroll ${toque1.ox},${toque1.sy} → ${toque2.ox},${toque2.sy})`);
-  ok(toque2.lienzo >= 150, `el lienzo conserva sus 150 px de contrato tras estirar en el dedo (${toque2.lienzo})`);
-  // Y la verdad medida del móvil, escrita para que no se pueda vender como otra cosa:
-  // aquí el alto NO lo da el flujo de la página (body lleva overflow:hidden y el
-  // documento mide 844 = viewport), lo da el reparto del #chartArea (256 px en el
-  // teléfono probado: barra de dibujo + fila del gráfico + escalera + barra de
-  // replay). Estirar el panel le quita fila AL GRÁFICO, y por eso el techo es el 45 %
-  // del área: con él la fila baja (de ${toque1.fila} a ${toque2.fila} px, medido) pero
-  // no se apaga, y la escalera no se sale del área (nada recortado por el andamio).
-  ok(toque2.fila > 0 && toque2.fila <= toque1.fila,
-     `la fila del gráfico cede lo que gana el panel (${toque1.fila} → ${toque2.fila} px) y no se apaga`);
-  ok(toque2.fuera === 0, `la escalera sigue entera dentro de #chartArea (se sale ${toque2.fuera} px)`);
-  ok(toque2.g === toque2.alto, 'el alto elegido a dedo se guarda igual que con ratón');
-  const caja43 = await fotoDe('chartArea', 'captura-43-asa-en-el-dedo.png');
-  // Geometría MEDIDA en móvil (de ahí estos dos asserts, que no son de adorno): el
-  // #chartArea de 390×844 mide 256 px y la escalera se apoya en su pie, así que al
-  // estirar el panel CRECE HACIA ARRIBA (el pie no se mueve) en vez de empujar nada,
-  // y sigue ENTERO dentro del área: no se recorta ni se sale del terminal.
+  const toque2 = await page.evaluate(geo);
+  ok(toque2.pane > toque1.pane, `el arrastre con el dedo estira el panel (${toque1.pane} → ${toque2.pane} px)`);
+  ok(toque2.pane === Math.min(toque1.pane + 40, toque1.techo),
+     `y se para donde manda el HUECO REAL: techo ${toque1.techo} px = área ${toque1.area} − barra de dibujo ${toque1.toolbar}`
+     + ` − replay ${toque1.replay} − lo que la escalera tiene pagado fuera del PnL − suelo del gráfico ${toque1.suelo}`);
+  ok(toque2.solape === 0 && toque1.solape === 0,
+     `ningún píxel del gráfico pinta encima de la escalera (solape ${toque1.solape} → ${toque2.solape} px; antes del arreglo eran 157)`);
+  ok(toque2.lienzo >= toque2.suelo && toque2.fila >= toque2.suelo - 2,
+     `las velas conservan su suelo de CSS con el panel a tope (caja ${toque2.lienzo} y fila ${toque2.fila} contra suelo ${toque2.suelo})`);
   ok(toque2.pie === toque1.pie,
-     `el arrastre a dedo estira hacia arriba: el pie del panel no se mueve (${toque1.pie} → ${toque2.pie})`);
-  ok(toque2.dentro, `y el panel estirado a ${toque2.alto} px sigue entero dentro de #chartArea (${toque2.area} px)`);
-  ok(caja43.width >= 340 && caja43.height >= toque2.alto + 100,
-     `captura del arrastre a dedo escrita (docs/captura-43-asa-en-el-dedo.png, ${caja43.width}×${caja43.height} px con el panel a ${toque2.alto})`);
-  // Se deja el panel en su alto de CSS para no alterar lo que sigue midiendo el móvil.
+     `la escalera sigue anclada al pie del área: su borde de abajo no se mueve (${toque1.pie} → ${toque2.pie})`);
+  // El intercambio es de suma cero: lo que la escalera gana, lo cede la fila del
+  // gráfico, y al contrario (aquí el pliegue del RSI devolvió más de lo que el panel
+  // pidió, así que la fila CRECIÓ: 208 → 220). Si algún día no cuadra al píxel, es
+  // que alguien metió un margen/padding en medio del reparto.
+  ok(toque1.fila - toque2.fila === toque2.escalera - toque1.escalera,
+     `fila del gráfico y escalera se intercambian píxeles exactos (${toque1.fila}→${toque2.fila} / ${toque1.escalera}→${toque2.escalera})`);
+  ok(toque2.plegada === false || toque2.rsi === 'none',
+     `en el teléfono estirar el PnL pliega el resto de la escalera (RSI: ${toque1.rsi} → ${toque2.rsi}, plegada ${toque2.plegada})`);
+  ok(toque2.sy === toque1.sy && toque2.ox === toque1.ox,
+     `el gesto táctil no acaba en scroll de la página (scroll ${toque1.ox},${toque1.sy} → ${toque2.ox},${toque2.sy})`);
+  ok(toque2.g === toque2.pane, `el alto elegido a dedo se guarda igual que con ratón (ST «pnlPaneAlto» = ${toque2.g})`);
+  const caja43 = await fotoDe('chartArea', 'captura-43-asa-en-el-dedo.png');
+  ok(caja43.width >= 340 && caja43.height >= toque2.pane + toque2.suelo,
+     `captura del arrastre a dedo escrita (docs/captura-43-asa-en-el-dedo.png, ${caja43.width}×${caja43.height} px: panel ${toque2.pane} + gráfico ${toque2.lienzo})`);
+  // Y se deshace: el doble clic devuelve el panel a su alto de CSS y la escalera
+  // entera (con el RSI otra vez visible). Si esto no pasara, el pliegue sería robar
+  // información al usuario en vez de prestársela al arrastre.
   await page.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
-  await espera(300);
+  await espera(350);
+  const deVuelta = await page.evaluate(geo);
+  ok(deVuelta.pane === toque1.pane && deVuelta.plegada === false && deVuelta.rsi !== 'none',
+     `doble clic: el panel vuelve a ${deVuelta.pane} px, la escalera se despliega sola (RSI ${deVuelta.rsi}) y el gráfico recupera su fila (${deVuelta.fila} px)`);
+  ok(deVuelta.g === null, `y la preferencia guardada se borra (${String(deVuelta.g)})`);
+  ok(deVuelta.lienzo >= 200, `con el reparto nuevo el gráfico en 390×844 mide ${deVuelta.lienzo} px de alto útil (antes: caja 200 con 43 de fila)`);
+
   ok(F.d.velas >= 2 && F.d.marcas >= 1, `y sigue pintando ${F.d.velas} velas de curva con ${F.d.marcas} marcador(es)`);
 
   const G = await page.evaluate(async () => {
