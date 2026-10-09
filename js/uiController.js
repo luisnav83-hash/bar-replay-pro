@@ -1264,6 +1264,7 @@
       <td class="num" id="openR">${r}</td>
       <td>${(TE.state.pending || []).length ? 'EN VIVO · pendientes: ' + TE.state.pending.length : 'EN VIVO'}</td>
       <td id="openBars">${p.bars || 0} (${U.fmtDuration(p.entryTime, TE.state.lastTime || p.entryTime)})</td>
+      ${UI._liveSparkCell()}
     </tr>`;
   };
 
@@ -1287,6 +1288,90 @@
     if (pend) pend.textContent = (TE.state.pending || []).length ? 'EN VIVO · pendientes: ' + TE.state.pending.length : 'EN VIVO';
   };
 
+  /**
+   * Celda del mini-recorrido de un trade cerrado. Se pinta a mano en un <canvas> de
+   * 46×16 y el camino viaja en `data-v` (los números ya sellados por PC en el trade),
+   * así que renderTrades() no depende de que la posición siga existiendo.
+   * SIN `pnlPath` (trade de antes de esta versión) la celda queda vacía: `title` lo
+   * dice y el texto de la fila no cambia, que es lo que miran otras pruebas.
+   */
+  /** Celda de la fila ABIERTA: un canvas que pinta PC con la traza de este instante. */
+  UI._liveSparkCell = function () {
+    return '<td class="tr-spark-c" title="recorrido en vivo del PnL de esta posición">'
+      + '<canvas class="tr-spark" data-live="1" width="46" height="16" aria-hidden="true"></canvas></td>';
+  };
+
+  UI._sparkCell = function (t) {
+    const v = Array.isArray(t.pnlPath) ? t.pnlPath.filter(Number.isFinite) : [];
+    if (v.length < 2) {
+      return '<td class="tr-spark-c" title="sin recorrido guardado: este trade se cerró antes de la mini-curva"></td>';
+    }
+    const mx = Number.isFinite(t.pnlMax) ? t.pnlMax : Math.max(...v);
+    const mn = Number.isFinite(t.pnlMin) ? t.pnlMin : Math.min(...v);
+    return `<td class="tr-spark-c" title="máx ${U.fmtMoney(mx, true)} · mín ${U.fmtMoney(mn, true)}">`
+      + `<canvas class="tr-spark" data-v="${v.map((x) => x.toFixed(2)).join(',')}" width="46" height="16" aria-hidden="true"></canvas></td>`;
+  };
+
+  /**
+   * Pinta una mini-curva del recorrido en un <canvas> de 46×16. Se comparte entre la
+   * tabla (recorrido SELLADO en el trade cerrado) y la fila de la posición abierta
+   * (recorrido VIVO, que pinta PC en cada vela), para que las dos se vean igual.
+   */
+  UI._paintSpark = function (c, vals, dpr) {
+    const x = c.getContext && c.getContext('2d');
+    if (!x || !vals || vals.length < 2) return;
+    const W = 46, H = 16, f = dpr || 1;
+    c.width = Math.round(W * f); c.height = Math.round(H * f);
+    x.setTransform(f, 0, 0, f, 0, 0);
+    x.clearRect(0, 0, W, H);
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (max === min) { max += 1; min -= 1; }
+    const px = (i) => (i / (vals.length - 1)) * (W - 2) + 1;
+    const py = (v) => H - 1.5 - ((v - min) / (max - min)) * (H - 3);
+    const ult = vals[vals.length - 1];
+    const col = ult > 0 ? '#25ca93' : ult < 0 ? '#f65b55' : '#8b8e96';
+    const agua = min < 0 && max > 0 ? py(0) : null;
+    if (agua !== null) {
+      x.strokeStyle = 'rgba(139,142,150,.45)'; x.setLineDash([1.5, 1.5]); x.lineWidth = 1;
+      x.beginPath(); x.moveTo(0, agua); x.lineTo(W, agua); x.stroke(); x.setLineDash([]);
+    }
+    // Relleno desde el agua (o desde el borde si el trade nunca la cruzó): en 46 px lo
+    // que se lee es la FORMA, así que el relleno importa más que el grosor de la línea.
+    const base = agua !== null ? agua : H - 1;
+    x.beginPath(); x.moveTo(px(0), base);
+    for (let i = 0; i < vals.length; i++) x.lineTo(px(i), py(vals[i]));
+    x.lineTo(px(vals.length - 1), base); x.closePath();
+    x.fillStyle = ult >= 0 ? 'rgba(37,202,147,.20)' : 'rgba(246,91,85,.20)';
+    x.fill();
+    x.beginPath();
+    for (let i = 0; i < vals.length; i++) { const ax = px(i), ay = py(vals[i]); if (i) x.lineTo(ax, ay); else x.moveTo(ax, ay); }
+    x.strokeStyle = col; x.lineWidth = 1.2; x.stroke();
+    x.fillStyle = col; x.beginPath(); x.arc(px(vals.length - 1), py(ult), 1.6, 0, Math.PI * 2); x.fill();
+  };
+
+  /** Pinta las mini-curvas selladas de los trades cerrados (tras rehacer la tabla). */
+  UI._paintTradeSparks = function () {
+    const dpr = Math.min(3, global.devicePixelRatio || 1);
+    document.querySelectorAll('#tradesBody canvas.tr-spark').forEach((c) => {
+      if (c.hasAttribute('data-live')) return;   // la viva la pinta PC en cada vela
+      const v = String(c.dataset.v || '').split(',').map(Number).filter(Number.isFinite);
+      UI._paintSpark(c, v, dpr);
+    });
+  };
+
+  /**
+   * Mini-en-vivo de la fila de la posición ABIERTA. Se llama desde PC.paintMini (que
+   * ya corre en cada vela del replay), así que la fila no va a otra ni desalinea con
+   * la cabecera: 13 celdas también.
+   */
+  UI.paintLiveSparks = function (vals) {
+    const dpr = Math.min(3, global.devicePixelRatio || 1);
+    const v = (Array.isArray(vals) ? vals : []).filter(Number.isFinite);
+    document.querySelectorAll('#tradesBody canvas.tr-spark[data-live]').forEach((c) => {
+      UI._paintSpark(c, v, dpr);
+    });
+  };
+
   UI.renderTrades = function () {
     const body = document.getElementById('tradesBody');
     const empty = document.getElementById('tradesEmpty');
@@ -1302,7 +1387,7 @@
     body.innerHTML = (abierta ? UI._openTradeRow(abierta) : '') + trades.map((t, i) => {
       const n = TE.state.trades.indexOf(t) + 1;
       const dur = U.fmtDuration(t.entryTime, t.exitTime);
-      return `<tr class="${t.pnl > 0 ? 'win' : 'loss'}">
+      return `<tr class="${t.pnl > 0 ? 'win' : 'loss'}" data-trade="${n}">
         <td>${n}</td>
         <td class="dir-${t.side}">${t.side === 'long' ? 'LONG' : 'SHORT'}</td>
         <td>${U.fmtDate(t.entryTime)}</td>
@@ -1315,8 +1400,10 @@
         <td class="num">${t.rMultiple !== null ? U.num(t.rMultiple, 2) : '—'}</td>
         <td>${TE.reasonLabel(t.reason)}</td>
         <td>${t.bars || 0} (${dur})</td>
+        ${UI._sparkCell(t)}
       </tr>`;
     }).join('');
+    UI._paintTradeSparks();   // los canvas solo se pueden pintar cuando ya están en el DOM
   };
 
   /* ------------------------------- Barra replay ------------------------------- */

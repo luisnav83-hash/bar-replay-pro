@@ -801,6 +801,12 @@ kbd {
      terminal, que en estrecho es una FILA desplazable (no una pila: si no, el
      panel de órdenes quedaría fuera del recorte y sería inalcanzable). */
   #workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  /* Nota medida (para no volver a intentarlo): poner esta fila en `auto` para que el
+     gráfico «recupere» altura NO sirve. Con `body{overflow:hidden}` y docH == 844, el
+     workspace son 504 px fijos; dos filas `auto` que piden 363 + 248 se siguen
+     recortando a 256 + 248, exactamente igual que con `minmax(0,1fr)`. El reparto del
+     alto en el móvil pasa por achicar el andamio (cabecera 190 px / franja de órdenes
+     248 px / registro 150 px), no por el truco del grid. */
   /* En la franja el libro va tumbado: sin cabecera de columnas y con tres
      filas por lado, para que el precio central quepa siempre. */
   .bf-book-cols { display: none; }
@@ -1029,6 +1035,13 @@ kbd {
 #posPnlSpark.vacio { opacity: .34; }
 #posPnlSparkNote { font-family: var(--mono); font-style: normal; font-size: 10px;
   color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Mini-curva del recorrido en el historial de trades ---- */
+#tradesTable th:last-child, #tradesBody td.tr-spark-c { width: 52px; text-align: left; }
+#tradesBody td.tr-spark-c { padding: 3px 4px; vertical-align: middle; }
+canvas.tr-spark { display: block; width: 46px; height: 16px;
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--line-soft); }
+#tradesBody tr:hover canvas.tr-spark { border-color: var(--line); }
 #panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
 
 @media (max-width: 640px) {

@@ -105,8 +105,8 @@ mirar el indicador nunca revela el futuro.
   queda** en pantalla y la curva se queda congelada en sus velas: se puede seguir
   moviendo el replay sin que crezca.
 - **El panel de PnL se estira**: arrastra su asa (⬍, pegada al borde superior del
-  panel) y el panel crece comiéndole sitio al gráfico; con **Mayús + ↑/↓** el paso es
-  de 40 px y con **doble clic** vuelve al suyo. El alto elegido se recuerda
+  panel) **con el ratón o con el dedo** y el panel crece comiéndole sitio al gráfico;
+  con **Mayús + ↑/↓** el paso es de 40 px y con **doble clic** vuelve al suyo. El alto elegido se recuerda
   (`ST 'pnlPaneAlto'`), se **recorta solo** a lo que cabe (entre 56 px y el 45 % del
   área, para que el gráfico conserve sus 150 px de contrato incluso a 390 px de
   ancho) y el asa no se come la ✕ del panel ni convierte el gesto en scroll
@@ -116,6 +116,17 @@ mirar el indicador nunca revela el futuro.
   línea en el color del signo, punto en el valor de ahora y nota con el máximo y el
   mínimo). Se pinta a mano en un `<canvas>` a la resolución real del dispositivo, así
   que no hay que levantar la vista del formulario para saber si la cosa mejora.
+- **Cada trade cerrado lleva su recorrido en el historial**: la tabla de trades gana
+  una última columna, «Recorrido», con una mini-curva de 46×16 px del PnL no realizado
+  que tuvo esa operación — con su máximo y su mínimo escritos en el `title` de la celda.
+  El recorrido **viaja dentro del trade** (`pnlPath`, recortado a 64 puntos *conservando
+  el máximo y el mínimo*, más `pnlMax`/`pnlMin`), así que no se recalcula al pintar la
+  tabla: sobrevive a cambiar de temporalidad, a olvidar la traza del gráfico y a
+  recargar la sesión. La fila de la posición **abierta** tiene su propia mini-curva en
+  vivo, que pinta el mismo motor del panel (`PC.paintMini` → `UI.paintLiveSparks`) en
+  cada vela del replay. Un trade cerrado antes de esta versión no lo inventa: su celda
+  queda vacía y el `title` lo dice.
+
 - El marcaje se apaga y enciende con **📈 PnL** en la barra del gráfico y la
   preferencia se recuerda (`ST 'pnlGrafico'`). La capa es `pointer-events: none`
   y queda por debajo de la leyenda (`z-index` 5 < 6): no se come ni el dibujo a
@@ -352,6 +363,18 @@ en la tarjeta de la posición, el pantallazo del recorrido con su «máx/mín»:
 
 ![Alto del panel y mini-PnL](docs/captura-41-alto-panel-y-mini.png)
 
+**El recorrido de cada trade, en el historial** — la última columna de la tabla: la fila
+de arriba es la posición abierta (mini-curva en vivo, 6 velas) y las demás son trades
+cerrados con su recorrido sellado, en el color de su resultado final:
+
+![Recorrido en el historial de trades](docs/captura-42-recorrido-en-el-historial.png)
+
+**El asa, con el dedo** (390×844) — el mismo gesto de estirar vale en el móvil: el panel
+pasa de 92 a 115 px (su techo es el 45 % del área de gráfico), la página no se desplace y
+el lienzo conserva sus 150 px:
+
+![Arrastre del panel con el dedo en móvil](docs/captura-43-asa-en-el-dedo.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -453,12 +476,15 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/pnl-chart.test.js      # 112 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 8 bloques:
+node tests/pnl-chart.test.js      # 138 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 9 bloques:
                                 #   posición viva (geometría medida contra CM.timeToX/priceToY, número igual al del
                                 #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
                                 #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
-                                #   navegador, para que el arranque sea de verdad nuevo) y móvil a 390 px
-node tests/pages-pnl.js          #   50 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+                                #   navegador, para que el arranque sea de verdad nuevo), móvil a 390 px CON EL DEDO
+                                #   (gesto táctil por CDP), alto del panel y mini de la tarjeta, y el recorrido sellado
+                                #   en el historial (I): 13 celdas contra 13 cabeceras, picos conservados por
+                                #   PC.reduce, title con máx/mín, y celda vacía en un trade sin recorrido
+node tests/pages-pnl.js          #   60 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
                                 #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
                                 #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
 node tests/bitunix.test.js      # 132 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
@@ -473,14 +499,14 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1024 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1050 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1294 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1024 locales + 270 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `00f5c10` — y el `md5` del archivo publicado (`7a8d4793…`) coincide byte
+**1330 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1050 locales + 280 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue de este incremento — y el `md5` del archivo publicado coincide byte
 a byte con el del build local: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
-57 del trailing + 95 de la piel Bitunix + 50 del marcaje de PnL)
+57 del trailing + 95 de la piel Bitunix + 60 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
@@ -573,11 +599,13 @@ bar-replay-app/
 │   ├── chart.js              # Gráfico principal, paneles y equity (Lightweight Charts)
 │   ├── pnlChart.js           # Marca la posición en el gráfico y su PnL vela a vela (banda,
 │                             #   etiqueta, panel con curva de alto ajustable y marcas en las velas;
-│                             #   además pinta el mini-PnL de la tarjeta de la posición)
+│                             #   además pinta el mini-PnL de la tarjeta, la mini-curva en vivo de la
+│                             #   fila abierta y SELLA el recorrido dentro del trade cerrado)
 │   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
 │   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
 │   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
-│   ├── uiController.js       # Cableado de la interfaz, modales y atajos
+│   ├── uiController.js       # Cableado de la interfaz, modales y atajos (y la mini-curva de
+│                             #   recorrido en cada fila del historial de trades)
 │   └── app.js                # Inicialización y orquestación
 ├── vendor/
 │   └── lightweight-charts.standalone.production.js   # v4.2.0 (Apache-2.0)
@@ -595,8 +623,8 @@ bar-replay-app/
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
-    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (112)
-    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (43)
+    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (138)
+    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (60)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -751,6 +779,27 @@ bar-replay-app/
   costaba ni un píxel** de gráfico (el cuerpo de la tarjeta tiene su propio scroll), así
   que se quitó el `@media (max-height)` que la ocultaba: una regla justificada con una
   cifra falsa es peor que no tenerla.
+- **En el móvil el alto del panel de PnL no lo da la página, lo quita el gráfico**
+  (medido en 390×844 con este incremento): `body` lleva `overflow:hidden` y el documento
+  mide 844 px = viewport, así que no hay «más abajo» adonde empujar. El reparto real es
+  cabecera 190 + workspace 504 (área de gráfico 256 = barra de dibujo 30 + fila del
+  gráfico + escalera de indicadores 145 + barra de replay 38) + registro 150. Por eso el
+  techo del arrastre es el **45 % del área** y no un máximo absoluto: al estirar a tope
+  (115 px) la fila del gráfico baja de 43 a 20 px —medido, y escrito así en
+  `tests/pnl-chart.test.js`— pero el lienzo conserva sus 150 px de contrato y la escalera
+  no se sale del área (`fuera === 0`). Se probó a poner la fila del workspace en `auto`
+  para que el gráfico «recuperara» altura: **no sirve**, con dos filas `auto` que piden
+  363 + 248 el contenedor de 504 las recorta a 256 + 248, idéntico a como está hoy (lo
+  dice el comentario de `css/bitunix.css` §10). Achicar el andamio del móvil es otro
+  incremento, no un parche de este.
+- **Una columna nueva en una tabla se añade AL FINAL y se arregla la fila abierta**
+  (esta vez contra un rojo de test, no a posteriori): el historial fija en otras suites
+  que el «Motivo» esté en `td:nth-child(11)` y que el `textContent` de la fila no cambie,
+  así que la mini-curva entra como decimotercera celda y, si no hay recorrido, la celda
+  va **vacía** con su `title` (un «—» habría cambiado el texto que comparan
+  `trailing.test.js` y `pages-promediar.js`). Y `UI._openTradeRow` tenía que ganar su
+  celda también: 12 celdas contra 13 cabeceras es una tabla desalineada que NINGÚN test
+  de «existe la columna» detecta — el detector es contar `tr.children` contra `th`.
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).

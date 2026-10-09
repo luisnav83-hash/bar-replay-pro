@@ -150,7 +150,16 @@
 
   const altoGuardado = () => { const v = (global.ST && ST.get) ? ST.get(ALTO_KEY, null) : null; return isNum(v) ? v : null; };
 
-  /** Recorta el alto a lo que cabe: ni menos del mínimo, ni más del 45 % del área. */
+  /**
+   * Recorta el alto a lo que cabe: ni menos del mínimo, ni más del 45 % del área de
+   * gráfico. El 45 % no es un capricho: medido en 390×844, el andamio deja al
+   * #chartArea 256 px (barra de dibujo 30 + fila del gráfico + escalera 145 + barra
+   * de replay 38) y el cuerpo NO es desplazable en el móvil (body overflow:hidden,
+   * docH == 844 == viewport), así que no hay «más abajo» adonde ir: si el panel de
+   * PnL pasara del 45 % la escalera se comería el gráfico entero. Con este techo la
+   * fila de las velas baja de 43 a 20 px como peor caso y el lienzo conserva sus
+   * 150 px de contrato.
+   */
   function altoTopa(v) {
     const area = el('chartArea');
     const tope = area ? Math.max(ALTO_MIN + 40, Math.round(area.getBoundingClientRect().height * 0.45)) : ALTO_MAX;
@@ -203,6 +212,9 @@
       mov = true; y0 = e.clientY; h0 = PC.alto();
       asa.classList.add('activa');
       try { asa.setPointerCapture(e.pointerId); } catch (err) {}
+      // En táctil, `preventDefault` sobre el puntero es lo que evita que el gesto se
+      // convierta en scroll de la página (junto con touch-action:none del CSS).
+      if (e.pointerType === 'touch') asa.focus({ preventScroll: true });
       e.preventDefault();
     });
     asa.addEventListener('pointermove', (e) => {
@@ -296,6 +308,9 @@
     ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.stroke();
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(vals.length - 1), Y(ult), 1.9, 0, Math.PI * 2); ctx.fill();
     if (nota) nota.textContent = `máx ${usd(max)} · mín ${usd(min)}`;
+    // Y la mini-curva de la fila ABIERTA del historial, con LA MISMA traza: un solo
+    // origen de datos para las tres representaciones (capa, panel y tarjetas).
+    try { if (global.UI && UI.paintLiveSparks) UI.paintLiveSparks(vals); } catch (e) {}
   };
 
   /* ------------------------------- panel PnL ------------------------------- */
@@ -401,7 +416,30 @@
     PC.place();
   };
 
-  /**.freeze de la última operación cerrada (para follow-up en el gráfico). */
+  /**
+   * Reduce una serie de números a `n` puntos como mucho PARA DIBUJAR. En 46 px no se
+   * puede decimar a lo bruto: el máximo y el mínimo del trade SON la información, así
+   * que se fuerzan (junto con el primer y el último punto) y el resto se reparte.
+   * Devuelve siempre como mucho `n` valores.
+   */
+  function reduce(vals, n) {
+    const tope = Math.max(4, Math.floor(n) || 64);
+    if (!Array.isArray(vals) || vals.length <= tope) return Array.isArray(vals) ? vals.slice() : [];
+    let maxi = 0, mini = 0;
+    for (let i = 0; i < vals.length; i++) {
+      if (vals[i] > vals[maxi]) maxi = i;
+      if (vals[i] < vals[mini]) mini = i;
+    }
+    const ids = new Set([0, maxi, mini, vals.length - 1]);
+    const extra = Math.max(0, tope - ids.size);
+    for (let e = 0; e < extra; e++) {
+      ids.add(Math.max(0, Math.min(vals.length - 1, Math.round(((e + 0.5) / extra) * (vals.length - 1)))));
+    }
+    return [...ids].sort((a, b) => a - b).map((i) => vals[i]);
+  }
+  PC.reduce = reduce;
+
+  /** Resume (.freeze) la última operación cerrada: es la fuente del recorrido sellado. */
   PC.captureRecap = function () {
     const cerrados = TE.state.trades.filter((t) => t.status === 'closed' && !t.parcial);
     const t = cerrados.length ? cerrados[cerrados.length - 1] : null;
@@ -409,6 +447,17 @@
     PC.recap = { side: t.side, qty: t.qty, entryPrice: t.entryPrice, entryTime: t.entryTime,
                  exitTime: t.exitTime, exitPrice: t.exitPrice, pnl: t.pnl, reason: t.reason,
                  parts: [], realized: t.pnl, additions: t.additions || 0, vivo: false };
+    /* El recorrido se SELLA dentro del trade cerrado: la tabla del historial lo pinta
+       sin recalcular nada, sigue ahí después de cambiar de temporalidad y sobrevive a
+       guardar/restaurar la sesión. Los trades cerrados antes de esta versión no lo
+       tienen y su celda queda VACÍA (con su title explicándolo), nunca inventada. */
+    const vals = PC.trace.map((p) => p.pnl);
+    if (vals.length >= 2) {
+      t.pnlPath = reduce(vals, 64);
+      t.pnlMax = Math.max(...vals);
+      t.pnlMin = Math.min(...vals);
+      try { if (global.UI && UI.renderTrades) UI.renderTrades(); } catch (e) {}
+    }
   };
 
   /** Curva del panel + líneas de máximo y mínimo. */
