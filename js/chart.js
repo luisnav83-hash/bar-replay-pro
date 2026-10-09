@@ -238,17 +238,57 @@
     show('rsi', cfg.rsi && cfg.rsi.on);
     show('macd', cfg.macd && cfg.macd.on);
     show('atr', cfg.atr && cfg.atr.on);
-    // La escala temporal solo se dibuja en el panel más bajo visible
-    const order = ['atr', 'macd', 'rsi']; // de abajo hacia arriba
-    const bottom = order.find((k) => cfg[k] && cfg[k].on) || null;
+    // Y el eje de tiempo, a donde haya hueco para él (ver CM._reparteEje)
+    CM._reparteEje();
+    // Re-alinear al aparecer/desaparecer paneles —y re-decidir el eje con la caja ya
+    // repartida, que al abrir un panel el CSS del tier todavía no ha medido—
+    setTimeout(() => {
+      try { CM._reparteEje(); CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) {}
+    }, 40);
+  };
+
+  /**
+   * DÓNDE SE PINTA EL EJE DE TIEMPO. El eje (las etiquetas de hora) ocupa ~18 px y la
+   * librería se los quita al hueco del panel que lo lleva. La regla histórica era «en el
+   * panel más bajo visible», y con las escaleras apretadas eso dejaba ese panel pintando
+   * en dos píxeles: medido, a 1440×900 el canvas del MACD era de 12 px y a 1400×560,
+   * 900×700, 1000×780 y 390×844 era de 2 px —un indicador decorativo—, mientras los
+   * paneles de encima conservaban los 14-39 px completos. El criterio pasa a ser de
+   * HUECO, no de posición: el eje se queda en el panel de abajo solo si a ese panel le
+   * quedan ≥ `CM.MIN_HUECO_CON_EJE` píxeles de gráfico; si no, se pinta en el chart
+   * principal —el mismo sitio que ya usa la app cuando no hay ningún panel abierto— y
+   * todos los paneles conservan su hueco entero.
+   *
+   * Se mide el contenedor (`.pane-chart`), no el canvas: el contenedor lo fija la rejilla
+   * y los `style.height` de PC.comprimeEscalera, así que la decisión NO realimenta su
+   * propia entrada (medir el canvas habría creado el vaivén que los `floor` de
+   * comprimeEscalera tardaron en/domar). `CM._ejeEn` deja constancia para los tests.
+   */
+  CM.MIN_HUECO_CON_EJE = 48;
+  CM._reparteEje = function () {
+    if (!CM.main) return 'principal';
+    const orden = ['atr', 'macd', 'rsi'];                       // de abajo hacia arriba
+    const c = CM.cfg || {};
+    const capo = (k) => document.getElementById('pane' + k.charAt(0).toUpperCase() + k.slice(1));
+    let abajo = null;
+    for (const k of orden) {
+      const pane = capo(k);
+      if (pane && !pane.classList.contains('hidden')) { abajo = k; break; }
+    }
+    let hueco = 0;
+    if (abajo) {
+      const cont = document.getElementById('chart' + abajo.charAt(0).toUpperCase() + abajo.slice(1));
+      hueco = cont ? Math.round(cont.getBoundingClientRect().height) : 0;
+    }
+    const enPanel = !!abajo && hueco >= CM.MIN_HUECO_CON_EJE;
     Object.keys(CM.panes).forEach((k) => {
       const chart = CM.panes[k];
-      if (!chart) return;
-      chart.timeScale().applyOptions({ visible: k === bottom });
+      if (chart) chart.timeScale().applyOptions({ visible: enPanel && k === abajo });
     });
-    CM.main.timeScale().applyOptions({ visible: bottom === null });
-    // Re-alinear al aparecer/desaparecer paneles
-    setTimeout(() => { try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) {} }, 40);
+    CM.main.timeScale().applyOptions({ visible: !enPanel });
+    CM._ejeEn = enPanel ? abajo : 'principal';
+    CM._ejeHueco = hueco;
+    return CM._ejeEn;
   };
 
   /* ============================== RENDER ============================== */

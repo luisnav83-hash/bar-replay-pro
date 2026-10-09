@@ -1506,7 +1506,19 @@ kbd {
   #ohlcLegend { font-size: 10px; gap: 5px 7px; max-width: calc(100% - 84px); padding: 3px 6px; }
   #ohlcLegend .lg-src { display: none; }
     #hiddenNotice { font-size: 9.5px; padding: 2px 8px; }
-  .indPane { height: 44px; }
+  .indPane { height: 56px; }
+  #paneArea:not(.pnl-solo) {
+    max-height: 117px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  }
+  #paneArea:not(.pnl-solo) .indPane { flex: 0 0 auto; }
+  #paneArea .pane-head { gap: 5px; }
+  #paneArea .pane-head .pane-title { font-size: 10px; white-space: nowrap; }
+  #paneArea .pane-head .pane-val { font-size: 10px; white-space: nowrap; min-width: 0;
+                                   overflow: hidden; text-overflow: ellipsis; }
+  #paneArea #rsiParams, #paneArea #macdParams, #paneArea #atrParams { display: none; }
+  #paneArea::-webkit-scrollbar { width: 4px; }
+  #paneArea .pane-resize { height: 18px; }
+  #paneArea .pane-close { min-height: 20px; min-width: 22px; }
   #topbar .field { flex-direction: row; align-items: center; gap: 6px; }
   #topbar .field-label { font-size: 9px; }
   #topbar .sb-quote { display: none; }
@@ -1624,7 +1636,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
-  #panePnl.indPane, #panePnl { height: 72px; }
+  #panePnl.indPane, #panePnl { height: 60px; }
   .pane-resize { height: 12px; right: 44px; }
   .pane-resize::after { top: 5px; width: 42px; height: 3px; }
   #posPnlSpark { max-width: 128px; height: 22px; }
@@ -5860,17 +5872,57 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     show('rsi', cfg.rsi && cfg.rsi.on);
     show('macd', cfg.macd && cfg.macd.on);
     show('atr', cfg.atr && cfg.atr.on);
-    // La escala temporal solo se dibuja en el panel más bajo visible
-    const order = ['atr', 'macd', 'rsi']; // de abajo hacia arriba
-    const bottom = order.find((k) => cfg[k] && cfg[k].on) || null;
+    // Y el eje de tiempo, a donde haya hueco para él (ver CM._reparteEje)
+    CM._reparteEje();
+    // Re-alinear al aparecer/desaparecer paneles —y re-decidir el eje con la caja ya
+    // repartida, que al abrir un panel el CSS del tier todavía no ha medido—
+    setTimeout(() => {
+      try { CM._reparteEje(); CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) {}
+    }, 40);
+  };
+
+  /**
+   * DÓNDE SE PINTA EL EJE DE TIEMPO. El eje (las etiquetas de hora) ocupa ~18 px y la
+   * librería se los quita al hueco del panel que lo lleva. La regla histórica era «en el
+   * panel más bajo visible», y con las escaleras apretadas eso dejaba ese panel pintando
+   * en dos píxeles: medido, a 1440×900 el canvas del MACD era de 12 px y a 1400×560,
+   * 900×700, 1000×780 y 390×844 era de 2 px —un indicador decorativo—, mientras los
+   * paneles de encima conservaban los 14-39 px completos. El criterio pasa a ser de
+   * HUECO, no de posición: el eje se queda en el panel de abajo solo si a ese panel le
+   * quedan ≥ `CM.MIN_HUECO_CON_EJE` píxeles de gráfico; si no, se pinta en el chart
+   * principal —el mismo sitio que ya usa la app cuando no hay ningún panel abierto— y
+   * todos los paneles conservan su hueco entero.
+   *
+   * Se mide el contenedor (`.pane-chart`), no el canvas: el contenedor lo fija la rejilla
+   * y los `style.height` de PC.comprimeEscalera, así que la decisión NO realimenta su
+   * propia entrada (medir el canvas habría creado el vaivén que los `floor` de
+   * comprimeEscalera tardaron en/domar). `CM._ejeEn` deja constancia para los tests.
+   */
+  CM.MIN_HUECO_CON_EJE = 48;
+  CM._reparteEje = function () {
+    if (!CM.main) return 'principal';
+    const orden = ['atr', 'macd', 'rsi'];                       // de abajo hacia arriba
+    const c = CM.cfg || {};
+    const capo = (k) => document.getElementById('pane' + k.charAt(0).toUpperCase() + k.slice(1));
+    let abajo = null;
+    for (const k of orden) {
+      const pane = capo(k);
+      if (pane && !pane.classList.contains('hidden')) { abajo = k; break; }
+    }
+    let hueco = 0;
+    if (abajo) {
+      const cont = document.getElementById('chart' + abajo.charAt(0).toUpperCase() + abajo.slice(1));
+      hueco = cont ? Math.round(cont.getBoundingClientRect().height) : 0;
+    }
+    const enPanel = !!abajo && hueco >= CM.MIN_HUECO_CON_EJE;
     Object.keys(CM.panes).forEach((k) => {
       const chart = CM.panes[k];
-      if (!chart) return;
-      chart.timeScale().applyOptions({ visible: k === bottom });
+      if (chart) chart.timeScale().applyOptions({ visible: enPanel && k === abajo });
     });
-    CM.main.timeScale().applyOptions({ visible: bottom === null });
-    // Re-alinear al aparecer/desaparecer paneles
-    setTimeout(() => { try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) {} }, 40);
+    CM.main.timeScale().applyOptions({ visible: !enPanel });
+    CM._ejeEn = enPanel ? abajo : 'principal';
+    CM._ejeHueco = hueco;
+    return CM._ejeEn;
   };
 
   /* ============================== RENDER ============================== */
@@ -6548,6 +6600,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   PC.comprimeEscalera = function () {
     const area = el('chartArea'), wrap = el('chartWrap'), pa = el('paneArea'), p = el('panePnl');
     if (!area || !wrap || !pa) return 0;
+    /* En el teléfono la escalera NO se aprieta: se desplaza (ver el `max-height` de
+       `#paneArea` en el bloque ≤640 de css/bitunix.css). Comprimir aquí solo reproducía el
+       defecto que se venía a arreglar: con `MIN_PANE` a 40 px y 24 de cabecera, al panel le
+       quedaban 15 px de gráfico —y 2 px mientras el eje de tiempo viviera dentro—. Se
+       limpian los `style.height` que hubiera dejado una ventana ancha, para que el CSS del
+       teléfono mande de verdad (un inline olvidado gana a la escalera de CSS: ya rompió
+       una vez el mini de la tarjeta de posición). */
+    if (esEstrecho()) {
+      let limpio = false;
+      [...pa.querySelectorAll('.indPane')].forEach((e) => {
+        if (e !== p && e.style.height) { e.style.height = ''; limpio = true; }
+      });
+      if (wrap.style.minHeight) { wrap.style.minHeight = ''; limpio = true; }
+      if (limpio) void pa.offsetHeight;
+      PC._debugComprime = { apretados: 0, alto: 'n/a', suelo: 'css (teléfono: se desplaza)' };
+      return 0;
+    }
     const alto = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
     const fila = (id) => alto(el(id));
     const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetParent !== null);
@@ -6633,6 +6702,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   PC.ajustaEscalera = function () {
     const plegado = PC._plieguePnL();
     PC.comprimeEscalera();
+    /* Y el eje de tiempo se reparte DESPUÉS del reparto: es la misma decisión en los dos
+       sentidos (si los paneles se apretaron, el eje se va al gráfico principal; si
+       recuperaron su alto, vuelve abajo). `CM._reparteEje` mide el contenedor, no el
+       canvas, así que no se realimenta. */
+    try { CM._reparteEje(); } catch (e) {}
     return plegado;
   };
 

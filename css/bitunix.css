@@ -1035,8 +1035,63 @@ kbd {
      y en 480×900 las velas quedan en 208 px, que es el «≥200 de altura útil» que pide
      tests/browser.capture.js para la captura móvil. Antes de compactar el andamio las
      velas tenían 43 px y, encima, la caja del lienzo (200 px por su min-height) se
-     pintaba 157 px SOBRE su propia escalera. */
-  .indPane { height: 44px; }
+     pintaba 157 px SOBRE su propia escalera.
+     El presupuesto, VUELTO A MEDIR tras compactar la barra de replay (390×844):
+       90 barra superior + [30 dibujo + 194 velas + 117 escalera + 34 replay]
+       + 250 franja de órdenes + 130 registro = 845 ≈ 844, sin desplazamiento del
+     documento. A 480×900 las velas quedan en 208 px, que es el «≥200 de altura útil» que
+     pide tests/browser.capture.js para la captura móvil. */
+  /* 56 px por indicador = 24 de cabecera + 31 de gráfico. Con los 44 px de antes el hueco
+     del gráfico era de 18 px y, como el eje de tiempo se pintaba DENTRO del panel de
+     abajo, ese panel medía 2 px de velas (medido en 390×844, 414×896 y 360×640): el RSI y
+     el MACD eran decorativos en el móvil. Con el eje movido al gráfico principal cuando no
+     hay hueco (CM._reparteEje, en js/chart.js), 31 px sí se leen. ¿Por qué 56 y no 58 o
+     64? Por la cuenta de la fila de abajo: 60 del PnL + 56 = 116, y la escalera tiene 117 —
+     los DOS paneles de la escalera por defecto caben enteros, sin recorte y sin desplazar. */
+  .indPane { height: 56px; }
+  /* Lo que no cabe, se desplaza —y la escalera conserva exactamente los 117 px de fila que
+     tenía: medido, el gráfico se queda con sus 194 px de siempre. Sin este `max-height`,
+     subir los paneles a 58 le habría comido 20 px al gráfico y roto el contrato de altura
+     de tests/responsive.test.js (`chart >= 180 && chart === fila`). El cap se levanta con
+     `.pnl-solo`, que es el caso en que la persona ESTIRA el PnL a propósito: ahí manda su
+     arrastre, no la escalera. */
+  #paneArea:not(.pnl-solo) {
+    max-height: 117px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  }
+  /* `flex:0 0 auto` es OBLIGATORIO para que esto sea «desplazar» y no «apretar»:
+     `#paneArea` es `display:flex;flex-direction:column` (css/chart.css:102) y los hijos
+     encogen por defecto —medido, con el cap puesto los paneles pasaban de 58 a 36 px y el
+     gráfico del panel a 8 px: el mismo defecto, con otro disfraz—. Que no encojan: lo que
+     sobra desborda, y desbordar dentro de un contenedor con `overflow-y:auto` es
+     alcanzable; encoger es invisible. */
+  #paneArea:not(.pnl-solo) .indPane { flex: 0 0 auto; }
+  /* LA CABECERA DEL PANEL, A UNA LÍNEA. Destapado por la propia captura de este bloque: a
+     390 px el MACD medía 95 de título + 268 de valores + 22 de ✕ + 16 de huecos = 401
+     dentro de 389, así que los dos `span` partían y su SEGUNDA línea se pintaba ENCIMA del
+     gráfico del propio panel (medido: los dos hijos a 24 px de alto dentro de una cabecera
+     de 24, o sea 24 de cabecera con 40 de contenido). Con el hueco a 5 px y la letra a
+     10 px son 379: una línea y 10 px de holgura. El título no se parte nunca (es corto y no
+     tiene nada que partir); los valores, si algún día no cupieran, se cortan con «…» —
+     mejor un número con ellipsis que una línea encima del gráfico—, y el contrato de
+     tests/responsive.test.js exige que en 390, 360 y 480 ese ellipsis NO llegue a usarse. */
+  #paneArea .pane-head { gap: 5px; }
+  #paneArea .pane-head .pane-title { font-size: 10px; white-space: nowrap; }
+  #paneArea .pane-head .pane-val { font-size: 10px; white-space: nowrap; min-width: 0;
+                                   overflow: hidden; text-overflow: ellipsis; }
+  /* Y lo que libera el hueco de verdad: en la cabecera, los PARÁMETROS del indicador
+     («12 26 9», «14») se quitan, no los valores. Es la misma decisión que en la barra de
+     replay (fuera la hora y la velocidad, que están en otro sitio; dentro el contador y el
+     estado): los parámetros son fijos y viven también en el panel de ajustes de indicadores,
+     mientras que «MACD 1,267.82 · SIG 1,345.12 · HIST −77.30» es lo único que cambia y lo
+     que se viene a mirar. Medido: 82 de título + 268 de valores + 22 de ✕ + 10 de huecos =
+     382 en 389 (con los parámetros eran 401 y el ellipsis se comía 8 px del HIST). */
+  #paneArea #rsiParams, #paneArea #macdParams, #paneArea #atrParams { display: none; }
+  #paneArea::-webkit-scrollbar { width: 4px; }
+  /* El asa del PnL y la ✕ de cada panel, a tamaño de dedo: medidos 345×12 y 20×13 —13 px
+     de diana justo en la pantalla donde el dedo mide 40—. Viven dentro de la cabecera de
+     24 px, así que no le cuestan un píxel al gráfico. */
+  #paneArea .pane-resize { height: 18px; }
+  #paneArea .pane-close { min-height: 20px; min-width: 22px; }
   /* PRESUPUESTO VERTICAL DEL TELÉFONO, MEDIDO (no a ojo): en 390×844 el andamio se
      llevaba 190 (barra) + 248 (franja de órdenes) + 150 (registro) = 588 px y al
      #chartArea le dejaba 256, de los que la escalera (145) + barra de dibujo (30) +
@@ -1375,11 +1430,16 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
-  /* 72 px en el teléfono, no 92: la cabecera del panel (valor + velas) ocupa ~19 px y
-     con ~53 de curva se lee el recorrido entero del trade. Esos 20 px son para el
-     gráfico, que es lo que se estaba comiendo el andamio; si hace falta más, el asa lo
-     estira y de paso pliega el RSI (PC.ajustaEscalera). */
-  #panePnl.indPane, #panePnl { height: 72px; }
+  /* 60 px, y la cuenta es la razón: con la escalera topada a su fila de siempre (117 px),
+     60 del PnL + 56 del RSI = 116 —entran LOS DOS paneles sin recorte; con los 72 de antes
+     el panel de al lado salía cortado 15 px por debajo del borde—. Es también el suelo que
+     exige `tests/pnl-chart.test.js` para que el mini no se aplaste (banda 60-100 px), así
+     que se queda en el borde de abajo de esa banda en vez de mover el contrato: a 60 la
+     curva mide 35 px, más que los 31 de un panel de indicador. El mini del teléfono nunca
+     fue para leer valores (eso está en la tarjeta y en la cabecera de este propio panel), es
+     para ver por dónde va el trade; y si se quiere más, el asa lo estira y
+     `#paneArea.pnl-solo` pliega el resto —el mecanismo ya estaba: ver PC._plieguePnL—. */
+  #panePnl.indPane, #panePnl { height: 60px; }
   /* En el dedo el asa se ensancha (de 7 a 12 px) y cede la mitad derecha del
      encabezado para que siga siendo fácil de agarrar sin comerte la ✕. */
   .pane-resize { height: 12px; right: 44px; }

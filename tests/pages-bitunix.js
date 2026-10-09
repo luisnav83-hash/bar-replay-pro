@@ -540,6 +540,62 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
            : `${etiqueta}: lo que no cabe de la barra no está enterrado (${RB ? RB.sw : '?'} px en ${RB ? RB.cw : '?'}, ${RB && RB.deslizable ? 'deslizable' : 'sin overflow'}): todas las velocidades se pulsan en algún punto del deslizamiento`);
       ok(RB && RB.ida && RB.ida.conFoco && Math.abs(RB.ida.conFoco.valor - RB.ida.conFoco.pide) <= 2,
          `${etiqueta}: la perilla sigue al replay con el deslizador enfocado (${RB && RB.ida && RB.ida.conFoco ? RB.ida.conFoco.valor + ' · índice ' + RB.ida.conFoco.pide : '?'} puntos de 1000; con el guard por foco se quedaba congelada)`);
+
+      /* LA ESCALERA DE INDICADORES EN EL TELÉFONO, SOBRE LO PUBLICADO. Antes de esto cada
+         panel medía 44 px con la cabecera de 24 y el eje de tiempo pintado DENTRO del panel
+         de abajo: a ese panel le quedaban 2 px de gráfico en el móvil (y 12 px a 1440×900).
+         Ahora el eje se pinta donde hay hueco (CM._reparteEje) y los paneles son de 56 px
+         con el PnL a 60, topando la escalera a su fila de siempre para que lo que sobre se
+         desplace en vez de comerle píxeles al gráfico. */
+      const ESC = await p.evaluate(async () => {
+        const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+        const g = (id) => document.getElementById(id);
+        /* ESTE BLOQUE TOCA EL ESTADO DE LOS INDICADORES, así que tiene que dejarlo EXACTAMENTE
+           como lo encontró: más abajo, el bloque de «Avanzado» compara el alto del gráfico con
+           el que midió arriba (`AV.vuelta.caja === G.chart`) y le daba igual porque nadie había
+           tocado nada —los paneles que abrió la iteración de 900×700 seguían abiertos—; con
+           este bloque apagándolos, el gráfico crecía 56 px y ese assert saltaba por los aires.
+           Se guarda y se devuelve, y el bloque no puede dejar huella en la geometría. */
+        const antes = { rsi: App.indicators.rsi.on, macd: App.indicators.macd.on, atr: App.indicators.atr.on };
+        App.indicators.rsi.on = true; App.indicators.macd.on = true;
+        App.applyIndicators(App.indicators, true);
+        await esperar(700);
+        const pa = g('paneArea'), q = pa.getBoundingClientRect(), rp = g('replayBar').getBoundingClientRect();
+        const franja = (id) => { const c = g(id); const cv = c && c.querySelector('canvas');
+          return c && cv ? Math.round(c.getBoundingClientRect().height - cv.getBoundingClientRect().height) : -1; };
+        const paneles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden'))
+          .map((e) => { const cv = e.querySelector('canvas'), cont = e.querySelector('.pane-chart');
+            return { id: e.id.replace('pane', ''), h: Math.round(e.getBoundingClientRect().height),
+              canvas: cv ? Math.round(cv.getBoundingClientRect().height) : 0,
+              inline: e.style.height || '—',
+              recortado: e.getBoundingClientRect().bottom > pa.getBoundingClientRect().bottom + 0.5 }; });
+        const max = pa.scrollHeight - pa.clientHeight;
+        pa.scrollTop = max; await esperar(200);
+        const ultimoDentro = (() => { const e = [...pa.querySelectorAll('.indPane')].filter((x) => !x.classList.contains('hidden')).pop();
+          const a = e.querySelector('.pane-close').getBoundingClientRect(), c = pa.getBoundingClientRect();
+          return a.bottom <= c.bottom + 0.5 && a.top >= c.top - 0.5; })();
+        pa.scrollTop = 0;
+        App.indicators.rsi.on = antes.rsi; App.indicators.macd.on = antes.macd; App.indicators.atr.on = antes.atr;
+        App.applyIndicators(App.indicators, true);
+        await esperar(320);
+        return { paneles, alto: Math.round(q.height), bot: Math.round(q.bottom), rpTop: Math.round(rp.top),
+          scrollea: pa.scrollHeight > pa.clientHeight + 2, max, eje: CM._ejeEn, franja: franja('chartWrap'),
+          franjaMacd: franja('chartMacd'), chart: Math.round(g('chartWrap').getBoundingClientRect().height),
+          devueltos: 'rsi:' + App.indicators.rsi.on + ' macd:' + App.indicators.macd.on,
+          igual: App.indicators.rsi.on === antes.rsi && App.indicators.macd.on === antes.macd
+            && App.indicators.atr.on === antes.atr };
+      });
+      const deInd = ESC.paneles.filter((x) => x.id !== 'Pnl');
+      ok(deInd.length === 2 && deInd.every((x) => x.h >= 56 && x.canvas >= 30),
+         `${etiqueta}: cada indicador de la escalera tiene ${deInd.map((x) => x.canvas + ' px de gráfico en ' + x.h + ' de panel').join(' y ')} (antes: 2 px, el RSI y el MACD no se veían en el móvil)`);
+      ok(ESC.eje === 'principal' && ESC.franja >= 10 && ESC.franjaMacd < 10,
+         `${etiqueta}: el eje de tiempo se pinta en el gráfico principal (franja de ${ESC.franja} px) y el panel de abajo no lo paga (${ESC.franjaMacd} px): ${ESC.eje}`);
+      ok(ESC.alto <= 118 && ESC.bot <= ESC.rpTop + 1 && ESC.chart >= 180,
+         `${etiqueta}: la escalera queda topada a ${ESC.alto} px, termina en y ${ESC.bot} con el replay en y ${ESC.rpTop} y el gráfico conserva ${ESC.chart} px`);
+      ok(ESC.igual === true,
+         `${etiqueta}: y el bloque deja los indicadores como los encontró (${ESC.devueltos}) —la geometría de las comprobaciones siguientes depende de eso, así que se comprueba la vuelta, no la buena voluntad—`);
+      ok(!ESC.scrollea || ESC.max > 0,
+         `${etiqueta}: lo que no cabe de la escalera se desplaza por dentro (${ESC.max} px deslizables)${ESC.scrollea ? '' : ' —y con la escalera por defecto no hace falta—'}`);
       ok(!RB || !RB.ida || (RB.ida.valor >= 690 && RB.ida.valor <= 710 && RB.ida.idx >= 68 && RB.ida.idx <= 72 && RB.ida.vuelta >= 48 && RB.ida.vuelta <= 52),
          `${etiqueta}: la perilla sigue la posición real (${RB && RB.ida ? RB.ida.valor : '?'} puntos de 1000 en la vela 70 %) y arrastrarla al 50 % lleva el replay a la mitad (${RB && RB.ida ? RB.ida.vuelta : '?'} %) —con el tope a 100 se leía 100 y el gesto no salía del 10 %—`);
 
