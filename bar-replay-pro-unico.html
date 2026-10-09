@@ -1608,6 +1608,19 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #topbar .bf-stat .bf-sub { font-size: 8px; }
   #topbar .bf-stat .bf-bar { width: 46px; flex: 0 0 auto; }
   #topbar .bf-stat.bf-src { flex: 0 0 auto; max-width: none; }
+  #replayBar { height: 34px; padding: 0 8px; gap: 8px; flex-wrap: nowrap; }
+  #replayBar .rb-buttons { order: 1; flex: 0 0 auto; }
+  #replayBar .rb-progress { order: 2; flex: 0 0 auto; gap: 6px;
+                            flex-direction: row; align-items: center; }
+  #replayBar .rb-speed { order: 3; flex: 0 0 auto; gap: 3px; }
+  #replayBar #progressRange { flex: 0 0 76px; width: 76px; height: 20px; }
+  #replayBar .rb-info .rb-sep { display: none; }
+  #replayBar .rb-status { font-size: 8px; padding: 0 4px; letter-spacing: .3px; }
+  #replayBar #pbPct { display: none; }
+  #replayBar .rb-buttons .rb-btn { width: 27px; height: 24px; }
+  #replayBar .rb-buttons .rb-play { width: 34px; }
+  #replayBar .rb-info { gap: 5px; white-space: nowrap; font-size: 9px; }
+  #replayBar #pbTime, #replayBar #pbSpeed, #replayBar .rb-clock { display: none; }
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
@@ -1953,7 +1966,13 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
       </div>
 
       <div class="rb-progress">
-        <input type="range" id="progressRange" min="0" max="100" value="0" step="1" title="Posición del replay: arrastra para saltar">
+        <!-- `max="1000"` y NO 100: `UI.refreshReplayBar` escribe `Math.round(fracción*1000)` y
+             `App.seekFromSlider` divide por 1000 —con el tope viejo el navegador CLAMPABA
+             el valor a 100, así que la perilla se quedaba pegada a la derecha desde la
+             primera vela (medido: índice 299/1500 → `value` 100; índice 1050 → 100) y
+             arrastrarla solo alcanzaba el 10 % del histórico (meter 500 se leía 100 →
+             10 %). La escala del elemento y la del código tienen que ser la misma. -->
+        <input type="range" id="progressRange" min="0" max="1000" value="0" step="1" aria-label="Posición del replay" title="Posición del replay: arrastra para saltar">
         <div class="rb-info">
           <span id="pbTime">—</span>
           <span class="rb-sep">·</span>
@@ -9104,8 +9123,32 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     const slider = document.getElementById('progressRange');
     slider.addEventListener('input', () => App.seekFromSlider(+slider.value / 1000));
-    slider.addEventListener('pointerdown', () => { UI._wasPlaying = BR.isPlaying(); BR.pause(); });
-    slider.addEventListener('pointerup', () => { if (UI._wasPlaying) BR.play(); });
+    /* Arrastrar la perilla tiene que hacer dos cosas y deshacerlas SIEMPRE: parar el replay
+       (para no competir con la mano) y avisar de que el repintado no le escriba el valor por
+       encima. El aviso vive en `_arrastrandoSlider`, no en el foco: con el guard viejo
+       (`document.activeElement !== slider`) la perilla se congelaba en cuanto el deslizador
+       se quedaba enfocado —medido: soltarlo con el replay sonando dejaba «vela 850 / 2000»
+       con la perilla todavía en el 20 %—, y en el teléfono el gesto se convierte en scroll
+       de la barra (que ahora desliza) y no llega a `pointerup`: sin `pointercancel` el replay
+       se quedaba pausado y la perilla pillada hasta recargar. `pointerup` se escucha en
+       `window` porque al soltar fuera del `<input>` el evento no vuelve al deslizador. */
+    const acabarDrag = () => {
+      if (!UI._arrastrandoSlider) return;
+      UI._arrastrandoSlider = false;
+      if (UI._wasPlaying) { UI._wasPlaying = false; BR.play(); }
+      /* Y se refresca YA: sin esto la perilla se quedaba en el punto donde la soltaste
+         hasta la siguiente vela (a 1×, un segundo entero; medido: valor 24 con el replay
+         en el 42,6 %). El repintado no espera al arrastre, así que hay que pedirlo a mano. */
+      UI.refreshReplayBar();
+    };
+    slider.addEventListener('pointerdown', () => {
+      UI._arrastrandoSlider = true;
+      UI._wasPlaying = BR.isPlaying();
+      BR.pause();
+      window.addEventListener('pointerup', acabarDrag, { once: true });
+      window.addEventListener('pointercancel', acabarDrag, { once: true });
+    });
+    window.addEventListener('blur', acabarDrag);   // ventana que pierde el foco a media arrastre
   };
 
   /* ------------------------------- Barra lateral ------------------------------- */
@@ -10463,7 +10506,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('pbSpeed', BR.speedLabel());
     setText('rbClock', c ? U.fmtDateSec(c.time) : '—');
     const slider = document.getElementById('progressRange');
-    if (slider && document.activeElement !== slider) slider.value = Math.round(BR.progressTotal() * 1000);
+    // Solo se respeta al usuario mientras ARRASTRA (ver `_arrastrandoSlider` en el cableado).
+    if (slider && !UI._arrastrandoSlider) slider.value = Math.round(BR.progressTotal() * 1000);
     U.$$('.speed-btn').forEach((b) => {
       const v = b.dataset.speed === 'max' ? 'max' : +b.dataset.speed;
       b.classList.toggle('active', v === BR.state.speed);

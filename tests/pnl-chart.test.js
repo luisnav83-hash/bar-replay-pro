@@ -207,10 +207,16 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     const MARGEN = 1.002;
     const futuroEnLosDosLados = (desde, entrada, dir) => {
       const c = App.candles, fin = Math.min(desde + 118, c.length - 1);
+      /* Y se busca contra el CIERRE de cada vela, no contra su mecha: lo que mide la
+         comprobación es la curva de PnL, y esa curva se pinta con el precio de cierre.
+         Con `high`/`low` el criterio aceptaba tramos donde el precio «tocó» el otro lado
+         en una sombra pero ningún cierre llegó a cruzar —medido con los datos de hoy:
+         búsqueda en la vela 854, paseo de 120 velas y `min` de la curva 0,00 exacto, el
+         de la entrada—, y el rojo cantaba un defecto que no existía. */
       let arriba = false, abajo = false;
       for (let j = desde + 1; j <= fin; j++) {
-        if (dir > 0 ? c[j].high > entrada * MARGEN : c[j].low < entrada / MARGEN) arriba = true;
-        if (dir > 0 ? c[j].low < entrada / MARGEN : c[j].high > entrada * MARGEN) abajo = true;
+        if (dir > 0 ? c[j].close > entrada * MARGEN : c[j].close < entrada / MARGEN) arriba = true;
+        if (dir > 0 ? c[j].close < entrada / MARGEN : c[j].close > entrada * MARGEN) abajo = true;
         if (arriba && abajo) return true;
       }
       return false;

@@ -69,6 +69,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         solape: paneBottom > rp.top + 2 ? Math.round(paneBottom - rp.top) : 0,
         ovx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
         recorteInterno: Math.round(Math.max(0, ca.bottom - ws.bottom)) + Math.round(Math.max(0, ws.bottom - R('bottomPanel').top)),
+        sliderEscala: (() => { const r = document.getElementById('progressRange');
+          return r ? [ +r.min, +r.max, Math.round(+r.value) ] : null; })(),
+        sliderCoherente: (() => { const r = document.getElementById('progressRange');
+          return r && window.BR ? Math.abs(+r.value - Math.round(BR.progressTotal() * 1000)) : -1; })(),
         playVisible: play.width > 0 && play.top >= 0 && play.bottom <= window.innerHeight + 2,
       };
     });
@@ -90,6 +94,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     ok(m.ovx === 0, `${etiqueta}: sin desbordamiento horizontal (${m.ovx}px)`);
     ok(m.recorteInterno === 0, `${etiqueta}: nada se recorta entre el gráfico y el panel inferior`);
     ok(m.playVisible, `${etiqueta}: el botón PLAY es visible sin desplazar`);
+    /* La escala del `<input>` de posición: el código escribe `fracción*1000` y divide por
+       1000, así que con `max="100"` (como estaba) el navegador clampaba el valor —la perilla
+       vivía pegada a la derecha desde la primera vela y el arrastre no pasaba del 10 % del
+       histórico—. Se comprueba el tope Y que el valor pintado sea el que pide el replay. */
+    ok(m.sliderEscala && m.sliderEscala[0] === 0 && m.sliderEscala[1] >= 1000
+       && m.sliderCoherente >= 0 && m.sliderCoherente <= 10,
+       `${etiqueta}: el deslizador de posición habla la escala del código (0..${m.sliderEscala ? m.sliderEscala[1] : '?'};`
+       + ` valor ${m.sliderEscala ? m.sliderEscala[2] : '?'} a ${m.sliderCoherente} del que pide el replay)`);
   }
 
   /* ═══════════ LA BARRA SUPERIOR DEL TELÉFONO: 135 → 90 px, y al gráfico ═══════════
@@ -303,6 +315,147 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
      `y se cierra como se abrió (aria ${AV.deVuelta.aria}, ST ${AV.deVuelta.st}, scroll ${AV.deVuelta.sy}, recorte ${AV.deVuelta.recorte})`);
   ok(AV.deVuelta.fila === AV.cerrado.fila && AV.deVuelta.caja === AV.deVuelta.fila,
      `el reparto vuelve exacto al estado cerrado (fila ${AV.deVuelta.fila} = ${AV.cerrado.fila})`);
+
+  /* ═══════════ LA BARRA DE REPLAY EN EL TELÉFONO: QUE TODO SE VEA Y SE PUEDA PULSAR ═══════════
+     Medido antes de tocar (390×844 sobre el archivo único): la barra medía 38 px con 795 px
+     de contenido en 389 de caja; el deslizador de posición empezaba en x 458 —fuera de la
+     barra— y su caja tenía 4 px de alto. Y no era soloen vertical: `chart.css` ponía el bloque de
+     progreso en columna (`.rb-progress{flex-direction:column}`) y `responsive.css`, al
+     envolver la barra (`flex-wrap:wrap`), mandaba la línea de información (hora, contador,
+     estado) a una segunda línea que caía FUERA por debajo del borde de una barra de 34 px,
+     sin scroll vertical: en un móvil la posición del replay nunca se había visto.
+     Se reordena (transporte · posición · velocidades), se aprieta y se desactivan los
+     duplicados; aquí se comprueba la geometría, que la cola deslizable sea alcanzable y —el
+     bug que salió en el camino, también en escritorio— que la escala del `<input>` sea la del
+     código. */
+  console.log('\\n▸ La barra de replay del teléfono (390×844)');
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await wait(420);
+  const RB = await page.evaluate(async () => {
+    const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+    const g = (id) => document.getElementById(id);
+    const app = window.App || window.__BR_APP__;
+    const barra = g('replayBar');
+    const R = (e) => { const r = e.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height, l: r.left, t: r.top, r: r.right, b: r.bottom }; };
+    const q = R(barra);
+    // Cortado = sale del alto de la barra (el defecto que nadie veía); fuera = del ancho.
+    const cortado = (e) => { const r = R(e); return r.h > 0 && (r.b > q.b + 0.5 || r.t < q.t - 0.5); };
+    const fuera = (e) => { const r = R(e); return r.r > q.r + 0.5 || r.l < q.l - 0.5; };
+    const pisa = (e) => { const b = R(e); if (b.h <= 0) return 'oculto';
+      const el = document.elementFromPoint(b.x + b.w / 2, b.y + b.h / 2);
+      return el && (e === el || e.contains(el) || el.contains(e)) ? 'si' : 'no'; };
+    const nombre = (e) => e.id || (e.classList.contains('speed-btn') ? 'vel ' + e.textContent.trim() : String(e.className));
+    const controles = [...barra.querySelectorAll('button, input, .rb-chip, .rb-status')];
+    const chips = [...barra.querySelectorAll('.speed-btn')];
+    const slider = g('progressRange');
+    const linea = ['pbIndex', 'pbStatus'].map((id) => ({ id, alto: Math.round(R(g(id)).h),
+      cortado: cortado(g(id)), fuera: fuera(g(id)), pisa: pisa(g(id)) }));
+    const botones = [...barra.querySelectorAll('.rb-buttons .rb-btn')].map((e) => ({ id: e.id, alto: Math.round(R(e).h), pisa: pisa(e) }));
+    // Cola deslizable: cada chip tiene que ser pulsable EN ALGUNA posición del swipe.
+    const deslizable = getComputedStyle(barra).overflowX === 'auto';
+    const max = barra.scrollWidth - barra.clientWidth;
+    const alcanzable = chips.map(() => false);
+    for (let k = 0; k < chips.length; k++) if (pisa(chips[k]) === 'si') alcanzable[k] = true;
+    if (deslizable && max > 0) {
+      for (let p = 0.2; p <= 1.001; p += 0.2) {
+        barra.scrollLeft = max * p; await esperar(80);
+        chips.forEach((e, k) => { if (pisa(e) === 'si') alcanzable[k] = true; });
+      }
+    }
+    barra.scrollLeft = 0;   // se deja como estaba: esta suite toma capturas justo después
+    const inalcanzables = chips.filter((e, k) => !alcanzable[k]).map((e) => e.textContent.trim());
+    // Función, no solo forma: ida y vuelta del deslizador contra el índice del replay.
+    const escala = { min: +slider.min, max: +slider.max };
+    let ida = null, vuelta = null;
+    if (window.BR && app && app.candles && app.candles.length > 4) {
+      const n = app.candles.length;
+      BR.seek(Math.round(n * 0.7)); await esperar(220);
+      ida = { idx: Math.round((BR.getIndex() + 1) / n * 100), valor: Math.round(+slider.value) };
+      slider.value = '500'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+      await esperar(220);
+      vuelta = { idx: Math.round((BR.getIndex() + 1) / n * 100) };
+      BR.seek(Math.round(n * 0.2)); await esperar(120);
+    }
+    // La perilla tiene que SEGUIR al replay aunque el deslizador tenga el foco (el guard
+    // viejo era `document.activeElement !== slider`: enfocado, se congelaba ahí).
+    let sigue = null;
+    if (window.BR && app && app.candles && app.candles.length > 4) {
+      slider.focus();
+      App.stepForward(); App.stepForward();
+      await esperar(260);
+      sigue = { foco: document.activeElement && document.activeElement.id,
+                valor: Math.round(+slider.value), pide: Math.round(BR.progressTotal() * 1000) };
+      slider.blur();
+    }
+    return { alto: Math.round(q.h), caja: (() => { const r = slider.getBoundingClientRect();
+             return { x: Math.round(r.x), y: Math.round(r.y), h: Math.round(r.height) }; })(), sigue,
+      sc: [barra.scrollWidth, barra.clientWidth], deslizable,
+      altoSlider: Math.round(R(slider).h), pisaSlider: pisa(slider), linea, botones,
+      vertical: controles.filter(cortado).map(nombre), fueraLinea: linea.filter((l) => l.fuera).length,
+      inalcanzables, escala, ida, vuelta };
+  });
+  ok(RB.alto === 34 && RB.altoSlider >= 20 && RB.pisaSlider === 'si',
+     `la barra del teléfono mide ${RB.alto} px y su deslizador de posición tiene ${RB.altoSlider} px de caja y se puede pulsar (antes: 38 px de barra, deslizador fuera en x 458 y caja de 4 px)`);
+  ok(RB.vertical.length === 0,
+     `ningún control sale cortado por los bordes horizontales de la barra${RB.vertical.length ? ' —' + RB.vertical.join(', ') + '—' : ''} (antes la línea de posición entera vivía bajo el borde inferior, sin scroll vertical donde buscarla)`);
+  ok(RB.botones.length === 5 && RB.botones.every((b) => b.alto >= 24 && b.pisa === 'si'),
+     `los 5 botones de transporte se ven y se pulsan sin deslizar nada (${RB.botones.map((b) => b.alto + 'px').join(' ')})`);
+  ok(RB.linea.every((l) => l.alto > 0 && !l.cortado && !l.fuera && l.pisa === 'si') && RB.fueraLinea === 0,
+     `y la línea de posición también: ${RB.linea.map((l) => l.id + ' ' + l.alto + 'px ' + l.pisa).join(' · ')} (contenedor de la barra en ${RB.sc[1]} px de caja)`);
+  ok(RB.escala.min === 0 && RB.escala.max >= 1000,
+     `el <input> de posición usa la escala del código (0..${RB.escala.max}): con el tope viejo de 100 el navegador clampaba el valor y la perilla se quedaba en el extremo desde la vela 1`);
+  ok(!RB.ida || (RB.ida.valor >= 690 && RB.ida.valor <= 710 && RB.ida.idx >= 68 && RB.ida.idx <= 72),
+     `poner el replay en la vela 70 % mueve la perilla a los ${RB.ida ? RB.ida.valor : '?'} puntos de 1000 (índice ${RB.ida ? RB.ida.idx : '?'} %)`);
+  ok(!RB.vuelta || (RB.vuelta.idx >= 48 && RB.vuelta.idx <= 52),
+     `y arrastrar la perilla al 50 % lleva el replay a la mitad del histórico (índice ${RB.vuelta ? RB.vuelta.idx : '?'} %) —antes 500 se leía 100 y el gesto no salía del 10 %`);
+  ok(RB.sigue && RB.sigue.foco === 'progressRange' && Math.abs(RB.sigue.valor - RB.sigue.pide) <= 2,
+     `la perilla sigue al replay con el deslizador enfocado (${RB.sigue ? RB.sigue.valor : '?'} puntos en el índice ${RB.sigue ? RB.sigue.pide : '?'} de 1000${RB.sigue && RB.sigue.foco ? ', foco puesto' : ''}) —con el guard por foco se quedaba congelada donde la dejaste`);
+  /* Y el arrastre con puntero: mientras dura, el replay se para y nadie escribe el valor
+     por encima del dedo; al soltar (o si el gesto se cancela, que en el teléfono pasa cada
+     vez que el deslizamiento de la barra se queda con el gesto) se reanuda y se engancha. */
+  const cajaSlider = { x: RB.caja.x + 8, y: RB.caja.y + RB.caja.h / 2 };
+  const duranteArrastre = async () => page.evaluate(async () => {
+    const r = document.getElementById('progressRange');
+    const antes = Math.round(+r.value);
+    App.stepForward(); App.stepForward();
+    await new Promise((x) => setTimeout(x, 260));
+    return { antes, despues: Math.round(+r.value), reproduciendo: BR.isPlaying(), arrastrando: !!UI._arrastrandoSlider };
+  });
+  await page.evaluate(() => { BR.play(); });
+  await wait(160);
+  await page.mouse.move(cajaSlider.x, cajaSlider.y);
+  await page.mouse.down();
+  const AD = await duranteArrastre();
+  await page.mouse.up();
+  await wait(200);
+  const AL = await page.evaluate(() => ({ reproduciendo: BR.isPlaying(), arrastrando: !!UI._arrastrandoSlider,
+    valor: Math.round(+document.getElementById('progressRange').value), pide: Math.round(BR.progressTotal() * 1000) }));
+  // Segundo round: el gesto que la barra se come (pointercancel) no puede dejar el replay pillado.
+  await page.mouse.move(cajaSlider.x, cajaSlider.y);
+  await page.mouse.down();
+  await page.evaluate(() => { document.getElementById('progressRange')
+    .dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })); });
+  await wait(200);
+  const AC = await page.evaluate(() => ({ reproduciendo: BR.isPlaying(), arrastrando: !!UI._arrastrandoSlider }));
+  await page.mouse.up();
+  await page.evaluate(() => { BR.pause(); document.getElementById('replayBar').scrollLeft = 0; });
+  ok(AD.reproduciendo === false && AD.arrastrando === true && AD.antes === AD.despues,
+     `mientras arrastras la perilla el replay está parado y nadie le mueve el valor (${AD.antes} → ${AD.despues}, arrastrando ${AD.arrastrando ? 'sí' : 'no'})`);
+  ok(AL.arrastrando === false && AL.reproduciendo === true && Math.abs(AL.valor - AL.pide) <= 3,
+     `al soltar, el replay vuelve a sonar y la perilla se engancha a la posición real (${AL.valor} vs ${AL.pide} puntos de 1000)`);
+  ok(AC.arrastrando === false && AC.reproduciendo === true,
+     `y si el gesto se cancela —en el teléfono, cuando el deslizamiento de la barra se lo lleva— el replay no queda pillado en pausa (arrastrando ${AC.arrastrando}, reproduciendo ${AC.reproduciendo ? 'sí' : 'no'})`);
+  ok(RB.inalcanzables.length === 0,
+     RB.inalcanzables.length ? `detrás del swipe hay velocidades que no se alcanzan: ${RB.inalcanzables.join(' ')}`
+       : `las velocidades que no caben (${RB.sc[0]} px de contenido en ${RB.sc[1]}) quedan a un gesto de la barra: todas se pulsan en algún punto del deslizamiento`);
+  /* Captura de la barra de replay en el teléfono: se ve el deslizador con la perilla en su
+     sitio (el bloque de arriba deja el replay en el 20 %), el contador y el estado, y la
+     cola de velocidades saliendo por el borde —es decir, deslizable, no perdida—. */
+  await page.evaluate(() => { document.getElementById('replayBar').scrollLeft = 0; });
+  await wait(220);
+  await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-46-barra-replay-movil.png') });
+
   /* Las dos capturas del teléfono, con los nombres del carrusel del README (44 y 45):
      la de arriba es el formulario tal cual se ve al abrir la app (todo a la vista, sin
      deslizar) y la otra, el bloque «Avanzado» abierto con su degradado al pie. */

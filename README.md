@@ -300,7 +300,7 @@ cortado por el borde izquierdo). A ≤640 la rejilla del formulario pasa a **una
 y TP uno debajo de otro, los dos a 363 px de ancho, sin desbordarse.
 
 `tests/responsive.test.js` (bloque «Avanzado del panel de órdenes
-en el teléfono», 15 comprobaciones) y `tests/pages-bitunix.js` (bloque móvil, 6) lo comprueban
+en el teléfono», 15 comprobaciones) y `tests/pages-bitunix.js` (bloque móvil, 13) lo comprueban
 pulsando de verdad:
 cada campo de SL/TP se enfoca con el puntero y acepta el número escrito, y cerrar devuelve
 píxel a píxel el estado anterior. La barra `Abrir Long / Abrir Short` sigue fija al pie.
@@ -317,10 +317,52 @@ mide los rectángulos y no deja solapar ninguna de las tres piezas (5 comprobaci
 nuevas: aviso dentro de la leyenda, altura de la caja y holgura con el eje, medidos
 también a 1440 px).
 
+**La barra de replay del teléfono: una línea y todo al alcance.** Medido en 390×844 sobre el
+build local: la barra medía 38 px de alto con **795 px de contenido dentro de 389 de caja**, el
+deslizador de posición empezaba en x 458 —fuera de la barra— y su caja era de **4 px** de alto.
+Y no era solo ancho: `css/chart.css` pone el bloque de progreso en columna
+(`.rb-progress{flex-direction:column}`) y `css/responsive.css`, a ≤900, envuelve la barra
+(`flex-wrap:wrap` + `.rb-progress{flex:1 1 100%}`) → la segunda línea —hora, contador,
+porcentaje, estado— caía **por debajo del borde inferior** de una barra de 34 px, y en la barra
+no hay scroll vertical donde buscarla. Es decir: en un móvil la posición del replay **nunca se
+había visto**. En ≤640 queda una sola línea de 34 px con `order` transporte → posición →
+velocidades, el deslizador fijo a 76×20 px (caja táctil) y fuera de la fila lo que está
+duplicado: `#pbTime`, `#pbSpeed` y `.rb-clock` (la hora UTC ya está en la leyenda OHLC y la
+velocidad en el chip activo) y `#pbPct` (el contador «vela 1152 / 1200» dice lo mismo con más
+precisión). Contenido ahora 644 px en 389: **se puede tocar sin deslizar** lo que hay que tocar
+—los cinco botones, a 24 px de alto, y la línea de posición— y la cola de velocidades se
+alcanza deslizando la propia barra (`overflow-x:auto`); no se esconde nada, se desplaza.
+
+**El deslizador hablaba en otra escala.** `UI.refreshReplayBar` escribe
+`Math.round(fracción·1000)` y `App.seekFromSlider` divide entre 1000, pero el `<input>` de
+`index.html` tenía `max="100"`: el navegador **clampaba** el valor —la perilla vivía pegada al
+extremo derecho desde la primera vela (medido: índice 299/1500 → `value` 100; índice 1050 →
+100)— y arrastrarla no salía del 10 % del histórico (escribir 500 se leía 100 → 10 %). Con el
+tope en 1000 la ida y vuelta cierra: poner el replay en la vela 70 % deja la perilla en 700
+puntos, y poner la perilla en 500 lleva el replay a la mitad (50 %).
+
+**Y la perilla dejaba de seguirte en cuanto la tocaban.** El repintado escribía el valor «salvo
+que el deslizador tenga el foco» (`document.activeElement !== slider`), de modo que después de un
+arrastre —el foco se queda puesto— la perilla se congelaba mientras el contador seguía subiendo
+(en la captura: «vela 850 / 2000» con la perilla en el 20 %). El permiso vive ahora en
+`UI._arrastrandoSlider`, que se pone en `pointerdown` y se quita en `pointerup`, en
+**`pointercancel`** y en el `blur` de la ventana —en el teléfono el gesto se cancela en cuanto el
+deslizamiento de la barra se lo lleva, y sin esa rama el replay se quedaba pausado con la perilla
+pillada hasta recargar—; y `acabarDrag()` refresca la barra al soltar, porque el repintado no
+espera al arrastre: sin ese refresco la perilla tardaba hasta la vela siguiente en engancharse
+(medido: valor 24 con el replay en el punto 426 de 1000, un segundo entero a 1×).
+
+Lo vigilan `tests/responsive.test.js` (bloque «La barra de replay del teléfono», 12
+comprobaciones) y `tests/pages-bitunix.js` (13 en el bloque móvil, sobre lo publicado). Dos
+detalles del cómo, que son la lección: se miden **los cuatro bordes** de cada control contra los
+de la barra —comprobar solo el derecho, como hacía la primera sonda, dejaba pasar el recorte
+vertical por abajo—, y cada chip de velocidad se declara alcanzable solo si se puede pulsar en
+**algún** punto del deslizamiento, no en la foto de reposo.
+
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
-`tests/responsive.test.js` (81 comprobaciones) y `tests/browser.capture.js`:
+`tests/responsive.test.js` (103 comprobaciones) y `tests/browser.capture.js`:
 el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
 altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
 el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
@@ -433,6 +475,12 @@ píxel (188 px en los dos estados):
 ![Formulario del móvil, plegado](docs/captura-44-formulario-movil-plegado.png)
 ![Formulario del móvil con «Avanzado» abierto](docs/captura-45-formulario-movil-avanzado.png)
 
+**La barra de replay en el teléfono** (390×844), tal como se ve tras el arreglo: una línea con
+los cinco botones de transporte, la perilla en su posición real y el contador con el estado —y la
+cola de velocidades, saliendo por el borde, a un gesto de distancia—:
+
+![Barra de replay en el móvil](docs/captura-46-barra-replay-movil.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -520,10 +568,12 @@ node tests/network.test.js    #  10 comprobaciones de paginación y datos reales
 node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  81 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  103 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
                               #   + el bloque «Avanzado» del teléfono, medido pulsando
+                              #   + la barra de replay del teléfono: cuatro bordes por control,
+                              #     swipe hasta cada velocidad e ida y vuelta del deslizador
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
 node tests/limites.test.js    #  14 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
@@ -924,6 +974,31 @@ bar-replay-app/
   px). Y se probó el atajo de poner la fila del workspace en `auto` sin compactar nada:
   **no sirve**, con dos filas `auto` que piden 363 + 248 el contenedor de 504 las recorta
   a 256 + 248, idéntico a lo de antes (lo dice el comentario de `css/bitunix.css` §10).
+- **La barra de replay del teléfono, y la escala del deslizador (2026-10-09).** Dos defectos
+  que estaban en TODAS las pantallas y uno que solo se veía en el móvil. (1) El
+  `<input type="range">` de posición llevaba `max="100"` mientras `UI.refreshReplayBar`
+  escribe `fracción·1000` y `App.seekFromSlider` divide entre 1000: el navegador **clampa** el
+  valor, así que la perilla nacía pegada a la derecha (medido: `value` 100 en la vela 300 de
+  1500) y arrastrar no sacaba del 10 % del histórico. La escala del elemento y la del código
+  son un contrato —mudo: ni un error, ni un rojo si nadie compara la perilla con el índice—.
+  (2) El repintado «respetaba» al usuario con `document.activeElement !== slider`, que en un
+  `<input>` quiere decir «para siempre en cuanto lo hayas tocado»: la perilla se congelaba
+  mientras el contador seguía subiendo. El permiso tiene que vivir en el **gesto**
+  (`pointerdown` → `UI._arrastrandoSlider`) y quitarse en `pointerup`, **`pointercancel`** y
+  `blur` de la ventana —en el teléfono el gesto se lo queda el deslizamiento de la barra, y
+  sin esa rama el replay se quedaba pausado hasta recargar—; y al soltar hay que **pedir el
+  repintado** (`UI.refreshReplayBar()`), porque sin él la perilla se engancha hasta la vela
+  siguiente (a 1×, un segundo: medido 24 contra 426). (3) En ≤640 la línea de posición del
+  replay no se veía nunca: `css/chart.css` ponía el bloque en columna y `css/responsive.css`
+  envolvía la barra, y una segunda línea fuera de un contenedor de 34 px con `overflow-x:auto`
+  (y vertical oculta) no se recupera deslizando. Tres reglas de método de esta pasada:
+  **`grep` del selector en TODOS los `css/*.css` antes de tocar uno** (aquí mandaban dos
+  ficheros que no era `bitunix.css`, y las reglas nuevas no entraban por nada), **comparar los
+  cuatro bordes** de cada control con los de su contenedor (la primera sonda miraba solo el
+  derecho y llamaba «bien» a un recorte por abajo), y en una fila deslizable declarar
+  alcanzable un control solo si se puede pulsar en **algún** punto del `scrollLeft` —medido en
+  reposo, los siete chips de velocidad parecían perdidos y estaban a un gesto—.
+
 - **El `min-height` de un gráfico en una fila `1fr` no agranda la fila: desborda.** Este
   era el hermano mayor del defecto del móvil, y tampoco era del móvil: con RSI + MACD
   abiertos el lienzo se pintaba ENCIMA de sus propios paneles de indicadores —**69 px a
