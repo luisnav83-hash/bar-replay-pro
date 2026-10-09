@@ -210,6 +210,50 @@ const numEn = (s) => {
   });
   ok(solapa === false, 'la etiqueta no tapa la leyenda OHLC');
   ok(F.banda && F.banda.h >= 2 && F.banda.w >= 2, `la banda sigue viéndose (${F.banda && F.banda.w}×${F.banda && F.banda.h})`);
+  // Las dos piezas nuevas del incremento, medidas en LO PUBLICADO: el asa del alto y
+  // el mini-PnL de la tarjeta. Se arrastra de verdad, con el ratón del navegador.
+  const asas = await p.evaluate(() => {
+    const a = document.getElementById('pnlPaneResize'), m = document.getElementById('posPnlSpark');
+    if (!a || !m) return null;
+    const r = a.getBoundingClientRect(), cs = getComputedStyle(a);
+    const x = m.getContext('2d').getImageData(0, 0, m.width, m.height).data;
+    let tinta = 0; for (let i = 3; i < x.length; i += 4) if (x[i] > 0) tinta++;
+    return { alto: PC.alto(), asaH: Math.round(r.height), asaAncho: Math.round(r.width),
+             tacto: cs.touchAction, enPanel: !!a.closest('#panePnl'),
+             miniTinta: tinta, miniAncho: Math.round(m.getBoundingClientRect().width),
+             lienzoAncho: m.width, dpr: Math.min(3, window.devicePixelRatio || 1),
+             nota: (document.getElementById('posPnlSparkNote') || {}).textContent || '' };
+  });
+  ok(asas !== null && asas.enPanel && asas.asaH >= 11 && asas.tacto === 'none',
+     asas ? `el asa del alto está en el panel y es agarrable a dedo (${asas.asaAncho}×${asas.asaH}, ${asas.tacto})` : 'FALTA el asa del alto');
+  ok(asas && asas.miniAncho > 40 && asas.miniTinta > 0,
+     `el mini de la tarjeta está pintado en lo publicado (${asas && asas.miniAncho} px CSS, ${asas && asas.miniTinta} px de tinta, nota «${asas && asas.nota}»)`);
+  ok(asas && asas.lienzoAncho >= asas.miniAncho * asas.dpr - 4,
+     `y a la resolución del dispositivo (${asas && asas.lienzoAncho} de lienzo para ${asas && asas.miniAncho} px CSS a ${asas && asas.dpr}x)`);
+  if (asas) {
+    const cajaAsa = await p.evaluate(() => { const r = document.getElementById('pnlPaneResize').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; });
+    await p.mouse.move(cajaAsa.x, cajaAsa.y); await p.mouse.down();
+    for (let i = 1; i <= 4; i++) { await p.mouse.move(cajaAsa.x, cajaAsa.y - i * 14); await esp(60); }
+    await p.mouse.up(); await esp(500);
+    const tras = await p.evaluate(() => ({ alto: PC.alto(), g: ST.get('pnlPaneAlto', null),
+                                           lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height) }));
+    // A 390 px el panel no puede estirarse todo lo que se le pida (el tope es el
+    // 45 % del área): se comprueba el arrastre CONTRA ese tope, no contra un número
+    // escrito a mano. En el móvil eso es precisamente lo que tiene que pasar.
+    const areaAlto = await p.evaluate(() => Math.round(document.getElementById('chartArea').getBoundingClientRect().height));
+    const topeMovil = Math.min(420, Math.max(96, Math.round(areaAlto * 0.45)));
+    const esperado = Math.min(asas.alto + 56, topeMovil);
+    ok(tras.alto === esperado && tras.g === tras.alto,
+       `arrastrar el asa estira el panel y lo guarda (${asas.alto} → ${tras.alto}, preferencia ${tras.g}; esperado ${esperado})`);
+    ok(tras.alto <= topeMovil, `y en móvil el panel no pasa del 45 % del área de ${areaAlto} px (tope ${topeMovil}, lienzo del gráfico ${tras.lienzo} px)`);
+    ok(tras.lienzo >= 150, `el gráfico conserva sus 150 px mínimos en el estrecho (${tras.lienzo})`);
+    // Se devuelve el panel a su alto de CSS para dejar la app como estaba (y para que
+    // la captura del README no dependa del arrastre).
+    await p.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+    await esp(350);
+    const deVuelta = await p.evaluate(() => ({ alto: PC.alto(), g: ST.get('pnlPaneAlto', 'sin-clave') }));
+    ok(deVuelta.alto < tras.alto && deVuelta.g === null, `doble clic: el panel vuelve al suyo (${deVuelta.alto} px) y la preferencia se borra`);
+  }
   ok(errs.length === 0, `ningún error de JavaScript en el marcaje${errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''}`);
   ok(rotos.every((u) => !/pnl|chart/i.test(u)), 'ninguna petición de recursos del gráfico caída' + (rotos.length ? ` (${rotos.length} fallidas, ajenas al marcaje)` : ''));
 

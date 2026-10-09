@@ -271,6 +271,11 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
   background:var(--bg-2);border-bottom:1px solid var(--line-soft);font-size:10px;
 }
 .pane-title{color:var(--tx-3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
+.pane-resize{position:absolute;left:0;right:56px;top:0;height:7px;z-index:7;cursor:ns-resize;touch-action:none;}
+.pane-resize::after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);
+  width:34px;height:2px;background:var(--line);opacity:.55;}
+.pane-resize:hover::after,.pane-resize.activa::after{background:var(--lima);opacity:1;}
+.pane-resize:focus-visible{outline:1px solid var(--lima);outline-offset:1px;}
 .pane-title b{color:var(--tx-2);font-family:var(--mono);}
 .pane-val{font-family:var(--mono);color:var(--accent-2);font-size:10.5px;}
 .pane-close{margin-left:auto;background:none;border:none;color:var(--tx-4);font-size:10px;}
@@ -1514,12 +1519,22 @@ kbd {
 #pnlBadgePct, #pnlBadgeDelta { color: var(--tx-3); font-size: 10px; }
 #pnlBadgeReal { color: var(--tx-4); font-size: 10px; }
 #pnlPaneVal { font-family: var(--mono); }
+#posPnlMini .mini-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#posPnlSpark { display: block; width: 100%; max-width: 180px; height: 26px;
+  background: rgba(255, 255, 255, .02); border: 1px solid var(--line-soft); }
+#posPnlSpark.vacio { opacity: .34; }
+#posPnlSparkNote { font-family: var(--mono); font-style: normal; font-size: 10px;
+  color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
 @media (max-width: 640px) {
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
   #panePnl.indPane, #panePnl { height: 92px; }
+  .pane-resize { height: 12px; right: 44px; }
+  .pane-resize::after { top: 5px; width: 42px; height: 3px; }
+  #posPnlSpark { max-width: 128px; height: 22px; }
+  #posPnlSparkNote { font-size: 9px; max-width: 118px; }
 }
 </style>
 </head>
@@ -1815,6 +1830,11 @@ kbd {
            posición, en dólares, con su máximo y su mínimo marcados. -->
       <div class="indPane hidden" id="panePnl" data-pane="pnl">
         <div class="pane-head"><span class="pane-title">PnL <b id="pnlPaneNote">sin posición</b></span><span class="pane-val" id="pnlPaneVal">—</span><button class="pane-close" id="pnlPaneClose" title="Ocultar el panel de PnL">✕</button></div>
+        <!-- Asa para estirar el panel (⬍). Con las flechas arriba/abajo sobre ella
+             se ajusta también de teclado; doble clic la devuelve al alto por defecto. -->
+        <div class="pane-resize" id="pnlPaneResize" role="separator" aria-orientation="horizontal"
+             tabindex="0" title="Arrastra para cambiar el alto del panel de PnL (doble clic: alto normal)"
+             aria-label="Alto del panel de PnL"></div>
         <div class="pane-chart" id="chartPnl"></div>
       </div>
       <div class="indPane hidden" id="paneRsi" data-pane="rsi">
@@ -2075,6 +2095,10 @@ kbd {
           </div>
           <div class="card-body">
             <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <!-- Mini-PnL: el mismo recorrido que enseña el panel del gráfico, en 26 px,
+                 para no tener que levantar la vista. Lo dibuja PC.paintMini(). -->
+            <div class="kv kv-mini" id="posPnlMini"><span>PnL vela a vela</span>
+              <b class="mini-wrap"><canvas id="posPnlSpark" width="180" height="26"></canvas><i id="posPnlSparkNote">sin recorrido todavía</i></b></div>
             <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
             <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
             <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
@@ -6158,6 +6182,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   PC._sig = '';                        // huella de lo dibujado (para no recalcular cada fotograma)
   PC._extremes = [];                   // líneas de máx/mín creadas (para retirarlas)
   PC._hadPos = false;                  // ¿había posición abierta en el refresco anterior?
+  PC._alto = null;                     // alto del panel en px (null = el que dice el CSS)
 
   /* ------------------------------ utilidades ------------------------------ */
 
@@ -6258,6 +6283,165 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return s;
   };
 
+  /* =============================== ALTO DEL PANEL ===============================
+   El panel de PnL se puede estirar arrastrando su asa (o con las flechas sobre
+   ella). El gráfico principal y los paneles de indicadores se reajustan solos:
+   los dos charts nacen con `autoSize: true` y `CM._syncPanes` mantiene el eje de
+   tiempo compartido, así que aquí solo hace falta poner la altura del contenedor.
+   El alto elegido se guarda en el navegador; el doble clic lo devuelve al suyo. */
+  const ALTO_MIN = 56, ALTO_MAX = 420, ALTO_KEY = 'pnlPaneAlto';
+  PC.ALTO_MIN = ALTO_MIN; PC.ALTO_MAX = ALTO_MAX;
+
+  const altoGuardado = () => { const v = (global.ST && ST.get) ? ST.get(ALTO_KEY, null) : null; return isNum(v) ? v : null; };
+
+  /** Recorta el alto a lo que cabe: ni menos del mínimo, ni más del 45 % del área. */
+  function altoTopa(v) {
+    const area = el('chartArea');
+    const tope = area ? Math.max(ALTO_MIN + 40, Math.round(area.getBoundingClientRect().height * 0.45)) : ALTO_MAX;
+    return Math.round(Math.max(ALTO_MIN, Math.min(Math.min(ALTO_MAX, tope), v)));
+  }
+
+  PC.alto = function () {
+    const p = el('panePnl');
+    if (!p || p.classList.contains('hidden')) return 0;
+    return Math.round(p.getBoundingClientRect().height);
+  };
+
+  /**
+   * Aplica (y opcionalmente guarda) el alto del panel. Con `guardar` a false se
+   * limita a recortar lo que ya había: así el resize de la ventana no escribe en
+   * la preferencia, solo la respeta dentro de lo que cabe.
+   */
+  PC.setAlto = function (v, guardar) {
+    const p = el('panePnl');
+    if (!p) return null;
+    const h = altoTopa(v);
+    p.style.height = h + 'px';
+    PC._alto = h;
+    const asa = el('pnlPaneResize');
+    if (asa) asa.setAttribute('aria-valuenow', String(h));
+    if (guardar && global.ST && ST.set) ST.set(ALTO_KEY, h);
+    try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (e) {}
+    return h;
+  };
+
+  /** Al arrancar: si hay alto guardado, se respeta (recortado a lo que quepa hoy). */
+  PC.initAlto = function () {
+    const h = altoGuardado();
+    // OJO: si no hay nada guardado NO se pone un alto inline «para tenerlo medido»:
+    // un style.height en el panel gana por encima de la escalera de alturas de
+    // css/bitunix.css (`.indPane` a 56/48 px en ventanas bajas) y el gráfico perdía
+    // sus píxeles por contrato (lo cazó tests/browser.capture.js: 229 px en vez de 240
+    // en la vista previa embebida de 1280x700). Solo manda un alto cuando la persona
+    // lo eligió (o había guardado).
+    if (h !== null) PC.setAlto(h, false); else PC._alto = null;
+  };
+
+  /** Asa: puntero (ratón, lápiz y dedo) + teclado + doble clic para volver al defecto. */
+  PC.initResize = function () {
+    const asa = el('pnlPaneResize'), p = el('panePnl');
+    if (!asa || !p || asa.dataset.pcResize) return;
+    asa.dataset.pcResize = '1';
+    let y0 = 0, h0 = 0, mov = false;
+    asa.addEventListener('pointerdown', (e) => {
+      mov = true; y0 = e.clientY; h0 = PC.alto();
+      asa.classList.add('activa');
+      try { asa.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    asa.addEventListener('pointermove', (e) => {
+      if (!mov) return;
+      // El asa está en el BORDE SUPERIOR del panel: arrastrarla hacia arriba
+      // estira el panel (el gráfico de arriba cede, que es lo que se espera).
+      PC.setAlto(h0 + (y0 - e.clientY), false);
+      PC.place();
+    });
+    const fin = (e) => {
+      if (!mov) return;
+      mov = false;
+      asa.classList.remove('activa');
+      try { asa.releasePointerCapture(e.pointerId); } catch (err) {}
+      PC.setAlto(PC.alto(), true);   // la preferencia se escribe AL SOLTAR, no en cada fotograma
+      PC.place();
+    };
+    asa.addEventListener('pointerup', fin);
+    asa.addEventListener('pointercancel', fin);
+    asa.addEventListener('dblclick', () => {
+      p.style.height = '';            // quita lo puesto a mano: manda otra vez el CSS
+      PC._alto = null;
+      if (global.ST && ST.set) ST.set(ALTO_KEY, null);
+      PC.place();
+    });
+    asa.addEventListener('keydown', (e) => {
+      const paso = e.shiftKey ? 40 : 12;
+      if (e.key === 'ArrowUp') PC.setAlto(PC.alto() + paso, true);
+      else if (e.key === 'ArrowDown') PC.setAlto(PC.alto() - paso, true);
+      else return;
+      e.preventDefault();
+      PC.place();
+    });
+    // Ventana que cambia de tamaño: el alto se recorta a lo que quepa, sin reescribir
+    // lo guardado (si mañana vuelve a haber sitio, la preferencia sigue ahí).
+    window.addEventListener('resize', () => {
+      if (PC._alto !== null) PC.setAlto(PC._alto, false);
+      PC.paintMini();   // el mini se dibuja en píxeles del dispositivo: con un resize
+                       // (o un cambio de móvil a mesa) hay que rehacerlo, el CSS solo
+                       // estira el <canvas> y la línea se veía borrosa
+    });
+  };
+
+  /* ============================ MINI-PnL EN LA TARJETA ============================
+   El mismo recorrido que pinta el panel del gráfico, en 26 px dentro de la tarjeta
+   de la posición: relleno desde el nivel 0, línea en el color del signo, punto en
+   el valor de ahora y nota con el máximo y el mínimo. Se dibuja a mano en un
+   canvas (sin librerías): es un pantallazo, no un gráfico. */
+  PC.paintMini = function () {
+    const c = el('posPnlSpark');
+    if (!c) return;
+    const ctx = c.getContext && c.getContext('2d');
+    const nota = el('posPnlSparkNote');
+    if (!ctx) return;
+    const vals = PC.trace.map((p) => p.pnl);
+    if (!vals.length) {
+      ctx.clearRect(0, 0, c.width, c.height);
+      c.classList.add('vacio');
+      if (nota) nota.textContent = (PC.recap ? PC.recap : '') ? 'operación cerrada: sin recorrido' : 'sin recorrido todavía';
+      return;
+    }
+    c.classList.remove('vacio');
+    // El lienzo se dimensiona en devicePixelRatio para que la línea se vea nítida
+    // en pantallas de móvil (2x, 3x) y no a 1 px de largo lógico.
+    const dpr = Math.min(3, global.devicePixelRatio || 1);
+    const w = c.clientWidth || 180, h = c.clientHeight || 26;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    if (max === min) { max += 1; min -= 1; }   // recta: se abre el rango para que se vea
+    const X = (i) => (vals.length === 1 ? w / 2 : (i / (vals.length - 1)) * w);
+    const Y = (v) => h - 2 - ((v - min) / (max - min)) * (h - 4);
+    const agua = min < 0 && max > 0 ? Y(0) : null;
+    if (agua !== null) {   // el nivel 0: «el agua», línea discontinua
+      ctx.strokeStyle = 'rgba(139,142,150,.55)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, agua); ctx.lineTo(w, agua); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const ult = vals[vals.length - 1];
+    const col = ult > 0 ? '#25ca93' : ult < 0 ? '#f65b55' : '#8b8e96';
+    const base = agua !== null ? agua : h;
+    ctx.beginPath(); ctx.moveTo(X(0), base);
+    for (let i = 0; i < vals.length; i++) ctx.lineTo(X(i), Y(vals[i]));
+    ctx.lineTo(X(vals.length - 1), base); ctx.closePath();
+    ctx.fillStyle = ult >= 0 ? 'rgba(37,202,147,.16)' : 'rgba(246,91,85,.16)';
+    ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < vals.length; i++) { const x = X(i), y = Y(vals[i]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(vals.length - 1), Y(ult), 1.9, 0, Math.PI * 2); ctx.fill();
+    if (nota) nota.textContent = `máx ${usd(max)} · mín ${usd(min)}`;
+  };
+
   /* ------------------------------- panel PnL ------------------------------- */
 
   PC.init = function () {
@@ -6311,6 +6495,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     cls(btn, 'active', PC.enabled);
     if (el('panePnl')) el('panePnl').classList.toggle('hidden', !PC.enabled);
+    PC.initAlto();
+    PC.initResize();
     PC.refresh(true);
   };
 
@@ -6401,6 +6587,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       if (sub) { const n = PC.trace.length;   // «1 vela» y «5 velas»: el texto se pone
         sub.textContent = s && s.vivo ? `${n} ${n === 1 ? 'vela' : 'velas'} desde la entrada` : 'última operación'; }
     }
+    PC.paintMini();   // el mini de la tarjeta se pinta CON la misma traza: no puede ir a otra
   };
 
   /** Marcadores sobre las velas (entrada, promediados, parciales, cierre). */
@@ -6454,6 +6641,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   PC.hideLayer = function () {
     ['pnlLayer', 'pnlBand', 'pnlEntryTick', 'pnlBadge'].forEach((id) => cls(el(id), 'hidden', true));
     cls(el('chartWrap'), 'pnl-on', false);
+    PC.paintMini();   // el mini de la tarjeta avisa de que no hay recorrido (no se queda con el anterior)
   };
 
   /** Texto y color de la etiqueta flotante (se refresca en cada vela). */
@@ -6564,6 +6752,19 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       bandaOculta: !!(el('pnlBand') && el('pnlBand').classList.contains('hidden')),
       etiqueta: el('pnlBadge') ? el('pnlBadge').textContent.replace(/\s+/g, ' ').trim() : '',
       panel: !!(el('panePnl') && !el('panePnl').classList.contains('hidden')),
+      // Alto del panel y asa: lo que ve la suite (medido, no lo que el código promete).
+      alto: PC.alto(), altoGuardado: altoGuardado(), altoMin: ALTO_MIN, altoMax: ALTO_MAX,
+      asa: (function () { const a = el('pnlPaneResize'); if (!a) return null; const r = a.getBoundingClientRect();
+        return { w: Math.round(r.width), h: Math.round(r.height), role: a.getAttribute('role'),
+                 curso: getComputedStyle(a).cursor, tacto: getComputedStyle(a).touchAction,
+                 tab: a.getAttribute('tabindex'), val: a.getAttribute('aria-valuenow') }; })(),
+      mini: (function () { const m = el('posPnlSpark'); if (!m) return null;
+        return { w: m.width, h: m.height, cw: Math.round(m.getBoundingClientRect().width),
+                 vacio: m.classList.contains('vacio'), nota: (el('posPnlSparkNote') || {}).textContent || '',
+                 pintado: (function () {   // ¿hay pigmento en el lienzo? se comprueba píxel a píxel
+                   try { const x = m.getContext('2d'), d = x.getImageData(0, 0, m.width, m.height).data;
+                     let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+                     return n; } catch (e) { return -1; } })() }; })(),
       // La marca de agua de la librería debe estar apagada en el panel (es la opción
       // con la que se creó el chart; si vuelve a aparecer tapando la curva, esto la
       // delata). Se lee del propio chart, no de una copia en el código.
@@ -6584,7 +6785,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   /** Al cambiar de par/temporalidad o al recargar la serie, el resumen deja de aplicar. */
-  PC.forgetSeries = function () { PC.recap = null; PC._sig = ''; PC.clearMarks(); PC.hideLayer(); };
+  /** Se llama al cambiar de serie/temporalidad: no es solo borrar el dibujo, es
+   *  olvidar la traza (si no, el mini de la tarjeta seguiría enseñando la curva de
+   *  una operación que ya no existe en este gráfico). */
+  PC.forgetSeries = function () {
+    PC.trace = []; PC.recap = null; PC._sig = '';
+    try { if (PC.series) PC.series.setData([]); } catch (e) {}
+    PC.clearMarks(); PC.hideLayer();
+  };
 
   global.PC = PC;
 })(window);
