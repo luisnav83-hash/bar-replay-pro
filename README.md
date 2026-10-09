@@ -86,6 +86,30 @@ mirar el indicador nunca revela el futuro.
 - PnL en tiempo real, líneas en el gráfico de entrada/SL/TP/liquidación y métricas
   del trade (MFE/MAE, R múltiplo, duración en velas y tiempo).
 
+- **LA POSICIÓN QUEDA MARCADA EN EL GRÁFICO y su PnL se ve subir y bajar**
+  (`js/pnlChart.js`): al abrir, una **banda** va de la vela de entrada al precio
+  actual (verde si gana, roja si pierde), con un **tick** en la vela de entrada y
+  una **etiqueta** pegada al precio actual que dice lado, tamaño, precio de
+  entrada, PnL en $, % sobre el margen y una flecha ▲/▼/= con el movimiento de la
+  última vela. Debajo del gráfico se abre un **panel de PnL**: la curva del PnL no
+  realizado vela a vela (línea rellena, con líneas en el máximo y el mínimo del
+  recorrido) y el recuento «N velas desde la entrada».
+- **El número no se inventa**: sale de `TE.unrealized(App.currentPrice())`, el
+  mismo del que vive la tarjeta de la posición, y la marca **sigue a la vela** al
+  hacer scroll, zoom, cambiar de temporalidad o redimensionar. Las velas futuras
+  no se pintan: la curva se corta en el cursor del replay.
+- **Cada hito deja su marca sobre la vela**: la entrada, cada promediado
+  (`#2`, `#3`… con el precio media resultante), cada cierre parcial (con lo
+  realizado) y el `CERRADO` con el **PnL neto** de la operación (comisiones
+  incluidas, o sea el mismo que se cobra la cuenta). Al cerrar, el resumen **se
+  queda** en pantalla y la curva se queda congelada en sus velas: se puede seguir
+  moviendo el replay sin que crezca.
+- El marcaje se apaga y enciende con **📈 PnL** en la barra del gráfico y la
+  preferencia se recuerda (`ST 'pnlGrafico'`). La capa es `pointer-events: none`
+  y queda por debajo de la leyenda (`z-index` 5 < 6): no se come ni el dibujo a
+  mano ni el gesto, y en ≤640 px la etiqueta se encoge (176×48) y se coloca
+  **por debajo** de la leyenda OHLC cuando el precio está arriba del todo.
+
 ### 6. Estadísticas y resultados
 Balance · equity · PnL total y abierto · margen usado y exposición · nº de trades ·
 ganadores/perdedores · **win rate** · **profit factor** · **payoff** · expectancy ·
@@ -295,6 +319,14 @@ Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
 
 ![Indicadores](docs/captura-03-indicadores.png)
 
+**PnL de la posición, marcado en el gráfico** — banda entrada→precio, tick en la vela de
+entrada, etiqueta con el PnL y el panel con la curva vela a vela (a la izquierda, el mismo
+marcaje a 390 px de ancho):
+
+![PnL en el gráfico](docs/captura-39-pnl-en-el-grafico.png)
+
+![PnL en el móvil](docs/captura-40-pnl-movil.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -383,7 +415,10 @@ node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y l
 node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
 node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
 node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
-node tests/pages-promediar.js #  43 comprobaciones del promediado/TP EN LA APP PUBLICADA (solo interfaz)
+node tests/pages-promediar.js #  46 comprobaciones del promediado/TP EN LA APP PUBLICADA (solo interfaz). El tramo
+                                #   donde el escalón es alcanzable se BUSCA avanzando con ⏭ y el replay se pone en
+                                #   pausa: con el azar de la serie de práctica, medir sobre el tramo que tocaba era
+                                #   una carrera contra el reloj (un rojo que solo salía con la batería cargada)
 node tests/pages-trailing.js  #  57 comprobaciones del trailing stop EN LA APP PUBLICADA (solo interfaz)
 node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
@@ -393,7 +428,15 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/bitunix.test.js      # 131 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+node tests/pnl-chart.test.js      #  82 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 6 bloques:
+                                #   posición viva (geometría medida contra CM.timeToX/priceToY, número igual al del
+                                #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
+                                #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
+                                #   navegador, para que el arranque sea de verdad nuevo) y móvil a 390 px
+node tests/pages-pnl.js          #   43 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+                                #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
+                                #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
+node tests/bitunix.test.js      # 132 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
 node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
@@ -405,22 +448,22 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**910 comprobaciones, 0 fallos** ✅ · **22 suites** locales · 1 sin contador (`single.test.js`,
+**992 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
-Con las cinco que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1127 comprobaciones, 0 fallos** ✅ · **27 suites** · 1 sin contador (`single.test.js`)
-(910 locales + 217 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-08
-con el despliegue en `e2d24b9` — y el `md5` del archivo publicado (`ccb3087e…`) coincide byte
-a byte con el del build local: 12 del buscador + 10 de dibujos + 43 de promediado/TP +
-57 del trailing + 95 de la piel Bitunix)
+Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
+**1255 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(992 locales + 263 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `ca79ec6` — y el `md5` del archivo publicado (`40c0d76f…`) coincide byte
+a byte con el del build local: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
+57 del trailing + 95 de la piel Bitunix + 43 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
 > suite que fallaba se llevaba por delante las siguientes y el informe quedaba a medias.
-> Las cinco suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
-> `test:pages-promediar`, `test:pages-trailing`, `test:pages-bitunix`) se quedan fuera de la
+> Las seis suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
+> `test:pages-promediar`, `test:pages-trailing`, `test:pages-bitunix`, `test:pages-pnl`) se quedan fuera de la
 > batería local porque dependen de la red y del despliegue: `node tools/run-all.js
-> --publicadas` las incluye (27 suites, y además se puede filtrar:
+> --publicadas` las incluye (29 suites, y además se puede filtrar:
 > `node tools/run-all.js --publicadas bitunix`).
 > Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
 > (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
@@ -503,6 +546,8 @@ bar-replay-app/
 │   ├── tradingEngine.js      # Cuenta, órdenes, SL/TP, liquidación, checkpoints
 │   ├── barReplay.js          # Motor del replay (play/pausa/velocidad/seek)
 │   ├── chart.js              # Gráfico principal, paneles y equity (Lightweight Charts)
+│   ├── pnlChart.js           # Marca la posición en el gráfico y su PnL vela a vela (banda,
+│                             #   etiqueta, panel con curva y marcas en las velas)
 │   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
 │   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
 │   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
@@ -524,6 +569,8 @@ bar-replay-app/
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
+    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (82)
+    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (43)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -655,6 +702,19 @@ bar-replay-app/
   900×700 y 480×900 con **0 px de desbordamiento** en todos los casos, manteniendo el
   gráfico ≥200 px de alto y los controles de replay/compra siempre accesibles
   (`captura-06-ventana-pequena.png`, `captura-10-movil.png`).
+- **Un `grid` puede estar mintiendo por su contenido mínimo** (caza de esta sesión,
+  `css/chart.css`): al estrechar la ventana, `#chartWrap` y `#mainChart` **no volvían
+  a encogerse** —se quedaban en 1102 px dentro de un viewport de 390 px, recortados—
+  porque la columna implícita de `#chartArea` la fijaba el *min-content* de
+  `#drawToolbar` (un flex `nowrap` de 1102 px). Tres líneas lo arreglan y son la
+  lección: `#chartArea { grid-template-columns: minmax(0,1fr) }` (así la pista puede
+  bajar de su mínimo), `#chartWrap { min-width:0; overflow:hidden }` y
+  `#drawToolbar { min-width:0; overflow-x:auto }` (la barra de dibujo, si no cabe,
+  se desplaza en vez de estirar el gráfico). Medido tras el arreglo: pista de 389 px
+  y `#chartWrap` de 389 px con 0 px de scroll horizontal. Es un `min-width:auto`
+  heredado del flex/grid: **un `1fr` sin `minmax(0,…)` no es un «ocupa lo que
+  sobre», es un «ocupa lo que sobre, pero nunca menos que tu contenido más ancho»**.
+  `tests/pnl-chart.test.js` (bloque F) y `tests/responsive.test.js` lo vigilan.
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).

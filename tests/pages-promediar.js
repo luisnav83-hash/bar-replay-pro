@@ -160,18 +160,39 @@ if (!puppeteer) {
 
   /* ── 4) TP escalonado ejecutándose con el replay ── */
   console.log('\n▸ 4) TP escalonado (Partial TP/SL)');
-  const plan = await p.evaluate(() => {
+  /* Primero: el replay en PAUSA. Si va solo, la vela que toca el nivel pasa de
+     largo mientras se rellena el formulario del escalón y la ejecución pasa a
+     depender del reloj de la máquina (así entró el falso rojo en una batería
+     cargada: el nivel se añadía DESPUÉS de la única vela que lo tocaba). */
+  if (await p.evaluate(() => !!(BR.state && BR.state.playing))) { await p.click('#btnPlay'); await esp(400); }
+  ok((await p.evaluate(() => !!(BR.state && BR.state.playing))) === false,
+     'replay en pausa antes de medir el escalón (si va solo, esta comprobación sería una carrera)');
+
+  const calc = () => p.evaluate(() => {
     const q = TE.state.position, i = BR.getIndex();
-    const resto = App.candles.slice(i + 1, i + 160);
+    // El nivel se busca a partir de la vela 12: deja margen para escribir el
+    // formulario sin que la vela del cruce quede ya atrás.
+    const resto = App.candles.slice(i + 12, i + 172);
     const base = Math.max(q.entryPrice, App.currentPrice());
     const maxHigh = Math.max(...resto.map((c) => c.high));
     const t = +(base * 1.0015).toFixed(2);
     const j = resto.findIndex((c) => c.high >= t);
-    return { t, j, maxHigh, vale: j >= 0 && t < maxHigh * 0.998, precio: App.currentPrice() };
+    return { t, j, maxHigh, vale: j >= 0 && t < maxHigh * 0.998, precio: App.currentPrice(), desde: i };
   });
-  if (!plan.vale) {
-    ok(false, `no hay nivel alcanzable en 160 velas (máx ${plan.maxHigh.toFixed(2)} / precio ${plan.precio.toFixed(2)})`);
-  } else {
+  /* El escalón necesita un tramo que SUBA. La serie de práctica arranca donde
+     arranca: si el azar cae en plena bajada no hay nivel alcanzable en 160 velas y
+     la comprobación no mediría nada (así saltó el rojo en una de las corridas). El
+     tramo se BUSCA avanzando de vela en vela con ⏭ —por la interfaz—, con tope, y
+     se dice cuántas velas ha costado encontrarlo. */
+  let plan = null, andadas = 0;
+  for (let intento = 0; intento < 300 && !plan; intento++) {
+    const cand = await calc();
+    if (cand.vale) plan = cand;
+    else { await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight'); andadas += 2; await esp(70); }
+  }
+  ok(plan !== null, plan ? `el paseo busca un tramo donde el nivel es alcanzable (${andadas} velas andadas)`
+                         : 'NO hay ningún tramo con nivel alcanzable en 600 velas: el test lo dice, no pasa de largo');
+  if (plan) {
     await p.evaluate((pv) => {
       document.getElementById('tpLvlPrice').value = String(pv.t);
       document.getElementById('tpLvlPct').value = '40';
@@ -182,14 +203,28 @@ if (!puppeteer) {
     ok(d1.niveles === 1 && d1.items === 1, `nivel ${plan.t.toFixed(2)} (40%) añadido y listado en la tarjeta`);
     ok(/TP1/.test(d1.lineas), 'el gráfico lo dibuja como «TP1 40%»');
     const qd = d1.qty;
-    let ejec = false, tras = null;
-    for (let k = 0; k < plan.j + 3 && !ejec; k++) {
-      await p.keyboard.press('ArrowRight');
-      await esp(60);
+    // Y ahora SÍ, con el nivel ya puesto, se vuelve a medir por dónde pasa: el
+    // objetivo es una posición del índice, no un número de pulsaciones (si alguna
+    // tecla no llega, el paseo se sigue comparando contra el índice real).
+    const plan2 = await p.evaluate((t) => {
+      // Se piden AL MENOS 2 velas de holgura: si la única vela que toca el nivel es
+      // la siguiente, la escritura del formulario ya la ha podido dejar atrás y la
+      // comprobación volvería a ser una carrera contra el reloj de la máquina.
+      const DESVIO = 2;
+      const i = BR.getIndex(), resto = App.candles.slice(i + DESVIO, i + 200);
+      const j = resto.findIndex((c) => c.high >= t);
+      return { j, desvio: DESVIO, hasta: j >= 0 ? i + DESVIO + j : -1, desde: i, idx: i };
+    }, plan.t);
+    ok(plan2.j >= 0 && plan2.hasta >= plan2.desde + plan2.desvio,
+       `con el nivel puesto la vela que lo toca sigue por delante (a ${plan2.hasta - plan2.desde} velas)`);
+    let ejec = false, tras = null, k = 0;
+    while (k < 420 && !ejec) {
+      await p.keyboard.press('ArrowRight'); k++;
       const s = await st();
       if (s.niveles === 0) { ejec = true; tras = s; }
+      if (s.idx >= plan2.hasta + 3) break;   // rebasado el cruce con holgura: no hay nada que esperar
     }
-    ok(ejec, 'el nivel se ejecuta SOLO al tocarlo (el resto de la posición sigue viva)');
+    ok(ejec, `el nivel se ejecuta SOLO al tocarlo (el resto de la posición sigue viva) · ${k} velas andadas, meta en la ${plan2.hasta}`);
     ok(ejec && Math.abs(tras.qty - qd * 0.6) / qd < 1e-6, `cerró su 40%: ${qd.toFixed(6)} → ${ejec ? tras.qty.toFixed(6) : '—'}`);
     ok(ejec && /parcial/.test(tras.ultMotivo) && tras.lado === 'long', `registrado como «${ejec ? tras.ultMotivo : '—'}» y la posición sigue LONG`);
     ok(ejec && Number.isFinite(tras.be), `el break-even se recalcula con lo que queda (${ejec ? tras.be.toFixed(2) : '—'})`);

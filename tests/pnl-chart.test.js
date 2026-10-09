@@ -166,13 +166,76 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ═════════════ C) SUBE Y BAJA: CURVA, FLECHA Y COLORES ═════════════ */
   console.log('\n▸ C) El PnL sube y baja, y se ve');
+  /* Para comprobar que la curva cruza el agua hace falta un tramo que la cruce. La
+     serie de práctica no garantiza que el trozo que toca baje nunca del precio de
+     entrada (con un LONG en plena subida el PnL mínimo es 0, y el marcaje no tiene
+     culpa), así que el escenario se BUSCA: si por delante no hay vela que vea los
+     dos lados, se cierra, se busca la entrada con futuro en ambos sentidos y se
+     vuelve a abrir por la interfaz. */
+  const reubicada = await page.evaluate(() => {
+    // «¿Por delante de esta vela va a haber PnL en los dos sentidos?» se mide contra
+    // el PRECIO DE ENTRADA (no contra el cierre de la vela del cursor: la entrada a
+    // mercado se paga otro precio y ahí estaba el desacuerdo) y con una holgura del
+    // 0,2 %, para que el cruce sea real y no un píxel del alto/bajo.
+    const MARGEN = 1.002;
+    const futuroEnLosDosLados = (desde, entrada, dir) => {
+      const c = App.candles, fin = Math.min(desde + 118, c.length - 1);
+      let arriba = false, abajo = false;
+      for (let j = desde + 1; j <= fin; j++) {
+        if (dir > 0 ? c[j].high > entrada * MARGEN : c[j].low < entrada / MARGEN) arriba = true;
+        if (dir > 0 ? c[j].low < entrada / MARGEN : c[j].high > entrada * MARGEN) abajo = true;
+        if (arriba && abajo) return true;
+      }
+      return false;
+    };
+    const i0 = BR.getIndex();
+    const pos = TE.state.position;
+    if (pos && futuroEnLosDosLados(i0, pos.entryPrice, pos.side === 'long' ? 1 : -1)) {
+      return { hizo: false, desde: i0, entrada: pos.entryPrice };
+    }
+    const c = App.candles;
+    for (let i = i0 + 1; i + 120 < c.length && i < i0 + 2500; i++) {
+      if (futuroEnLosDosLados(i, c[i].close, 1)) {
+        document.getElementById('btnFlatten').click();
+        BR.seek(i);
+        document.getElementById('sizeInput').value = '30';
+        document.getElementById('btnLong').click();
+        return { hizo: true, desde: i0, hasta: i, entrada: c[i].close, precio: App.currentPrice() };
+      }
+    }
+    return { hizo: false, sinOpcion: true, desde: i0 };
+  });
+  ok(reubicada.sinOpcion !== true, 'el histórico ofrece un tramo con recorrido en los dos lados'
+     + (reubicada.sinOpcion ? ' (y si no lo hubiera, este test lo diría con una ✗ en vez de pasar de largo)' : ''));
+  if (reubicada.hizo) {
+    await espera(400);
+    console.log(`  · escenario buscado: la posición se reabre en la vela ${reubicada.hasta} (antes ${reubicada.desde}), entrada ${reubicada.entrada.toFixed(2)} — por delante hay velas por encima y por debajo`);
+  }
+  // Una sola comprobación, con mensaje distinto según el camino: lo que se exige SIEMPRE
+  // es que el paseo mida una posición abierta en una vela con futuro en los dos sentidos.
+  ok(reubicada.hizo ? (reubicada.hasta > reubicada.desde && Math.abs(reubicada.precio - reubicada.entrada) < 0.01)
+                    : reubicada.entrada > 0,
+     reubicada.hizo ? `y la posición nueva se abre al precio de esa vela (${reubicada.precio.toFixed(2)})`
+                    : `el tramo que ya tocaba ya vale: la entrada (${reubicada.entrada.toFixed(2)}) tiene PnL en los dos sentidos por delante`);
   const C = await page.evaluate(() => {
     const antes = PC.trace.length;
     App.stepForward();
     const tras = PC.trace.length;
     const v = { verde: 0, rojo: 0, arriba: 0, abajo: 0, errores: [] };
-    for (let i = 0; i < 26; i++) {
+    /* El paseo se alarga hasta que la curva ha pasado por los DOS lados del agua,
+       con 26 velas como muestra mínima y 120 como tope. Antes se paseaban 26 velas
+       fijas y se exigía el cruce: si el tramo de práctica que toca no baja del
+       precio de entrada, el número nunca es negativo y la comprobación fallaba sin
+       que el marcaje tuviera nada que ver (la serie de práctica no es fija del todo).
+       Ahora el escenario se busca, no se espera. */
+    const MAX = 120;
+    let n = 0;
+    for (let i = 0; i < MAX; i++) {
+      n++;
       App.stepForward();
+      const t0 = PC.trace;
+      const ult0 = t0[t0.length - 1].pnl;
+      const mn0 = Math.min(...t0.map((x) => x.pnl)), mx0 = Math.max(...t0.map((x) => x.pnl));
       const t = PC.trace, ult = t[t.length - 1].pnl, prev = t.length > 1 ? t[t.length - 2].pnl : ult;
       const d = PC.debug();
       const banda = ult > 0 ? 'pos' : ult < 0 ? 'neg' : d.colores.banda;
@@ -183,15 +246,17 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       if (ult > prev) { v.arriba++; if (flecha !== '▲') v.errores.push(`vela ${i}: sube (${ult.toFixed(2)} vs ${prev.toFixed(2)}) y la flecha es «${flecha}»`); }
       if (ult < prev) { v.abajo++; if (flecha !== '▼') v.errores.push(`vela ${i}: baja y la flecha es «${flecha}»`); }
       if (ult > 0) v.verde++; else if (ult < 0) v.rojo++;
+      if (n >= 26 && mn0 < 0 && mx0 > 0) break;   // cruce visto y muestra suficiente
     }
     const t = PC.trace, d = PC.debug();
-    return { antes, tras, v, d, ultimo: t[t.length - 1].pnl,
+    return { antes, tras, n, v, d, ultimo: t[t.length - 1].pnl,
              max: Math.max(...t.map((x) => x.pnl)), min: Math.min(...t.map((x) => x.pnl)) };
   });
   ok(C.tras === C.antes + 1, `cada vela añade UN punto a la curva (${C.antes} → ${C.tras})`);
-  ok(C.v.errores.length === 0, `en 26 velas el color y la flecha nunca mienten${C.v.errores.length ? ' → ' + C.v.errores.slice(0, 2).join(' ; ') : ''}`);
-  ok(C.min < 0 && C.max > 0, `la posición ha pasado por los dos lados del agua: ${C.min.toFixed(2)} de mínimo, ${C.max.toFixed(2)} de máximo`);
-  ok(C.v.verde + C.v.rojo === 26, `los colores se han decidido vela a vela (verde ${C.v.verde}, rojo ${C.v.rojo})`);
+  ok(C.v.errores.length === 0, `en ${C.n} velas el color y la flecha nunca mienten${C.v.errores.length ? ' → ' + C.v.errores.slice(0, 2).join(' ; ') : ''}`);
+  ok(C.min < 0 && C.max > 0, `en ${C.n} velas la posición ha pasado por los dos lados del agua: ${C.min.toFixed(2)} de mínimo, ${C.max.toFixed(2)} de máximo`);
+  ok(C.v.verde + C.v.rojo === C.n, `los colores se han decidido vela a vela (${C.n} velas: verde ${C.v.verde}, rojo ${C.v.rojo})`);
+  ok(C.n < 120, `el paseo encontró el cruce por debajo de la entrada sin agotar las 120 velas (fueron ${C.n})`);
   ok(C.v.arriba > 0 && C.v.abajo > 0, `la flecha ha subido ${C.v.arriba} veces y bajado ${C.v.abajo}`);
   ok(C.d.max >= C.d.ultimo && C.d.min <= C.d.ultimo, `máx ${C.d.max.toFixed(2)} · último ${C.d.ultimo.toFixed(2)} · mín ${C.d.min.toFixed(2)}, en ese orden`);
   ok(C.d.colores.banda === (C.ultimo > 0 ? 'pos' : 'neg'), `acabado el paseo, la banda está en el color del signo (${C.d.colores.banda})`);

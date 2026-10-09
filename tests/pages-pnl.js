@@ -2,7 +2,7 @@
  * pages-pnl.js — auditoría del MARCAJE DE PnL EN EL GRÁFICO sobre LO PUBLICADO.
  *
  * tests/pnl-chart.test.js abre el archivo único SIN RED y comprueba el contrato
- * completo (6 bloques, 79 comprobaciones). Esta suite hace lo que esas no pueden:
+ * completo (6 bloques, 82 comprobaciones). Esta suite hace lo que esas no pueden:
  * abrir la URL que ve un visitante (GitHub Pages, con red y con datos reales) y
  * comprobar que la marca se pinta, sigue a la vela y cuadra con el motor AHÍ.
  *
@@ -60,7 +60,7 @@ const numEn = (s) => {
   await esp(1200);
 
   /* Lectura común, dentro de la página: motor + textos + geometría medida. */
-  const E = () => p.evaluate(() => {
+  const E = (q) => (q || p).evaluate(() => {
     const g = (id) => document.getElementById(id);
     const txt = (id) => { const e = g(id); return e ? (e.textContent || '').trim() : ''; };
     const vis = (id) => { const e = g(id); return !!e && e.offsetParent !== null; };
@@ -165,18 +165,29 @@ const numEn = (s) => {
   ok(E1.botonActivo === false && E1.aria === 'false', 'el botón deja de estar activo y la accesibilidad lo dice');
   ok(E1.preferencia === false, 'la preferencia queda escrita en el almacenamiento local');
   if (!LOCAL) {
-    await p.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-    await p.waitForFunction('window.App && window.App.candles && window.App.candles.length > 0', { timeout: 60000 });
-    await p.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 40000 });
-    await esp(900);
-    const E2 = await E();
-    ok(E2.botonActivo === false && E2.capaVisible === false, 'tras RECARGAR sigue apagado (la preferencia manda en el arranque)');
-    await p.click('#btnPnl'); await esp(500);
-    const E3 = await E();
-    ok(E3.preferencia === true, 'y al volver a encenderlo se guarda de nuevo');
+    // No se puede recargar la pestaña: la app PIDE CONFIRMACIÓN al salir si hay
+    // operaciones (js/app.js, `beforeunload`), y en headless ese diálogo deja la
+    // navegación colgada para siempre. Se abre OTRA pestaña del mismo navegador:
+    // arranque de documento nuevo, mismo origen y por tanto el mismo localStorage,
+    // que es exactamente lo que hay que comprobar.
+    const p2 = await b.newPage();
+    await p2.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await p2.goto(URL_PASADA, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await p2.waitForFunction('window.App && window.App.candles && window.App.candles.length > 0', { timeout: 60000 });
+    await p2.waitForFunction("document.getElementById('loader').classList.contains('hidden')", { timeout: 40000 });
+    await esp(1200);
+    const E2 = await E(p2);
+    ok(E2.preferencia === false, 'en el arranque nuevo la preferencia apagada es la que manda (leída del almacenamiento)');
+    ok(E2.botonActivo === false && E2.capaVisible === false, 'y el arranque nuevo efectivamente no pinta el marcaje');
+    await p2.evaluate(() => { const s = TE.state.position; if (!s) document.getElementById('btnLong').click(); });
+    await esp(700);
+    await p2.click('#btnPnl'); await esp(500);
+    const E3 = await E(p2);
+    ok(E3.preferencia === true, 'y al volver a encenderlo con el botón se guarda de nuevo');
+    await p2.close();
   } else {
-    skip('en build local no se recarga la página (file:// + intercepción se cuelga)');
-    skip('preferencia tras recarga');
+    skip('en build local no se abre una segunda pestaña: la preferencia cruzada se comprueba en tests/pnl-chart.test.js');
+    skip('arranque nuevo con la preferencia apagada');
   }
 
   /* ─────────────── F) Móvil: que quepa ─────────────── */
