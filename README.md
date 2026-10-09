@@ -107,10 +107,15 @@ mirar el indicador nunca revela el futuro.
 - **El panel de PnL se estira**: arrastra su asa (⬍, pegada al borde superior del
   panel) **con el ratón o con el dedo** y el panel crece comiéndole sitio al gráfico;
   con **Mayús + ↑/↓** el paso es de 40 px y con **doble clic** vuelve al suyo. El alto elegido se recuerda
-  (`ST 'pnlPaneAlto'`), se **recorta solo** a lo que cabe (entre 56 px y el 45 % del
-  área, para que el gráfico conserve sus 150 px de contrato incluso a 390 px de
-  ancho) y el asa no se come la ✕ del panel ni convierte el gesto en scroll
-  (`touch-action: none`).
+  (`ST 'pnlPaneAlto'`), se **recorta solo** a lo que cabe y el asa no se come la ✕ del
+  panel ni convierte el gesto en scroll (`touch-action: none`). El recorte no es un
+  porcentaje escrito a mano: `PC.techoAlto()` mide el **hueco real** —alto del
+  `#chartArea` menos barra de dibujo, menos barra de replay, menos lo que la escalera
+  tiene pagado fuera del PnL y menos el suelo de CSS del gráfico—, así que estirar **no
+  puede** dejar a las velas por debajo de su suelo. En el teléfono, además, estirar por
+  encima del alto de defecto **pliega el resto de la escalera** (el RSI/MACD/ATR estaban
+  ahí abajo y vuelven solos con el doble clic o al devolver el panel al suyo): en
+  390×844 no caben a la vez velas grandes, PnL grande y RSI.
 - **Mini-PnL en la tarjeta de la posición**: junto al «PnL no realizado» hay un
   pantallazo de 26 px con el mismo recorrido del panel (relleno desde el nivel 0,
   línea en el color del signo, punto en el valor de ahora y nota con el máximo y el
@@ -370,8 +375,8 @@ cerrados con su recorrido sellado, en el color de su resultado final:
 ![Recorrido en el historial de trades](docs/captura-42-recorrido-en-el-historial.png)
 
 **El asa, con el dedo** (390×844) — el mismo gesto de estirar vale en el móvil: el panel
-pasa de 92 a 115 px (su techo es el 45 % del área de gráfico), la página no se desplace y
-el lienzo conserva sus 150 px:
+pasa de su alto de teléfono (80 px) a lo que el hueco permita —aquí 120—, la página no se
+desplaza, el RSI se aparta mientras dura el estirado y las velas no bajan de su suelo:
 
 ![Arrastre del panel con el dedo en móvil](docs/captura-43-asa-en-el-dedo.png)
 
@@ -396,8 +401,13 @@ soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
 
 | 37 | **Terminal de futuros (piel Bitunix)**, escritorio 1440×900 |
 | 38 | El mismo terminal en **390 px**: gráfico arriba y libro + panel de órdenes en franja |
+| 39 | PnL de la posición **marcado en el gráfico** (banda, etiqueta, marcas y panel) |
+| 40 | El mismo marcaje a 390 px |
+| 41 | Panel de PnL **estirado a mano** + mini-PnL en la tarjeta de la posición |
+| 42 | **Historial de trades con el recorrido** de cada operación (la columna nueva) |
+| 43 | **El asa arrastrada con el dedo** (390×844): panel a 120 px, escalera plegada, velas intactas |
 
-*(37 y 38 las escribe `tests/bitunix.test.js`; el resto, `tests/browser.capture.js` en Chromium headless.)*
+*(37 y 38 las escribe `tests/bitunix.test.js`; 39, 41, 42 y 43, `tests/pnl-chart.test.js`; el resto, `tests/browser.capture.js` en Chromium headless.)*
 
 ---
 
@@ -476,7 +486,7 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/pnl-chart.test.js      # 138 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 9 bloques:
+node tests/pnl-chart.test.js      # 141 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 9 bloques:
                                 #   posición viva (geometría medida contra CM.timeToX/priceToY, número igual al del
                                 #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
                                 #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
@@ -484,7 +494,7 @@ node tests/pnl-chart.test.js      # 138 comprobaciones del MARCAJE DE PnL sobre 
                                 #   (gesto táctil por CDP), alto del panel y mini de la tarjeta, y el recorrido sellado
                                 #   en el historial (I): 13 celdas contra 13 cabeceras, picos conservados por
                                 #   PC.reduce, title con máx/mín, y celda vacía en un trade sin recorrido
-node tests/pages-pnl.js          #   63 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+node tests/pages-pnl.js          #   64 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
                                 #   (sobre el build local son 60 ✓ y 2 omitidas: las 3 comprobaciones de la
                                 #   pestaña nueva se cambian por 2 skip, porque en file:// no hay origen
                                 #   compartido donde medir la preferencia cruzada)
@@ -502,14 +512,14 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1050 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1053 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1333 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1050 locales + 283 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+(1053 locales + 284 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
 con el despliegue en `13418fa` — y el `md5` del archivo publicado (`d7f3af9e…`, 921 425 B)
 coincide byte a byte con el del build local: 12 del buscador + 10 de dibujos +
-46 de promediado/TP + 57 del trailing + 95 de la piel Bitunix + 63 del marcaje de PnL)
+46 de promediado/TP + 57 del trailing + 95 de la piel Bitunix + 64 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
@@ -626,8 +636,8 @@ bar-replay-app/
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
-    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (138)
-    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (63)
+    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (141)
+    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (64)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
@@ -782,19 +792,29 @@ bar-replay-app/
   costaba ni un píxel** de gráfico (el cuerpo de la tarjeta tiene su propio scroll), así
   que se quitó el `@media (max-height)` que la ocultaba: una regla justificada con una
   cifra falsa es peor que no tenerla.
-- **En el móvil el alto del panel de PnL no lo da la página, lo quita el gráfico**
-  (medido en 390×844 con este incremento): `body` lleva `overflow:hidden` y el documento
-  mide 844 px = viewport, así que no hay «más abajo» adonde empujar. El reparto real es
-  cabecera 190 + workspace 504 (área de gráfico 256 = barra de dibujo 30 + fila del
-  gráfico + escalera de indicadores 145 + barra de replay 38) + registro 150. Por eso el
-  techo del arrastre es el **45 % del área** y no un máximo absoluto: al estirar a tope
-  (115 px) la fila del gráfico baja de 43 a 20 px —medido, y escrito así en
-  `tests/pnl-chart.test.js`— pero el lienzo conserva sus 150 px de contrato y la escalera
-  no se sale del área (`fuera === 0`). Se probó a poner la fila del workspace en `auto`
-  para que el gráfico «recuperara» altura: **no sirve**, con dos filas `auto` que piden
-  363 + 248 el contenedor de 504 las recorta a 256 + 248, idéntico a como está hoy (lo
-  dice el comentario de `css/bitunix.css` §10). Achicar el andamio del móvil es otro
-  incremento, no un parche de este.
+- **En el móvil el alto del panel de PnL no lo da la página: se lo quita al gráfico** — y
+  por eso el arreglo tiene que ser del andamio, no del gesto (medido en 390×844).
+  `body` lleva `overflow:hidden` y el documento mide 844 px = viewport, así que no hay
+  «más abajo» adonde empujar; el reparto era cabecera 190 + workspace 504 (área de
+  gráfico 256 = barra de dibujo 30 + fila del gráfico + escalera 145 + replay 38) +
+  registro 150, y a las velas les quedaban **43 px de fila**. Lo que engañaba a los
+  contratos: `#chartWrap` medía 200 px **de caja** porque su `min-height` lo exigía, pero
+  la caja desbordaba la fila y **se pintaba encima de su propia escalera** (solape medido:
+  157 px). Un assert sobre `getBoundingClientRect().height` no puede distinguir «200 px
+  útiles» de «200 px encima de otra cosa»: ahora se comprueba también que **caja == fila**
+  y que el solape es 0.
+  Con el andamio compactado (barra superior en 3 filas en vez de 4: marca + botones a la
+  par y los campos «Par»/«Temporalidad» en una línea sin la coletilla «USDT · Binance»;
+  franja de órdenes 250 → 200; registro 150 → 100; panel de PnL de móvil 92 → 80 px), la
+  fila del gráfico en 390×844 es de **208 px** —honestos, sin solape— y en 480×900, de
+  **266 px**, por encima de los 200 que ya pedían `tests/layout.test.js` y
+  `tests/browser.capture.js`. En teléfonos ADEMÁS bajos (≤760 px de alto: 360×640,
+  390×667) el `#chartArea` se queda con su suelo de 350 px y **el terminal se desplaza en
+  vertical** en vez de solaparse (medido: con las filas en `auto` la franja de órdenes
+  pisaba el gráfico 101 px). Y se probó el atajo de poner la fila del workspace en `auto`
+  sin compactar nada: **no sirve**, con dos filas `auto` que piden 363 + 248 el
+  contenedor de 504 las recorta a 256 + 248, idéntico a lo de antes (lo dice el
+  comentario de `css/bitunix.css` §10).
 - **Una columna nueva en una tabla se añade AL FINAL y se arregla la fila abierta**
   (esta vez contra un rojo de test, no a posteriori): el historial fija en otras suites
   que el «Motivo» esté en `td:nth-child(11)` y que el `textContent` de la fila no cambie,

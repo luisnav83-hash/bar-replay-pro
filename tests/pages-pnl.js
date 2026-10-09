@@ -272,18 +272,29 @@ const numEn = (s) => {
     await p.mouse.move(cajaAsa.x, cajaAsa.y); await p.mouse.down();
     for (let i = 1; i <= 4; i++) { await p.mouse.move(cajaAsa.x, cajaAsa.y - i * 14); await esp(60); }
     await p.mouse.up(); await esp(500);
-    const tras = await p.evaluate(() => ({ alto: PC.alto(), g: ST.get('pnlPaneAlto', null),
-                                           lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height) }));
-    // A 390 px el panel no puede estirarse todo lo que se le pida (el tope es el
-    // 45 % del área): se comprueba el arrastre CONTRA ese tope, no contra un número
-    // escrito a mano. En el móvil eso es precisamente lo que tiene que pasar.
-    const areaAlto = await p.evaluate(() => Math.round(document.getElementById('chartArea').getBoundingClientRect().height));
-    const topeMovil = Math.min(420, Math.max(96, Math.round(areaAlto * 0.45)));
-    const esperado = Math.min(asas.alto + 56, topeMovil);
+    // El tope NO es un número escrito aquí: es el que calcula la propia app
+    // (PC.techoAlto = hueco real del área menos barra de dibujo, replay, lo que la
+    // escalera tiene pagado fuera del PnL y el suelo de CSS del gráfico). Y lo que de
+    // verdad se comprueba es la invariante que este arreglo trajo: la CAJA del gráfico
+    // coincide con su FILA de grid, o sea que ninguna vela se pinta encima de la
+    // escalera (en lo publicado hasta ayer eran 157 px de solape en un 390×844).
+    const tras = await p.evaluate(() => {
+      const area = document.getElementById('chartArea'), wrap = document.getElementById('chartWrap'), pa = document.getElementById('paneArea');
+      const q = wrap.getBoundingClientRect(), r = pa.getBoundingClientRect();
+      const fila = Math.round(parseFloat(getComputedStyle(area).gridTemplateRows.split(' ')[1]));
+      return { alto: PC.alto(), g: ST.get('pnlPaneAlto', null), techo: PC.techoAlto(),
+               lienzo: Math.round(q.height), fila, suelo: Math.round(parseFloat(getComputedStyle(wrap).minHeight) || 0),
+               solape: Math.max(0, Math.round(q.bottom - r.top)), plegada: pa.classList.contains('pnl-solo'),
+               rsi: getComputedStyle(document.getElementById('paneRsi')).display };
+    });
+    const esperado = Math.min(asas.alto + 56, tras.techo);
     ok(tras.alto === esperado && tras.g === tras.alto,
-       `arrastrar el asa estira el panel y lo guarda (${asas.alto} → ${tras.alto}, preferencia ${tras.g}; esperado ${esperado})`);
-    ok(tras.alto <= topeMovil, `y en móvil el panel no pasa del 45 % del área de ${areaAlto} px (tope ${topeMovil}, lienzo del gráfico ${tras.lienzo} px)`);
-    ok(tras.lienzo >= 150, `el gráfico conserva sus 150 px mínimos en el estrecho (${tras.lienzo})`);
+       `arrastrar el asa estira el panel y lo guarda (${asas.alto} → ${tras.alto}, preferencia ${tras.g}; esperado ${esperado} = hueco real)`);
+    ok(tras.alto <= tras.techo, `y no pasa del hueco real del teléfono (techo ${tras.techo} px, medido por la propia app)`);
+    ok(tras.solape === 0 && tras.lienzo >= tras.suelo && tras.fila >= tras.suelo - 2,
+       `el gráfico conserva su suelo SIN pintar sobre la escalera (caja ${tras.lienzo} / fila ${tras.fila} / suelo ${tras.suelo}, solape ${tras.solape} px)`);
+    ok(!tras.plegada || tras.rsi === 'none',
+     `y en estrecho el resto de la escalera se aparta si hace falta (RSI ${tras.rsi}, plegada ${String(tras.plegada)})`);
     // Se devuelve el panel a su alto de CSS para dejar la app como estaba (y para que
     // la captura del README no dependa del arrastre).
     await p.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
@@ -327,33 +338,37 @@ const numEn = (s) => {
   if (!LOCAL) await p.screenshot({ path: '/tmp/paginas-pnl-movil.png' });
   // Arrastre CON EL DEDO por CDP (setViewport con hasTouch recarga la página y con
   // intercepción de peticiones se cuelga: lo aprendido en las suites locales).
-  const g1 = await p.evaluate(() => {
-    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
-    const pie = document.getElementById('panePnl').getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
-             alto: PC.alto(), sy: window.scrollY, pie: Math.round(pie.bottom) };
+  // La medición se instala EN LA PÁGINA (no en Node): `page.evaluate` serializa la
+  // función y ejecutarla aquí dentro sería un ReferenceError — g1 y g2 tienen que medir
+  // exactamente lo mismo, así que comparten el helper.
+  await p.evaluate(() => {
+    window.__geoG = () => {
+      const area = document.getElementById('chartArea'), wrap = document.getElementById('chartWrap');
+      const pa = document.getElementById('paneArea'), asa = document.getElementById('pnlPaneResize');
+      const r = asa.getBoundingClientRect(), q = wrap.getBoundingClientRect(), s2 = pa.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+               alto: PC.alto(), sy: window.scrollY, pie: Math.round(s2.bottom),
+               techo: PC.techoAlto(), solape: Math.max(0, Math.round(q.bottom - s2.top)),
+               lienzo: Math.round(q.height), suelo: Math.round(parseFloat(getComputedStyle(wrap).minHeight) || 0),
+               area: Math.round(area.getBoundingClientRect().height),
+               fuera: Math.max(0, Math.round(s2.bottom - area.getBoundingClientRect().bottom)) };
+    };
   });
+  const g1 = await p.evaluate(() => window.__geoG());
   const cdp = await p.target().createCDPSession();
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: g1.x, y: g1.y }] });
   for (let i = 1; i <= 4; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: g1.x, y: g1.y - i * 14 }] }); await esp(60); }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await esp(500);
-  const g2 = await p.evaluate(() => {
-    const pie = document.getElementById('panePnl').getBoundingClientRect();
-    const a = document.getElementById('chartArea').getBoundingClientRect();
-    return { alto: PC.alto(), sy: window.scrollY, g: ST.get('pnlPaneAlto', null), pie: Math.round(pie.bottom),
-             fuera: Math.max(0, Math.round(pie.bottom - a.bottom)),
-             lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
-             area: Math.round(a.height) };
-  });
-  const topeG = Math.min(420, Math.max(96, Math.round(g2.area * 0.45)));
-  ok(g2.alto > g1.alto && g2.alto === Math.min(g1.alto + 56, topeG),
-     `arrastrar con el dedo estira el panel publicado y se para en el 45 % del área (${g1.alto} → ${g2.alto}, tope ${topeG})`);
+  const g2 = await p.evaluate(() => Object.assign(window.__geoG(), { g: ST.get('pnlPaneAlto', null) }));
+  ok(g2.alto > g1.alto && g2.alto === Math.min(g1.alto + 56, g2.techo),
+     `arrastrar con el dedo estira el panel publicado y se para en el hueco real (${g1.alto} → ${g2.alto}, techo ${g2.techo})`);
   ok(g2.sy === g1.sy, `el gesto táctil no se convierte en scroll de la página (${g1.sy} → ${g2.sy})`);
   ok(g2.pie === g1.pie && g2.fuera === 0,
-     `el panel crece hacia arriba y no se sale del área (pie ${g1.pie} → ${g2.pie}, fuera ${g2.fuera} px)`);
-  ok(g2.g === g2.alto && g2.lienzo >= 150,
-     `se guarda la preferencia (${g2.g}) y el lienzo mantiene sus 150 px (${g2.lienzo})`);
+     `la escalera sigue anclada al pie del área y no se sale de él (pie ${g1.pie} → ${g2.pie}, fuera ${g2.fuera} px)`);
+  ok(g2.solape === 0, `con el dedo pasa lo mismo que con ratón: 0 px de gráfico pintados sobre la escalera (${g2.solape})`);
+  ok(g2.g === g2.alto && g2.lienzo >= g2.suelo,
+     `se guarda la preferencia (${g2.g}) y el lienzo respeta su suelo de CSS (${g2.lienzo} ≥ ${g2.suelo})`);
   await p.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
   await esp(350);
   await p.evaluate(() => { if (TE.state.position) document.getElementById('btnFlatten').click(); });

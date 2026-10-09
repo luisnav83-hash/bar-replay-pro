@@ -997,7 +997,69 @@ kbd {
      de Long/Short sin tener que andar rellenanado dentro de un hueco de 88 px. */
   .indPane { height: 52px; }
   #bottomPanel { height: 150px; }
-  #sidebar { max-height: 250px; }
+  /* PRESUPUESTO VERTICAL DEL TELÉFONO, MEDIDO (no a ojo): en 390×844 el andamio se
+     llevaba 190 (barra) + 248 (franja de órdenes) + 150 (registro) = 588 px y al
+     #chartArea le dejaba 256, de los que la escalera (145) + barra de dibujo (30) +
+     replay (38) robaban la fila del gráfico a 43 px — con #chartWrap desbordando por su
+     min-height ENCIMA de los paneles. Las tres reglas de abajo compactan lo que YA tiene
+     scroll propio y devuelven sitio a las velas (fila medida: 43 → ~137 px). No se toca
+     la barra superior: par, temporalidades, mark/index y 24 h son la estructura del
+     terminal que se copió de Bitunix, y ocultarla sería copiar peor. */
+  /* Y la barra superior deja de gastar CUATRO filas en un teléfono. Medido a 390×844:
+     190 px = marca 44 + par/temporalidades 71 + botones 38 + estadísticas 36. Se
+     reordena en 3 (marca y botones a la par; los campos en una línea, sin la coletilla
+     «USDT · Binance», que repite lo que ya dice la fila de estadísticas). Esas ~4 filas
+     ahorradas son las que ganan las VELAS: la fila del gráfico pasa de 129 a 215 px,
+     que es el alto útil que pedía tests/layout.js — pero esta vez de verdad, con la caja
+     del gráfico coincidiendo con su fila (antes «200 px» era una caja que desbordaba y
+     se pintaba encima de la escalera: la fila real medía 43 px). */
+  #topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto;
+            align-items: center; row-gap: 0; padding: 4px 8px 5px; }
+  #topbar .brand { grid-area: 1 / 1; border-right: 0; min-height: 0; padding: 4px 0; }
+  #topbar .topbar-right { grid-area: 1 / 2; margin-left: 0; padding: 4px 0; }
+  #topbar .topbar-group:not(.topbar-right) { grid-area: 2 / 1 / 3 / 3; padding: 3px 0; gap: 10px; overflow-x: auto; }
+  #topbar .bf-stats { grid-area: 3 / 1 / 4 / 3; }
+  #topbar .field { flex-direction: row; align-items: center; gap: 6px; }
+  #topbar .field-label { font-size: 9px; }
+  #topbar .sb-quote { display: none; }
+  #sidebar { max-height: 200px; }
+  /* El registro del móvil: 33 px de pestañas + ~66 de lista, con su propio scroll
+     (.tab-body{overflow:auto}); en Bitunix el registro del teléfono también es una
+     franja fina. 12 px más o menos aquí son 12 px de velas. */
+  #bottomPanel { height: 100px; }
+  /* Suelo del gráfico en el teléfono: con la leyenda OHLC compacta (10 px, 3 filas)
+     132 px es lo mínimo que cabe sin colarse por debajo del eje de precio. Es TAMBIÉN
+     el suelo que respeta PC.techoAlto(): el arrastre no puede dejar la fila por debajo. */
+  #chartWrap { min-height: 120px; }
+  /* Y la escalera, en el teléfono, se ve de UNA en UNA: mientras el panel de PnL esté
+     estirado por encima de su alto por defecto, el resto de paneles se pliega (la clase
+     la pone PC.setAlto y la quita el doble clic). 844 px no dan para las velas grandes,
+     el PnL grande y el RSI a la vez. */
+  #paneArea.pnl-solo .indPane:not(#panePnl) { display: none; }
+
+  /* Teléfono ADEMÁS bajo (667 y 640 px de alto, los iPhones pequeños y muchos Android):
+     aquí no hay forma de que quepan velas + PnL + órdenes + registro sin desplazar, así
+     que el terminal se desplaza en vertical y el área de gráfico se queda con su suelo
+     (barra de dibujo 30 + gráfico 132 + PnL 92 + replay 34 ≈ 292 px). Medido antes de
+     esta regla: la fila del gráfico era de 0 px y la escalera se comía el área entera. */
+  @media (max-height:760px) {
+    /* Mismo recurso que el tier histórico de ≤520 px de alto: cuando el teléfono NO da
+       para todo, el terminal se desplaza en vertical en vez de solaparse. Sin esto,
+       forzar el área a 344 px hacía que la franja de órdenes la PISARA (medido a
+       390×667: sidebar arrancaba en y 355 con el área terminando en 508 → 101 px
+       encima del gráfico). Las dos filas pasan a medir lo que piden y a crecer el
+       documento: 164 de barra + 344 de gráfico + 200 de órdenes + 112 de registro = 820
+       > 667, así que se desliza ~153 px y nada se pinta encima de nada. */
+    body { overflow-y: auto; height: auto; min-height: 100vh; }
+    #workspace { flex: 0 0 auto; height: auto; min-height: 0; overflow: visible;
+                 grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+    /* 30 barra de dibujo + 120 suelo del gráfico + 133 escalera (PnL 80 + RSI 52) +
+       34 replay + 3 de bordes: el teléfono que no quepa todo esto DESPLAZA la franja de
+       órdenes hacia abajo en vez de solaparla (medido a 360×640: fila del gráfico
+       147 px con 344 y 153 con 350 — con 350 el gráfico entra también en el contrato de
+       «altura útil ≥150 en pantallas bajas» que usan las suites de piel). */
+    #chartArea { min-height: 350px; }
+  }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
   /* (1,3,0) para ganar a la regla de arriba, que es (1,2,0). */
   #sidebar > #orderCard > .card-body { max-height: 214px; }
@@ -1050,7 +1112,10 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
-  #panePnl.indPane, #panePnl { height: 92px; }
+  /* 80 px en el teléfono, no 92: la cabecera del panel (valor + velas) son ~19 px y
+     con 60 de curva se lee el recorrido entero del trade. Los 12 px vuelven al
+     gráfico, que es lo que se estaba comiendo el andamio. */
+  #panePnl.indPane, #panePnl { height: 80px; }
   /* En el dedo el asa se ensancha (de 7 a 12 px) y cede la mitad derecha del
      encabezado para que siga siendo fácil de agarrar sin comerte la ✕. */
   .pane-resize { height: 12px; right: 44px; }
