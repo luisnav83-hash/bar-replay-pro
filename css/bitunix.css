@@ -622,6 +622,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .tool:hover { background: var(--bg-3); color: var(--tx-1); }
 .tool.active { background: rgba(184, 240, 64, .16); color: var(--accent); }
 .mini-select { height: 24px; font-size: 10.5px; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--tx-2); }
+/* «⊘ scroll» es un <label> con su checkbox dentro, no un botón: sin alto propio
+   medía 19 px en escritorio (en el teléfono 26) y era la única diana de la barra
+   por debajo de los 20 px que respetan los demás controles. Mide como un `.tool`. */
+#drawToolbar .switch { min-height: 22px; padding: 0 5px; border-radius: var(--r-sm); }
 .color-pick input[type="color"] { width: 22px; height: 22px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-3); }
 
 #ohlcLegend {
@@ -933,7 +937,10 @@ kbd {
   #topbar .topbar-group { padding: 4px 10px; }
   #bottomPanel { height: 156px; }
   #replayBar { height: 38px; }
-  #drawToolbar { height: 30px; }
+  /* La barra de dibujo NO repite el alto aquí: `--toolbar-h` (30 px en este tier)
+     manda a la vez la fila de `#chartArea` y la caja de la barra. Escribir la
+     altura por su cuenta en un solo de los dos sitios es lo que dejaba 2 px de
+     franja muerta bajo la barra en el tier de 700 px de alto. */
   .bf-stat { min-width: 100px; padding: 0 10px; }
   .bf-stat .bf-v { font-size: 12.5px; }
   .bf-stat.bf-last .bf-v { font-size: 15px; }
@@ -949,11 +956,14 @@ kbd {
 /* Tier 700: coincide con el «modo apurado» histórico del tema (responsive.css
    §7): panel inferior a 104 px y paneles de indicadores apretados. */
 @media (max-height:700px) {
-  :root { --stats-h: 30px; }
+  /* --toolbar-h baja a 28 aquí PARA que baje también la fila del grid: la caja de
+     la barra y la fila que le toca a `#chartArea` salen de la misma variable, así
+     que los 2 px que se le quitan a la barra van al gráfico (169 → 171 px medida a
+     360×640) en vez de quedarse de relleno entre la barra y el borde. */
+  :root { --stats-h: 30px; --toolbar-h: 28px; }
   #topbar .brand { min-height: 36px; padding: 0 8px; }
   #bottomPanel { height: 104px; }
   #replayBar { height: 34px; }
-  #drawToolbar { height: 28px; }
   .tabs { height: 28px; }
   .tab { padding: 0 10px; font-size: 10.5px; }
   .rb-btn { width: 27px; height: 24px; }

@@ -212,8 +212,10 @@ tbody tr.loss td:nth-child(8),tbody tr.loss td:nth-child(9){color:var(--down);}
 }
 #drawToolbar{
   display:flex;align-items:center;gap:6px;padding:0 8px;
-  background:var(--bg-2);border-bottom:1px solid var(--line);overflow-x:auto;
-  min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+  background:var(--bg-2);border-bottom:1px solid var(--line);
+  min-width:0;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none}
+#drawToolbar::-webkit-scrollbar{height:0;width:0}
 .tool-cluster{display:flex;align-items:center;gap:3px;padding-right:7px;border-right:1px solid var(--line-soft);}
 .tool-cluster:last-child{border-right:none;}
 .tool-cluster-right{margin-left:auto;padding-right:0;}
@@ -1210,6 +1212,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .tool:hover { background: var(--bg-3); color: var(--tx-1); }
 .tool.active { background: rgba(184, 240, 64, .16); color: var(--accent); }
 .mini-select { height: 24px; font-size: 10.5px; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--tx-2); }
+#drawToolbar .switch { min-height: 22px; padding: 0 5px; border-radius: var(--r-sm); }
 .color-pick input[type="color"] { width: 22px; height: 22px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-3); }
 #ohlcLegend {
   gap: 10px;
@@ -1442,7 +1445,6 @@ kbd {
   #topbar .topbar-group { padding: 4px 10px; }
   #bottomPanel { height: 156px; }
   #replayBar { height: 38px; }
-  #drawToolbar { height: 30px; }
   .bf-stat { min-width: 100px; padding: 0 10px; }
   .bf-stat .bf-v { font-size: 12.5px; }
   .bf-stat.bf-last .bf-v { font-size: 15px; }
@@ -1452,11 +1454,10 @@ kbd {
   .bf-asks, .bf-bids { max-height: 102px; overflow: hidden; }
 }
 @media (max-height:700px) {
-  :root { --stats-h: 30px; }
+  :root { --stats-h: 30px; --toolbar-h: 28px; }
   #topbar .brand { min-height: 36px; padding: 0 8px; }
   #bottomPanel { height: 104px; }
   #replayBar { height: 34px; }
-  #drawToolbar { height: 28px; }
   .tabs { height: 28px; }
   .tab { padding: 0 10px; font-size: 10.5px; }
   .rb-btn { width: 27px; height: 24px; }
