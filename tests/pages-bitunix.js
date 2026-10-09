@@ -432,6 +432,89 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
       ok(/1:#orderCard|1:orderCard/.test(G.orden), `${etiqueta}: el panel de órdenes es lo primero que se ve (${G.orden})`);
     }
     ok(G.visible, `${etiqueta}: los botones Long/Short se pueden pulsar`);
+
+    /* ═══ «AVANZADO» del formulario, TOCADO con dedo sobre lo publicado ═══
+       En el teléfono el cuerpo del formulario pedía 510 px dentro de 214 de caja: once
+       controles vivían bajo el recorte. Se prueban las dos mitades del arreglo —lo
+       esencial alcanzable sin deslizar, lo plegado alcanzable al abrir— porque la
+       segunda sin la primera es simplemente esconder cosas. */
+    if (w <= 640) {
+      const AV = await p.evaluate(async () => {
+        const g = (id) => document.getElementById(id);
+        const pisa = (e) => {
+          if (!e || e.offsetParent === null) return 'oculto';
+          const q = e.getBoundingClientRect();
+          const c = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+          return (c === e || e.contains(c) || (c && c.contains(e))) ? 'si' : 'no';
+        };
+        // `#feeInput` no está en la lista: es el control HEREDADO del tema anterior,
+        // dentro de un `.visually-hidden` y fuera del recorte por diseño (su centro mide
+        // x = −11 px). Se comprueba lo que la persona ve y toca.
+        /* Los cinco de arriba tienen que estar A LA VISTA sin deslizar nada; «Cerrar
+           todo» y los precios de SL/TP viven en la parte que puede quedar debajo (es un
+           botón destructivo y dos campos de uso puntual, y la barra de Long/Short es fija
+           por diseño), así que se comprueba alcanzABLES deslizando la tarjeta. */
+        const esenciales = ['segOrderType', 'segSize', 'sizeInput', 'btnLong', 'btnShort'];
+        const bajoPie = ['btnFlatten'];
+        const cb = g('orderCard').querySelector('.card-body');
+        const recorte = () => Math.round(cb.scrollHeight - cb.clientHeight);
+        // Se mide la tarjeta DESDE SU ARRIBA: las secciones anteriores de esta suite ya
+        // han jugado con el deslizador y un «no se pulsa» sin volver a 0 sería un falso
+        // positivo (el control está, solo que fuera del hueco en ese instante).
+        cb.scrollTop = 0;
+        const antes = { hitos: esenciales.map((id) => pisa(g(id))), recorte: recorte(), desborda: g('orderCard').classList.contains('desborda'),
+                        abajo: bajoPie.map((id) => g(id).getBoundingClientRect().top > cb.getBoundingClientRect().bottom - 2),
+                        aria: g('btnOrderAvanzado').getAttribute('aria-expanded'),
+                        oculto: !g('orderAvanzado').offsetParent,
+                        docH: document.documentElement.scrollHeight, vh: window.innerHeight,
+                        head: Math.round(g('orderCard').querySelector('.card-head').getBoundingClientRect().height) };
+        g('btnOrderAvanzado').click();
+        await new Promise((r) => setTimeout(r, 420));
+        const sl = g('slInput');
+        sl.scrollIntoView({ block: 'center' });
+        await new Promise((r) => setTimeout(r, 220));
+        sl.focus(); sl.value = '70000'; sl.dispatchEvent(new Event('input', { bubbles: true }));
+        const despues = {
+          aria: g('btnOrderAvanzado').getAttribute('aria-expanded'), visible: !!g('orderAvanzado').offsetParent,
+          sl: (document.activeElement === sl ? 'foco' : 'SIN FOCO') + '/' + pisa(sl) + '/' + sl.value,
+          recorte: (() => { const cb = g('orderCard').querySelector('.card-body'); return Math.round(cb.scrollHeight - cb.clientHeight); })(),
+          desborda: g('orderCard').classList.contains('desborda'),
+          solape: Math.max(0, Math.round(g('chartWrap').getBoundingClientRect().bottom - g('paneArea').getBoundingClientRect().top)),
+          caja: Math.round(g('chartWrap').getBoundingClientRect().height),
+          fila: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
+          franja: Math.round(g('sidebar').getBoundingClientRect().height),
+        };
+        g('btnOrderAvanzado').click();
+        await new Promise((r) => setTimeout(r, 400));
+        cb.scrollTop = 0;
+        const trasDeslizar = [];
+        for (const id of bajoPie) { g(id).scrollIntoView({ block: 'center' }); await new Promise((r2) => setTimeout(r2, 200)); trasDeslizar.push(id + ':' + pisa(g(id))); }
+        cb.scrollTop = 0;
+        const vuelta = { aria: g('btnOrderAvanzado').getAttribute('aria-expanded'), oculto: !g('orderAvanzado').offsetParent,
+                         caja: Math.round(g('chartWrap').getBoundingClientRect().height), sy: Math.round(window.scrollY),
+                         hitos: esenciales.map((id) => pisa(g(id))), recorte: recorte(), trasDeslizar,
+                         desborda: g('orderCard').classList.contains('desborda'),
+                         st: window.ST && ST.get('ordenAvanzado', null) };
+        return { antes, despues, vuelta };
+      });
+      /* Aquí la app viene del bloque anterior en modo «Límite» (su fila de precio y sus
+         siete atajos: ~54 px más), así que el formulario NO cabe en los 221 px de caja.
+         No se pide que quepa: se pide que lo ESENCIAL esté arriba sin deslizar y que si
+         algo queda debajo, la tarjeta lo avise (su deslizador + el degradado del pie). */
+      ok(AV.antes.hitos.every((x) => x === 'si') && AV.antes.aria === 'false' && AV.antes.oculto
+         && (AV.antes.recorte <= 1 ? AV.antes.desborda === false : AV.antes.desborda === true),
+         `${etiqueta}: con el formulario plegado se puede pulsar TODO lo esencial sin deslizar y el pie avisa solo cuando hace falta (${AV.antes.hitos.join(' ')} · recorte ${AV.antes.recorte}, aviso ${AV.antes.desborda} · doc ${AV.antes.docH}/${AV.antes.vh})`);
+      ok(AV.antes.head >= 22, `${etiqueta}: la cabecera de la tarjeta no se aplasta (${AV.antes.head} px) —es el flex de la franja, que antes la dejaba en 19—`);
+      ok(AV.despues.visible && AV.despues.aria === 'true' && AV.despues.sl.startsWith('foco/si/'),
+         `${etiqueta}: al abrir «Avanzado», el stop loss se ve, se enfoca y se escribe (${AV.despues.sl})`);
+      ok(AV.despues.solape === 0 && AV.despues.caja === AV.despues.fila && AV.despues.caja === G.chart,
+         `${etiqueta}: abrir no le quita un píxel al gráfico (${AV.despues.caja} == fila ${AV.despues.fila} == los ${G.chart} de antes) y no pinta sobre la escalera`);
+      ok(AV.despues.recorte >= 80 && AV.despues.desborda === true,
+         `${etiqueta}: lo que no cabe se alcanza deslizando la tarjeta (${AV.despues.recorte} px, con el aviso del pie)`);
+      ok(AV.vuelta.oculto && AV.vuelta.aria === 'false' && AV.vuelta.st === false && AV.vuelta.recorte === AV.antes.recorte && AV.vuelta.hitos.every((x) => x === 'si') && AV.vuelta.trasDeslizar.every((x) => x.endsWith(':si')),
+         `${etiqueta}: cerrar devuelve el estado anterior de verdad (aria ${AV.vuelta.aria}, ST ${AV.vuelta.st}, recorte ${AV.vuelta.recorte} = ${AV.antes.recorte}, ${AV.vuelta.hitos.join(' ')})`);
+      ok(AV.vuelta.caja === G.chart, `${etiqueta}: y el gráfico recupera píxel a píxel lo que tenía antes de abrir (${AV.vuelta.caja} == ${G.chart})`);
+    }
   }
   await p.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await esp(500);

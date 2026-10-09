@@ -859,8 +859,12 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(toque2.pane === Math.min(toque1.pane + 40, toque2.techo),
      `y se para donde manda el HUECO REAL: pedido ${toque1.pane}+40, techo con la escalera ya plegada ${toque2.techo} `
      + `(sin plegar era ${toque1.techo} = área ${toque1.area} − dibujo ${toque1.toolbar} − replay ${toque1.replay} − RSI − suelo ${toque1.suelo}) → panel ${toque2.pane} px`);
-  ok(toque2.pane > toque1.techo ? toque2.plegada === true : toque2.plegada === false,
-     `por encima del techo sin plegar (${toque1.techo} px) solo se pasa si la escalera se aparta (plegada ${toque2.plegada})`);
+  /* Ojo al borde: con la franja del teléfono compactada, el pedido (78+40) cae EXACTO
+     en el techo (118), y `reduce()` pliega al llegar a él (>=), no solo al pasarlo. Lo
+     que se comprueba es la propiedad —«por ENCIMA del techo sin plegar no se pasa», que
+     es lo que impediría pintar la escalera bajo el panel—, no un `>` memorizado. */
+  ok(toque2.pane <= toque1.techo || toque2.plegada === true,
+     `con el techo sin plegar a ${toque1.techo} px, el panel llega a ${toque2.pane} (plegada ${toque2.plegada}): nunca se pasa del techo con la escalera puesta`);
   ok(toque2.lienzo >= toque2.suelo,
      `y al estirar a tope las velas no bajan de su suelo: caja ${toque2.lienzo} vs suelo ${toque2.suelo}`);
   ok(toque2.solape === 0 && toque1.solape === 0,

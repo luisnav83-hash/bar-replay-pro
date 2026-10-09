@@ -263,6 +263,48 @@ panel de órdenes mida menos de 20 px de alto: el deslizador de apalancamiento t
 la barra fina por diseño (`height: 3px`) y con el dedo era imposible de agarrar, así
 que ahora la caja del `input[type=range]` mide 22 px y la pista sigue viéndose de 3 px.
 
+**Y el formulario cabe: 510 px dentro de 214 ya no existen.** Medido a 390×844 antes de
+esto: el cuerpo del panel pedía 510 px y la caja le daba 214, con **15 de sus 26 controles**
+fuera del recorte (`q0…q4`, la comisión, SL, TP, los seis atajos de % y «Cerrar todo» vivían
+bajo el borde, sin barra que lo avisara). Tres cosas, en este orden:
+
+- **Las dos filas de segmentados pasan a una línea** (Mercado|Límite y %equity|USD|Qty,
+  ~308 px dentro de 374) y las cuatro filas de arriba se aprietan al mínimo que sigue
+  siendo diana: 24-28 px de alto por fila, botones de tipo a 24, campos a 24, Long/Short
+  a 34. Son 40 px devueltos al gráfico sin esconder nada.
+- **«Avanzado» es la única fila que se pliega** —comisión, SL, TP y sus seis atajos, 149 px—
+  con un botón en la *cabecera* de la tarjeta (`#btnOrderAvanzado`, `aria-expanded` como única
+  fuente de verdad) y la preferencia guardada en `localStorage` (clave `ordenAvanzado`), porque
+  quien trabaja con SL/TP no debería abrir el panel cada vez. La pista de texto (`#orderHint`)
+  y la del modo límite (`#limitHint`) se quedan fuera en el teléfono: repiten lo que ya dicen
+  los `title`; los elementos siguen en el DOM, solo deja de pintarlos el CSS.
+- **Lo que no cabe lo desliza la TARJETA, no la página.** `#orderCard > .card-body` es
+  `overflow-y:auto` con `min-height:0` dentro de la franja topada: abrir «Avanzado» (o pasar a
+  modo Límite, que añade 54 px) no le quita **un píxel** al gráfico. Y para que un pie cortado
+  no parezca un dibujo roto, `UI.initOrdenAvanzado` pone `#orderCard.desborda` cuando
+  `scrollHeight > clientHeight` y CSS pinta un degradado de 14 px (con `scrollIntoView` basta
+  para llegar a SL/TP con el dedo; `overscroll-behavior:contain` evita que deslizar la tarjeta
+  arrastre también la página).
+
+Medido ahora, a 390×844 con la app recién abierta: franja 250 → tarjeta 249 (cabecera 28 +
+cuerpo 221) contra **222 px de contenido** —en reposo no hay nada que deslizar—, **18 de 18
+controles alcanzables**, documento 844 = 844 (no desliza) y **188-189 px de fila de gráfico**
+los que se reparten con la escalera: eran 146 antes de este paso y 43 al empezar el trabajo del
+móvil. Abriendo «Avanzado»: gráfico idéntico (188 contra 189 —±2 px del redondeo del reparto—),
+franja en su tope (250), solape 0, desborde horizontal 0 y 150 px por debajo del pie con su
+aviso. Y en esa fila de SL/TP estaba el último defecto gordo: eran `grid-template-columns:1fr 1fr`
+con la etiqueta en línea, cada campo pedía 287 px de mínimo de contenido y `1fr` es
+`minmax(AUTO,1fr)` —el campo de Take Profit se iba a x 303…601 dentro de una caja de 379, y
+`scrollIntoView` lo tapaba desplazando la tarjeta en horizontal (se veía «COMPRAR / LONG»
+cortado por el borde izquierdo). A ≤640 la rejilla del formulario pasa a **una columna**: SL
+y TP uno debajo de otro, los dos a 363 px de ancho, sin desbordarse.
+
+`tests/responsive.test.js` (bloque «Avanzado del panel de órdenes
+en el teléfono», 15 comprobaciones) y `tests/pages-bitunix.js` (bloque móvil, 6) lo comprueban
+pulsando de verdad:
+cada campo de SL/TP se enfoca con el puntero y acepta el número escrito, y cerrar devuelve
+píxel a píxel el estado anterior. La barra `Abrir Long / Abrir Short` sigue fija al pie.
+
 Dos piezas del gráfico también estaban en su sitio solo «de casualidad» y se han
 colocado bien: el aviso de **velas ocultas** ya no es un `position:absolute` suelto
 sino un elemento más de la leyenda OHLC (va en su línea y no pisa nunca el `O/H/L/C`,
@@ -278,7 +320,7 @@ también a 1440 px).
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
-`tests/responsive.test.js` (60 comprobaciones) y `tests/browser.capture.js`:
+`tests/responsive.test.js` (74 comprobaciones) y `tests/browser.capture.js`:
 el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
 altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
 el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
@@ -383,6 +425,14 @@ suelo de 120 px:
 
 ![Arrastre del panel con el dedo en móvil](docs/captura-43-asa-en-el-dedo.png)
 
+**El formulario del teléfono, cabiendo** (390×844) — a la izquierda como se abre la app
+(todo lo esencial a la vista, sin deslizar); a la derecha, el bloque «Avanzado» abierto: la
+tarjeta desliza por dentro, la barra de Long/Short sigue fija y el gráfico no ha perdido un
+píxel (188 px en los dos estados):
+
+![Formulario del móvil, plegado](docs/captura-44-formulario-movil-plegado.png)
+![Formulario del móvil con «Avanzado» abierto](docs/captura-45-formulario-movil-avanzado.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -409,6 +459,8 @@ soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
 | 41 | Panel de PnL **estirado a mano** + mini-PnL en la tarjeta de la posición |
 | 42 | **Historial de trades con el recorrido** de cada operación (la columna nueva) |
 | 43 | **El asa arrastrada con el dedo** (390×844): panel 72 → 112 px, escalera plegada, velas intactas |
+| 44 | Formulario del móvil **tal cual se abre**: 222 px de contenido en 221 de caja, nada que deslizar |
+| 45 | El mismo formulario con **«Avanzado» abierto**: desliza la tarjeta, no el gráfico |
 
 *(37 y 38 las escribe `tests/bitunix.test.js`; 39, 41, 42 y 43, `tests/pnl-chart.test.js`; el resto, `tests/browser.capture.js` en Chromium headless.)*
 
@@ -465,12 +517,13 @@ node tests/logic.test.js      # 153 pruebas: indicadores, datos, trading, estad�
 node tests/dom.smoke.js       #  51 comprobaciones en navegador simulado (requiere jsdom)
 node tests/boot.test.js       #  13 comprobaciones de arranque con red bloqueada
 node tests/network.test.js    #  10 comprobaciones de paginación y datos reales de Binance
-node tests/browser.capture.js #  47 comprobaciones en Chromium real + capturas PNG
+node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  60 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  74 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
+                              #   + el bloque «Avanzado» del teléfono, medido pulsando
 node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
 node tests/limites.test.js    #  14 comprobaciones de las órdenes límite (ciclo completo)
 node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
@@ -517,14 +570,14 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1073 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1088 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1360 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1073 locales + 287 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `78ec625` — y el `md5` del archivo publicado (`9ef3ff5d…`, 934 257 B)
-coincide byte a byte con el del build local: 12 del buscador + 10 de dibujos +
-46 de promediado/TP + 57 del trailing + 97 de la piel Bitunix + 65 del marcaje de PnL)
+(1086 locales + las 6 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas en cada
+despliegue — y el `md5` del archivo publicado coincide byte a byte con el del build local:
+12 del buscador + 10 de dibujos + 46 de promediado/TP + 57 del trailing + **104 de la piel
+Bitunix** (añade el bloque móvil de «Avanzado») + 65 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera

@@ -404,6 +404,9 @@
     <div class="card bf-order" id="orderCard">
       <div class="card-head"><span class="card-title">Nueva orden</span>
         <span class="tag tag-muted" id="tagPrice">—</span>
+        <button class="bf-adv" id="btnOrderAvanzado" aria-expanded="false" aria-controls="orderAvanzado"
+                title="Apalancamiento, stop loss y take profit (en el teléfono es donde no caben)">
+          Avanzado <span class="ar" aria-hidden="true">⌄</span></button>
       </div>
       <div class="card-body">
         <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
@@ -419,9 +422,20 @@
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
           </div>
         </div>
-        <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
-          <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
-          <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+        <!-- Las dos filas de segmentados (tipo de orden y unidad del tamaño) van en la
+             MISMA línea en el teléfono (css/bitunix.css, bloque ≤640): son 28 px + 4 de
+             gap que el formulario necesita para no esconder nada. El precio límite baja a
+             su fila propia porque solo aparece en modo «Límite». -->
+        <div class="ord-segs">
+          <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
+            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
+            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+          </div>
+          <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
+            <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
+            <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
+            <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
+          </div>
         </div>
 
         <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
@@ -445,12 +459,6 @@
           <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
         </div>
 
-        <div class="seg" id="segSize">
-          <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
-          <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
-          <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
-        </div>
-
         <label class="field full">
           <span class="field-label" id="sizeLabel">Tamaño (% del equity)</span>
           <span class="input-row">
@@ -462,6 +470,14 @@
         <div class="bf-slide-quick" id="quickSize" role="group" aria-label="Fracción del disponible">
           <button class="q0" data-pct="0">0</button><button class="q1" data-pct="25">25</button><button class="q2" data-pct="50">50</button><button class="q3" data-pct="75">75</button><button class="q4 active" data-pct="100">100</button>
         </div>
+
+        <!-- «AVANZADO» DEL TELÉFONO: apalancamiento/comisión, SL/TP y sus atajos: 124 px
+             que Bitunix en el teléfono también esconde tras un desplegable. Se pliega con
+             el botón de la cabecera (js/uiController.js, recuerda el estado en
+             `ST «ordenAvanzado»`) y SOLO por ancho: fuera del bloque ≤640 de la CSS no
+             hay ninguna regla que oculte estas tres filas, así que en escritorio se ven
+             siempre y el botón ni aparece. -->
+        <div class="ord-adv" id="orderAvanzado">
 
         <div class="grid-2 bf-fee-row">
           <!-- Control HEREDADO del tema anterior: sigue existiendo porque
@@ -506,6 +522,7 @@
           <button class="chip" data-tppct="1">TP 1%</button>
           <button class="chip" data-tppct="2">TP 2%</button>
           <button class="chip" data-tppct="4">TP 4%</button>
+        </div>
         </div>
 
         <div class="order-actions">

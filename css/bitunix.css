@@ -788,6 +788,17 @@ kbd {
 
 /* En estrecho el terminal apila: gráfico arriba, libro+órdenes debajo, y la
    fila de estadísticas pasa a desplazarse en horizontal (ya lo hace). */
+/* El botón de «Avanzado» es del teléfono: en escritorio las tres filas avanzadas están
+   siempre a la vista (ningún CSS las oculta fuera de ≤640 px), así que no hay nada que
+   plegar y el botón se queda sin pintar. La apariencia, aquí fuera del media, para que
+   el aspecto sea el mismo cuando aparezca. */
+#btnOrderAvanzado { display: none; align-items: center; gap: 4px; height: 18px; padding: 0 6px;
+                    border: 1px solid var(--line); border-radius: 2px; background: var(--bg-3, #17171c);
+                    color: var(--txt-2, #8b8e96); font: 600 9px/1 var(--font-ui, ui-sans-serif);
+                    letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+#btnOrderAvanzado .ar { font-size: 9px; line-height: 1; }
+#btnOrderAvanzado:hover { color: var(--txt-1, #e6e7ea); border-color: var(--line-2, #2a2a32); }
+
 @media (max-width: 1000px) {
   /* En estrecho la franja del terminal se come ALTURA (es una fila debajo del
      gráfico), así que el andamio se compacta aquí siempre: sin esto, en
@@ -1093,7 +1104,107 @@ kbd {
   }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
   /* (1,3,0) para ganar a la regla de arriba, que es (1,2,0). */
-  #sidebar > #orderCard > .card-body { max-height: 214px; }
+  /* El cuerpo del formulario mide lo que la franja le deja (250 − cabecera) y, si no
+     cabe, DESLIZA LA TARJETA: es lo que permite plegar «Avanzado» sin robarle un píxel
+     al gráfico ni dejar controles fuera del mundo. Antes `max-height` era el único
+     tope y por eso había que ir a buscar a scroll los % rápidos y el «Cerrar todo»;
+     ahora el contenido real con todo plegado son ~207 px (medido), o sea: nada que
+     deslizar en el estado por defecto. `overscroll-behavior:contain` para que seguir
+     deslizando sobre la tarjeta no arrastre también la página (en el dedo es muy
+     fácil). */
+  #sidebar > #orderCard > .card-body { max-height: none; overflow-y: auto; overscroll-behavior: contain;
+                                      padding: 4px 8px 3px; gap: 2px; scrollbar-width: thin; }
+  /* 224 px de contenido contra 221 de caja con TODO plegado: se apretaron 2 px de
+     `padding-bottom` para que el estado por defecto NO deslice (la señal del pie solo
+     aparece cuando de verdad hay algo debajo, y en reposo no lo hay). */
+  /* El `max-height:none` no es adorno: la regla de arriba (`#sidebar > .card > .card-body`,
+     88 px para las tarjetas del libro) gana en cascada si aquí no se pone, y el cuerpo del
+     formulario se quedaba en 88 px de 235 (medido) —seis controles otra vez fuera—. */
+  /* Las dos filas de segmentados, en una sola línea (Mercado|Límite + %equity|USD|Qty
+     ≈ 308 px dentro de 374): 32 px devueltos al gráfico sin esconder un solo control. */
+  #orderCard .ord-segs { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+  #orderCard .ord-segs > .seg { flex: 1 1 auto; min-width: 0; }
+  /* Campo de tamaño: la etiqueta en línea con el input (44 → 30 px). */
+  #orderCard .field { flex-direction: row; align-items: center; gap: 6px; }
+  #orderCard .field .field-label { font-size: 9px; white-space: nowrap; }
+  #orderCard .field .input-row { flex: 1 1 auto; min-width: 0; }
+  #orderCard .order-actions .btn { height: 34px; font-size: 12px; }
+  #orderCard .order-actions { gap: 6px; }
+  /* La fila de coste/margen/cerrar-todo: aquí están los 10 px que separan «cabe en la
+     franja» de «hay que ir a buscar botones a scroll». `margin-top` y `padding-top` de
+     la regla general (8 + 7 px) se quedan en 2 + 2, y el botón «Cerrar todo» baja a
+     18 px de alto —además de pulsable tiene su tecla (Escape), que es como Bitunix
+     resuelve el mismo sitio en el teléfono—. */
+  #orderCard .bf-cost { min-height: 22px; margin-top: 0; padding-top: 0; gap: 6px; font-size: 9px; align-items: center; }
+  /* 24 px y no 18: `tests/bitunix.test.js` exige 20 px mínimos a TODO control visible
+     del panel (es el contrato que cazó el deslizador de apalancamiento de 3 px) y
+     «Cerrar todo» es el botón que liquida la posición —no se puede quedar en 18—. */
+  #orderCard .bf-cost .bf-flat { height: 24px; padding: 0 7px; font-size: 9px; }
+  /* Cabecera de la tarjeta: 24 px con el título a 10 px y el botón «Avanzado» de 18.
+     Y `flex: 0 0 auto`, que es el punto: `#orderCard` es una columna flex dentro de una
+     franja de 250 px, así que si el cuerpo aprieta, la cabecera se APLASTA (medido: 19 px
+     en vez de 33, con el botón de 18 px colgando). Es la misma familia de bugs que
+     `tests/bitunix.test.js` vigila en las filas del formulario. */
+  /* Cabecera de la tarjeta: 28 px (24 dejaban el botón «Avanzado» en 18 px de diana,
+     por debajo del mínimo táctil que mide `tests/bitunix.test.js`) con el título a 10 px
+     y el botón a 22. Y `flex: 0 0 auto`, que es el punto: `#orderCard` es una columna
+     flex dentro de una franja de 250 px, así que si el cuerpo aprieta, la cabecera se
+     APLASTA (medido: 19 px en vez de 33, con el botón colgando). Es la misma familia de
+     bugs que `tests/bitunix.test.js` vigila en las filas del formulario. */
+  #orderCard > .card-head { flex: 0 0 auto; height: 28px; gap: 5px; padding: 0 6px; }
+  #orderCard > .card-body { flex: 1 1 auto; min-height: 0; }
+  /* Las cuatro filas de arriba del formulario, al mínimo que sigue siendo pulsable
+     (22-28 px de diana, como en Bitunix): es lo que devuelve 40 px al gráfico. */
+  #orderCard .bf-margin-row { min-height: 22px; }
+  #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
+  #orderCard .field { min-height: 26px; }
+  #orderCard .field input { height: 24px; }
+  /* 24 px de fila, no 20: `tests/bitunix.test.js` exige ≥24 a CADA fila del formulario
+     (fue el bug de las filas aplastadas a 2 px) y aquí sobra sitio con los 4 px que se
+     acaban de quitar del margen de la fila de coste. Los botones siguen en 22, por
+     encima del mínimo táctil de 20 que la misma suite mide control a control. */
+  #orderCard .bf-slide-quick { min-height: 24px; }
+  #orderCard .bf-slide-quick button { height: 22px; }
+  #orderCard .ord-segs { min-height: 24px; }
+  /* La pista de texto se queda fuera en el teléfono: repite lo que ya dicen los
+     `title` de los botones y del bloque avanzado, y eran 16 px que no cabían. El
+     elemento sigue en el DOM (las suites leen su texto) —ocultarlo por CSS no rompe
+     nada; borrarlo del HTML, sí—. */
+  #orderCard #orderHint { display: none; }
+  /* Lo mismo con la pista del modo «Límite» (36 px): en el teléfono, con esa línea
+     puesta, el campo de TAMAÑO se metía debajo de la barra fija de Long/Short (medido:
+     su centro caía sobre `btnShort`). El texto repite lo que dicen los `title` de los
+     siete atajos de precio; fuera. */
+  #orderCard #limitHint { display: none; }
+  /* La fila de la comisión trae un control HEREDADO del tema anterior (el `select` de
+     apalancamiento) que sigue en el DOM porque `UI.syncLeverage` lo usa como fuente de
+     verdad, pero está `.visually-hidden`: con la rejilla de dos columnas dejaba media
+     fila en negro (medido: campo de 180 px dentro de 363). Si la rejilla detecta ese
+     hueco, pasa a una columna y el campo ocupa toda la fila. `:has()` es un extra: donde
+     no exista se queda como estaba, no se rompe nada. */
+  #orderCard .bf-fee-row:has(> .visually-hidden) { grid-template-columns: minmax(0, 1fr); }
+  /* SL y TP, UNA DEBAJO DE OTRA en el teléfono. Con la rejilla de dos columnas cada
+     campo medía 287-298 px de mínimo de contenido (etiqueta en línea + input de 168) y
+     `1fr` es `minmax(AUTO, 1fr)`: las dos pistas se comían las 363 px y el campo de
+     Take Profit acababa en x 303 con su borde derecho en 601 —222 px fuera de la
+     tarjeta, sin scroll horizontal que lo rescate—. Aquí el hueco no se arregla
+     encogiendo el campo (un `input[type=number]` de 60 px no muestra «80000»), se
+     arregla dándole la fila entera, que es además como lo resuelve el propio Bitunix en
+     el teléfono. Y con las filas a una columna desaparece el efecto secundario: el
+     `scrollIntoView` del campo ya no desplazaba la tarjeta en horizontal (se veía
+     «COMPRAR / LONG» cortado por el borde izquierdo). */
+  #orderCard > .card-body .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  /* «Avanzado»: la única regla que oculta, y solo dentro de este medio. */
+  #orderAvanzado { display: flex; flex-direction: column; gap: 4px; }
+  #orderCard.adv-cerrado #orderAvanzado { display: none; }
+  #btnOrderAvanzado { display: inline-flex; height: 22px; }
+  /* Señal de que la tarjeta desliza: un degradado al pie, puesto por JS
+     (`UI.initOrdenAvanzado` → `marcaDesborde`) SOLO cuando el cuerpo necesita más de lo
+     que tiene. Sin la clase no se pinta nada: en el estado por defecto no hay que
+     fingir un deslizador que no existe. */
+  #orderCard { position: relative; }
+  #orderCard.desborda::after { content: ""; position: absolute; left: 1px; right: 1px; bottom: 0; height: 14px;
+                               pointer-events: none; background: linear-gradient(180deg, rgba(20,20,24,0), var(--bg-2, #141418)); }
   #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
   #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
 }
