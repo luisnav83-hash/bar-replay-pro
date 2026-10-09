@@ -433,7 +433,7 @@ contrato que se exigió a los chips de velocidad y a las ✕ de la escalera, por
 la añadidura de que se exige que algo se quede fuera en reposo (`fueraReposo > 0`): sin eso, el assert
 de «todos alcanzables» sería gratis en una barra que cupiera entera—. En reposo se ven las once
 herramientas, el color y el grosor **cortándose en el borde derecho**, y ese corte es la señal de que
-hay más (captura 48). El dedo manda bien: una pasada de 200 px que empieza *encima* del botón «hline»
+hay más; la captura 48 enseña la otra punta, con la barra deslizada hasta el final. El dedo manda bien: una pasada de 200 px que empieza *encima* del botón «hline»
 desliza la barra y **no** cambia la herramienta ni dibuja —si el `click` se disparara al soltar, cada
 pasada cambiaría de lápiz y el usuario se creería trazando una horizontal mientras intenta llegar al
 ✕ de «borrar dibujos»—; un toque corto en el mismo punto sí cambia a `hline`, que es la otra mitad del
@@ -580,10 +580,12 @@ enteros y el eje de tiempo pintado bajo las velas:
 
 ![Escalera de indicadores en el móvil](docs/captura-47-escalera-movil.png)
 
-**La barra de dibujo en el teléfono** (390×844), en reposo: las once herramientas y el color a la
-vista, el grosor cortándose en el borde derecho (ahí detrás quedan estilo de línea, borrar, limpiar,
-imán, PnL, autoescala, log y «⊘ scroll», y todos se alcanzan deslizando) y la caja de la barra
-ocupando exacto su fila de 30 px:
+**La barra de dibujo en el teléfono** (390×844), con la barra deslizada hasta el final: es la
+prueba de que lo que no cabe se alcanza —estilo de línea, grosor, borrar selección, borrar todos,
+imán, PnL marcado, autoescala, log y «⊘ scroll» dentro de la caja de 30 px—, y se toma así porque
+en reposo el plano era *idéntico* al de la barra de replay (mismo viewport, mismo estado: el mismo
+md5, es decir, nada que contar). El reposo se ve en la captura 46, con las once herramientas, el
+color y el grosor cortándose en el borde derecho —ese corte es la señal de que hay más—:
 
 ![Barra de dibujo en el móvil](docs/captura-48-barra-dibujo-movil.png)
 
@@ -674,10 +676,14 @@ node tests/network.test.js    #  10 comprobaciones de paginación y datos reales
 node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  133 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  145 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
                               #   + el bloque «Avanzado» del teléfono, medido pulsando
+                              #   + la barra de dibujo (fila == caja en cuatro tallas, dianas
+                              #     >=20 px, y lo que no cabe: centro pulsable en algún punto
+                              #     del deslizamiento, con algo fuera en reposo para que el
+                              #     assert no sea gratis)
                               #   + la barra de replay del teléfono: cuatro bordes por control,
                               #     swipe hasta cada velocidad e ida y vuelta del deslizador
                               #   + la escalera del teléfono: hueco pintado por panel, cap con
@@ -729,19 +735,27 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1145 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1157 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1455 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1145 locales + 310 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `a43b959`. Aquí no basta con que la batería esté verde: se comprueba que
+**1478 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1157 locales + 321 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-10
+con el despliegue en `8555a78`. Aquí no basta con que la batería esté verde: se comprueba que
 lo servido ES lo construido, midiendo el `md5` en la URL pública contra el fichero local —
-`bar-replay-pro-unico.html` `8c60162f…` (951 744 B), `index.html` `47646e33`,
-`css/bitunix.css` `1af1cfbb`, `js/chart.js` `20df4968`, `js/pnlChart.js` `9e871624`,
-`js/uiController.js` `0163b026` y las capturas nuevas `docs/captura-46-barra-replay-movil.png`
-`99ad1af5` y `docs/captura-47-escalera-movil.png` `f2deb5df`: los ocho, byte a byte iguales—).
+`bar-replay-pro-unico.html` `9ee75a56…` (951 845 B), `index.html` `47646e33`,
+`css/bitunix.css` `ab76f49b`, `css/chart.css` `dd086d92`, `js/chart.js` `20df4968`,
+`js/pnlChart.js` `9e871624`, `js/uiController.js` `0163b026`: los siete, byte a byte iguales—).
+**Y se dejó de citar el `md5` de las capturas**: las treinta y pico las regeneran las suites en
+cada corrida (otro cambio de dos píxeles en un panel las reescribe todas), así que no son una
+huella del despliegue —lo eran en el párrafo anterior de este README, y las dos últimas veces
+hubo que re-medirlas porque habían vuelto a cambiar por sí solas
 Desglose de las seis publicadas: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
-57 del trailing + **120 de la piel Bitunix** (12 comprobaciones nuevas sobre lo publicado: 7 de
+57 del trailing + **131 de la piel Bitunix** (11 más sobre lo publicado —3 por talla en las tres
+tallas del bucle móvil: fila == caja con el scrollbar sin hueco cobrado, todas las dianas dentro
+de la caja y lo que desborda alcanzable—, y 2 del gesto con dedo por CDP a 390×844: la pasada que
+empieza encima de un botón desliza la barra sin cambiar de herramienta, y el toque corto sí la
+cambia, con la emulación de tacto encendida porque sin ella Blink no sintetiza el `click`; las 12 del incremento anterior
+fueron 7 de
 la barra de replay del teléfono —deslizador pisable de 20 px, línea de posición dentro de la
 barra y no debajo, escala del `<input>` 0..1000 y la perilla siguiendo al replay con el foco
 puesto— y 5 de la escalera de indicadores —hueco pintado por panel, cap con deslizamiento, eje

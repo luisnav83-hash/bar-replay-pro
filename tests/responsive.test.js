@@ -685,7 +685,18 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
      derecho —que es la señal de que detrás hay más, no de que falte nada—. */
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   await wait(420);
+  /* La captura se toma con la barra DESLIZADA HASTA EL FINAL, que es lo que este bloque
+     afirma: que lo que no cabe se alcanza. En reposo sería un plano idéntico al de la barra
+     de replay (de hecho el primer intento dio el mismo md5 que captura-46: mismo viewport,
+     mismo estado, nada que contar). Al final de la barra se ven, dentro de su caja de 30 px:
+     el estilo de línea, el grosor, borrar selección, borrar todos, el imán, el PnL marcado,
+     la autoescala, el log y el bloqueo del scroll (los glifos de esos botones se perdían al
+     escribir el comentario, así que aquí van por su nombre). */
+  await page.evaluate(() => { const d = document.getElementById('drawToolbar'); d.scrollLeft = d.scrollWidth; });
+  await wait(240);
   await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-48-barra-dibujo-movil.png') });
+  await page.evaluate(() => { document.getElementById('drawToolbar').scrollLeft = 0; });
+  await wait(140);
 
   /* Captura de la escalera del teléfono, abierta hasta el último panel: los dos
      indicadores con su gráfico de 32 px y la ✕ alcanzable. */
