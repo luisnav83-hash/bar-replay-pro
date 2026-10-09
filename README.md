@@ -679,21 +679,23 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1115 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1145 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1420 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1115 locales + 305 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `44d36ed`. Aquí no basta con que la batería esté verde: se comprueba que
+**1455 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1145 locales + 310 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `a43b959`. Aquí no basta con que la batería esté verde: se comprueba que
 lo servido ES lo construido, midiendo el `md5` en la URL pública contra el fichero local —
-`bar-replay-pro-unico.html` `66a490e9…` (947 533 B), `index.html` `47646e33`,
-`css/bitunix.css` `cf8d2b9f`, `js/uiController.js` `0163b026` y la captura nueva
-`docs/captura-46-barra-replay-movil.png` `99ad1af5`: los cinco, byte a byte iguales—).
+`bar-replay-pro-unico.html` `8c60162f…` (951 744 B), `index.html` `47646e33`,
+`css/bitunix.css` `1af1cfbb`, `js/chart.js` `20df4968`, `js/pnlChart.js` `9e871624`,
+`js/uiController.js` `0163b026` y las capturas nuevas `docs/captura-46-barra-replay-movil.png`
+`99ad1af5` y `docs/captura-47-escalera-movil.png` `f2deb5df`: los ocho, byte a byte iguales—).
 Desglose de las seis publicadas: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
-57 del trailing + **115 de la piel Bitunix** (7 comprobaciones nuevas: la barra de replay del
-teléfono medida sobre lo publicado —deslizador pisable de 20 px, línea de posición dentro de la
+57 del trailing + **120 de la piel Bitunix** (12 comprobaciones nuevas sobre lo publicado: 7 de
+la barra de replay del teléfono —deslizador pisable de 20 px, línea de posición dentro de la
 barra y no debajo, escala del `<input>` 0..1000 y la perilla siguiendo al replay con el foco
-puesto—) + 65 del marcaje de PnL
+puesto— y 5 de la escalera de indicadores —hueco pintado por panel, cap con deslizamiento, eje
+en un solo sitio y estado de los indicadores devuelto—) + 65 del marcaje de PnL
 
 - Nota de la misma fecha sobre `test:pnl` (`tests/pnl-chart.test.js`, dos rojos **deterministas**,
   reproducidos con este incremento aparcado con `git stash` —así se descartó que los metiera él—):
