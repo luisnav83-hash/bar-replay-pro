@@ -141,6 +141,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       tfAntes: pisa(tfActivo),
       tfTrasSwipe: (tfActivo.scrollIntoView({ inline: 'center', block: 'nearest' }), await new Promise((r) => setTimeout(() => r(pisa(tfActivo)), 240))),
       demoTrasSwipe: (g('btnDemo').scrollIntoView({ inline: 'center', block: 'nearest' }), await new Promise((r) => setTimeout(() => r(pisa(g('btnDemo'))), 240))),
+      /* Y la fila del par vuelve a su principio: los `scrollIntoView` de arriba dejan el
+         deslizador en el extremo derecho, y esta suite captura las pantallas después —una
+         galería con «...argar datos» cortado a la izquierda no enseña nada—. */
+      devuelta: (grupo.scrollLeft = 0, g('bfStats').scrollLeft = 0, Math.round(grupo.scrollLeft)),
       chart: Math.round(g('chartWrap').getBoundingClientRect().height),
       filaChart: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
       solape: Math.max(0, Math.round(g('chartWrap').getBoundingClientRect().bottom - g('paneArea').getBoundingClientRect().top)),
@@ -158,7 +162,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
      `ningún dato de las 24 h se corta con ellipsis${TB.textoFuera.length ? ' (' + TB.textoFuera.join(', ') + ')' : ''} —los chips piden su ancho y la fila desliza (${TB.scrolleaStats ? 'sí' : 'no'})—`);
   ok(TB.scrolleaGrupo && TB.anchoGrupo[0] > TB.anchoGrupo[1],
      `la fila del par no esconde nada: desliza en horizontal (${TB.anchoGrupo[0]} px de contenido en ${TB.anchoGrupo[1]})`);
-  ok(TB.tfTrasSwipe === 'si' && TB.demoTrasSwipe === 'si',
+  ok(TB.devuelta === 0 && TB.tfTrasSwipe === 'si' && TB.demoTrasSwipe === 'si',
      `y tras deslizarla se alcanza la temporalidad activa y el botón DEMO (tf ${TB.tfAntes}→${TB.tfTrasSwipe}, demo ${TB.demoAntes}→${TB.demoTrasSwipe})`);
   ok(TB.pisaStats && TB.ovx === 0 && TB.docH === TB.vh,
      `las tres filas no se pisan (estadísticas bajo el grupo del par), el documento no desliza (${TB.docH} = ${TB.vh}) y no hay scroll horizontal (${TB.ovx}px)`);
