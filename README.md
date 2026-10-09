@@ -263,7 +263,12 @@ se publica sola y queda accesible desde cualquier navegador (también móvil) en
 - Aplicación completa: **https://luisnav83-hash.github.io/bar-replay-pro/**
 - Archivo único (ideal para el móvil): **https://luisnav83-hash.github.io/bar-replay-pro/bar-replay-pro-unico.html**
 
-Instrucciones paso a paso en **[SUBIR-A-GITHUB.md](SUBIR-A-GITHUB.md)**.
+Esto **ya está subido y publicado** en esas tres direcciones. Si alguna vez se
+parte de cero, no hace falta ninguna guía: crear el repositorio en GitHub y
+`git init && git add -A && git commit -m "Bar Replay Pro" && git branch -M main &&
+git remote add origin <URL> && git push -u origin main` — el workflow
+`.github/workflows/pages.yml` se encarga del resto (y el archivo único no
+necesita ni build: `bar-replay-pro-unico.html` se sube tal cual y funciona).
 
 ---
 
