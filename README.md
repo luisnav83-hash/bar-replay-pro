@@ -409,10 +409,53 @@ del replay. Y para medir dónde se pinta el eje no se pregunta a la librería (v
 las diez tallas): se mide la franja que le falta al canvas dentro de su contenedor, que es el
 eje.
 
+
+**La barra de dibujo del teléfono: cada control es una diana, y lo que no cabe se alcanza.** Medido
+en once tallas antes de tocar, había tres cosas —y solo dos se ven en este motor. (1) La fila que
+`#chartArea` le reserva y la caja de la barra salían de **dos reglas distintas**: `--toolbar-h` manda
+en las dos (`css/chart.css:18` para la fila, `css/bitunix.css:606` para el alto), pero los tiers de
+altura reescribían `#drawToolbar{height}` por su cuenta y el de ≤700 px de alto bajó la caja a 28 y
+se olvidó de la variable → **28 px de barra dentro de 30 de fila**, con 2 px de franja muerta justo
+donde el tier quería regalarle píxeles al gráfico (169 → **171** a 360×640 y 229 → **231** a
+1400×560). El arreglo no es poner 28 en los dos sitios, que callaba el rojo y dejaba la trampa: es
+**quitar la segunda fuente**, con lo que el desajuste deja de ser escribible. (2) «⊘ scroll» es un
+`<label>` con su checkbox dentro, no un botón, y sin alto propio medía **19 px de diana** en
+escritorio mientras el resto de la barra va a 22-27: ahora mide como un `.tool` (`min-height:22px`).
+(3) Tercero latente: la barra pedía `scrollbar-width:thin`, que **en Firefox no es superpuesto** y en
+Chrome <121 se comía los 8 px de la regla global de `::-webkit-scrollbar` —en una fila de 28-30 px
+con controles de 24, eso recorta los botones por abajo y no hay forma de verlo aquí, donde el
+scrollbar es superpuesto y la reserva medida es 1 px, que es el borde—. Se pasa a `scrollbar-width:
+none` con su `::-webkit-scrollbar{height:0}`, igual que en la barra superior del teléfono.
+
+Y lo que no cabe **no se pierde**: a 390 px la barra tiene 746 px de contenido en 389 de caja (desliza
+357) y los **21 controles** tienen su centro pulsable en algún punto del deslizamiento —el mismo
+contrato que se exigió a los chips de velocidad y a las ✕ de la escalera, por el mismo motivo, y con
+la añadidura de que se exige que algo se quede fuera en reposo (`fueraReposo > 0`): sin eso, el assert
+de «todos alcanzables» sería gratis en una barra que cupiera entera—. En reposo se ven las once
+herramientas, el color y el grosor **cortándose en el borde derecho**, y ese corte es la señal de que
+hay más (captura 48). El dedo manda bien: una pasada de 200 px que empieza *encima* del botón «hline»
+desliza la barra y **no** cambia la herramienta ni dibuja —si el `click` se disparara al soltar, cada
+pasada cambiaría de lápiz y el usuario se creería trazando una horizontal mientras intenta llegar al
+✕ de «borrar dibujos»—; un toque corto en el mismo punto sí cambia a `hline`, que es la otra mitad del
+contrato: la barra no se ha quedado sorda.
+
+Lo que **no** se persigue, porque no es un defecto: a 360×640 y 320×568 el documento mide 827 px (antes
+847) y la página desliza. Es el formulario de órdenes apilado debajo del gráfico en un móvil bajo, y
+deslizar la página ahí es lo correcto —por eso este bloque NO pide `docH === vh` como pide el de la
+escalera—; lo que sí se exige es que el gráfico conserve su caja == su fila y que la barra entera sea
+zona de controles.
+
+Lo prueban `tests/responsive.test.js` (bloque «La barra de dibujo»: 12 comprobaciones —dos por talla en
+cuatro tallas más cuatro del teléfono—, 133 → **145**) y `tests/pages-bitunix.js` (11 en el bloque
+móvil sobre lo publicado, 120 → **131**), con el gesto táctil por CDP donde una suite `file://` no
+puede llegar. Y el contrato de la fila tiene mordida probada: reproduciendo el estado pre-arreglo en el
+fichero construido (variable a 30 y regla suelta a 28) el bloque pone **rojo 360×640 y 320×568** con
+los números en el mensaje, y verde en cuanto se quita una de las dos fuentes.
+
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
-`tests/responsive.test.js` (103 comprobaciones) y `tests/browser.capture.js`:
+`tests/responsive.test.js` (103 comprobaciones) y `tests/browser.capture.js``tests/responsive.test.js` (145 comprobaciones) y `tests/browser.capture.js`:
 el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
 altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
 el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
@@ -536,6 +579,13 @@ MACD con 30 px de gráfico cada uno —antes, 2 px—, sus cabeceras a una líne
 enteros y el eje de tiempo pintado bajo las velas:
 
 ![Escalera de indicadores en el móvil](docs/captura-47-escalera-movil.png)
+
+**La barra de dibujo en el teléfono** (390×844), en reposo: las once herramientas y el color a la
+vista, el grosor cortándose en el borde derecho (ahí detrás quedan estilo de línea, borrar, limpiar,
+imán, PnL, autoescala, log y «⊘ scroll», y todos se alcanzan deslizando) y la caja de la barra
+ocupando exacto su fila de 30 px:
+
+![Barra de dibujo en el móvil](docs/captura-48-barra-dibujo-movil.png)
 
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
@@ -667,10 +717,10 @@ node tests/pages-pnl.js          #   65 comprobaciones del marcaje EN LA APP PUB
                                 #   compartido donde medir la preferencia cruzada)
                                 #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
                                 #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
-node tests/bitunix.test.js      # 132 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+node tests/bitunix.test.js      # 133 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
-node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
+node tests/pages-bitunix.js     #   131 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
                                 #   botones y deslizadores reales, y verifica libro, quick sizes, coste/
                                 #   margen, liquidación por modo, pestañas y lo que se ve en móvil
 node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
@@ -1069,7 +1119,27 @@ bar-replay-app/
   reparte un hueco fijo (24 px de cabecera, ~26 de eje), «el panel mide 44 px» no dice nada de
   lo que se ve —lo que se ve son 2 px—; los contratos de este proyecto miden desde entonces el
   hueco pintado, no la caja pedida.
-- **La barra de replay del teléfono, y la escala del deslizador (2026-10-09).** Dos defectos
+- **Un contrato de una medida compartida se arregla quitando la segunda fuente (2026-10-10).** La
+  barra de dibujo medía 28 px de caja en una fila de 30 en TODOS los paneles de menos de 700 px de
+  alto, porque la fila la fija `--toolbar-h` y el tier reescribía el alto de la barra a mano. Poner
+  28 en los dos sitios habría callado el rojo y dejado la trampa puesta; se borró la regla del tier,
+  la variable manda en las dos y el defecto deja de ser representable —el assert (`fila === caja` en
+  cuatro tallas) queda de centinela, y se comprobó que muerde reproduciendo el estado viejo sobre el
+  fichero construido, porque un centinela que no puede ponerse rojo es decoración: dos de las tres
+  mutaciones que probé lo pusieron, y la que no (quitar solo la variable) demostró que ahora es
+  imposible desincronizar las dos medidas escribiendo un solo sitio—. Tres falsedades del test, y no
+  de la app, salieron en este bloque: una sonda marcaba «0 de 21 controles alcanzables» en una barra
+  perfecta porque su helper llamaba `h` a la altura y el guard pedía `.height` (`undefined` → falsy →
+  todos fuera: **la segunda vez que el `R()` corto de este proyecto muerde**, y ya va siendo costumbre
+  escribir el helper con las claves completas cuando el assert depende de un `if (!r.alto)`); el toque
+  corto publicado daba «la barra está sorda» porque sin `Emulation.setTouchEmulationEnabled` Blink no
+  convierte un `touchEnd` en `click` (se enciende y se apaga por CDP, que no obliga a recargar y así
+  no se pierde el estado que las comprobaciones de encima acaban de medir); y las coordenadas del toque
+  se habían medido ANTES de la pasada de al lado, que deja la barra deslizada 185 px —el dedo caía en
+  «arrow» en vez de «hline»—. Y para quien añada un bloque que cambie el viewport: los bloques de
+  captura de `responsive.test.js` no ponen el tamaño, **lo heredan**; el mío lo dejó en 1280×800 y las
+  cuatro capturas del móvil salieron a tamaño de escritorio hasta que el bloque lo devuelve.
+  - **La barra de replay del teléfono, y la escala del deslizador (2026-10-09).** Dos defectos
   que estaban en TODAS las pantallas y uno que solo se veía en el móvil. (1) El
   `<input type="range">` de posición llevaba `max="100"` mientras `UI.refreshReplayBar`
   escribe `fracción·1000` y `App.seekFromSlider` divide entre 1000: el navegador **clampa** el

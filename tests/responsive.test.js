@@ -596,6 +596,97 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   await wait(520);
 
+  /* ═════════ LA BARRA DE DIBUJO: DIANAS, RECORTE Y LO QUE NO CABE ═════════
+     Medido antes de tocar, en once tallas: la fila que `#chartArea` reserva para la barra
+     y la caja de la barra salían de dos reglas distintas. `--toolbar-h` manda en las dos
+     (`chart.css` la usa para la fila, `bitunix.css:606` para el alto), pero los tiers de
+     altura escribían `#drawToolbar{height}` a mano y el de menos de 700 px de alto se
+     olvidó de la variable: 28 px de caja dentro de 30 de fila, con 2 px de franja muerta
+     donde el tier quería regalarle píxeles al gráfico (169 → 171 a 360×640 con el arreglo).
+     Y en la barra había una diana corta: el «⊘ scroll» es un `<label>` con su checkbox, sin
+     alto propio, y medía 19 px en escritorio (los demás controles, 22-27). El tercero no se
+     ve en este motor: la barra pedía `scrollbar-width:thin`, que en Firefox NO es superpuesto
+     y en Chrome viejo se comía los 8 px de la regla global —en una fila de 28-30 px con
+     controles de 24, eso recorta los botones por abajo—; ahora el scrollbar no reserva hueco.
+     Lo que NO se persigue: a 360×640 y 320×568 el documento mide 827 px y la página desliza.
+     Es el formulario de órdenes apilado bajo el gráfico, y deslizar la página en un móvil
+     bajo es lo correcto —por eso aquí no se pide `docH === vh` como en la escalera—. */
+  console.log('\n▸ La barra de dibujo (390×844 · 360×640 · 320×568 · 1280×800)');
+  const DBJO = {};
+  for (const [DW, DH] of [[390, 844], [360, 640], [320, 568], [1280, 800]]) {
+    await page.setViewport({ width: DW, height: DH, deviceScaleFactor: 1 });
+    await wait(460);
+    DBJO[DW + 'x' + DH] = await page.evaluate(async () => {
+      const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = (id) => document.getElementById(id);
+      const barra = g('drawToolbar'), ca = g('chartArea');
+      /* Las claves del helper, COMPLETAS y a propósito: en este fichero el R() de la
+         escalera llama `t`/`b`/`h` a top/bottom/height, y pedir `.height` a un objeto así
+         da `undefined` —el guard `if (!r.height)` devuelve false para todo y el contrato se
+         convierte en humo (pasó al medir esta barra: 0 de 21 controles «alcanzables»). */
+      const R = (e) => { const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, height: r.height, width: r.width,
+                 top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+      const q = R(barra);
+      const pisa = (e) => { const r = R(e); if (!r.height || !r.width) return 'oculto';
+        const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return el && (e === el || e.contains(el) || el.contains(e)) ? 'si' : 'no'; };
+      const controles = [...barra.querySelectorAll('button, select, input[type="color"], #drawToolbar .switch')];
+      const nombre = (e) => e.id || (e.dataset && e.dataset.tool) || String(e.className);
+      const geo = controles.map((e) => { const r = R(e);
+        return { n: nombre(e), height: Math.round(r.height), width: Math.round(r.width),
+          recortado: r.bottom > q.bottom + 0.5 || r.top < q.top - 0.5,
+          fuera: r.right > q.right + 0.5 || r.left < q.left - 0.5, pisa: pisa(e) }; });
+      /* «Alcanzable» = centro pulsable en ALGÚN punto del deslizamiento, no en la foto de
+         reposo: es el mismo contrato que se exigió a los chips de velocidad y a las ✕ de la
+         escalera, por el mismo motivo. Y solo tiene mérito si algo se sale (se comprueba). */
+      const max = barra.scrollWidth - barra.clientWidth;
+      const alcance = geo.map((x) => x.pisa === 'si');
+      for (let s = 0.1; max > 0 && s <= 1.001; s += 0.1) {
+        barra.scrollLeft = Math.round(max * s); await esperar(45);
+        controles.forEach((e, k) => { if (pisa(e) === 'si') alcance[k] = true; });
+      }
+      barra.scrollLeft = 0; await esperar(60);
+      const cs = getComputedStyle(barra);
+      return { fila: Math.round(parseFloat(getComputedStyle(ca).gridTemplateRows.split(' ')[0])),
+        caja: Math.round(q.height), varH: getComputedStyle(document.documentElement).getPropertyValue('--toolbar-h').trim(),
+        scb: barra.offsetHeight - barra.clientHeight, sb: cs.scrollbarWidth, ovx: cs.overflowX,
+        sw: barra.scrollWidth, cw: barra.clientWidth, max, n: geo.length,
+        minH: Math.min(...geo.map((x) => x.height)), minW: Math.min(...geo.map((x) => x.width)),
+        bajos: geo.filter((x) => x.height < 20 || x.width < 20).map((x) => x.n + '@' + x.height + '×' + x.width),
+        switchH: (geo.find((x) => /(^| )switch( |$)/.test(x.n)) || {}).height || 0,
+        recortados: geo.filter((x) => x.recortado).map((x) => x.n),
+        fueraReposo: geo.filter((x) => x.fuera).length, pisanReposo: geo.filter((x) => x.pisa === 'si').length,
+        inalcanzables: geo.filter((x, k) => !alcance[k]).map((x) => x.n),
+        primero: geo[0] };
+    });
+    const et = DW + '×' + DH, d = DBJO[DW + 'x' + DH];
+    ok(d.fila === d.caja,
+       `${et}: la barra de dibujo ocupa exacto su fila (${d.caja} px de caja en fila de ${d.fila}, --toolbar-h ${d.varH}) —antes el tier de menos de 700 px de alto bajaba la caja a 28 y dejaba la fila en 30: 2 px de relleno en vez de 2 px de gráfico—`);
+    ok(d.bajos.length === 0 && d.recortados.length === 0,
+       `${et}: sus ${d.n} controles son diana (el más pequeño, ${d.minH}×${d.minW} px; «⊘ scroll» ${d.switchH} px de alto) y ninguno se sale de la caja verticalmente${d.recortados.length ? ': ' + d.recortados.join(' ') : ''}`);
+  }
+  const dp = DBJO['390x844'];
+  ok(dp.sw > dp.cw && dp.max > 0 && dp.fueraReposo > 0,
+     `en el teléfono no cabe todo y se ve que no cabe: ${dp.sw} px de contenido en ${dp.cw} de caja, ${dp.fueraReposo} controles fuera en reposo, la barra desliza ${dp.max} px (overflow-x:${dp.ovx})`);
+  ok(dp.inalcanzables.length === 0,
+     dp.inalcanzables.length ? `detrás del swipe hay controles que no se pulsan nunca: ${dp.inalcanzables.join(' ')}`
+       : `y lo que queda detrás del swipe se alcanza: los ${dp.n} controles tienen su centro pulsable en algún punto del deslizamiento (en reposo se pulsan ${dp.pisanReposo})`);
+  ok(dp.primero.pisa === 'si' && !dp.primero.recortado,
+     `la primera herramienta se ve y se pulsa sin deslizar (${dp.primero.n}: ${dp.primero.height}×${dp.primero.width} px) —la barra empieza en el borde izquierdo, no a medias—`);
+  ok(dp.scb <= 1 && dp.sb === 'none',
+     `el scrollbar no le roba fila a la barra: reserva ${dp.scb} px (el borde inferior) con scrollbar-width:${dp.sb}; con la regla global de 8 px la fila útil se quedaba en 20 contra botones de 24`);
+  /* Y el viewport VUELVE a la talla del teléfono: los cuatro bloques de capturas que hay
+     debajo (47, 46, 45 y 44) no ponen el tamaño, lo heredan del bloque anterior —y el mío
+     terminaba de recorrer las tallas en 1280×800, así que la primera corrida del bloque
+     sacó las cuatro capturas del móvil a tamaño de escritorio: el daño colateral típico de
+     un bloque nuevo que cambia el viewport. La captura 48 se toma aquí, en reposo, con la
+     herramienta activa a la izquierda y el `<select>` de grosor cortándose en el borde
+     derecho —que es la señal de que detrás hay más, no de que falte nada—. */
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await wait(420);
+  await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-48-barra-dibujo-movil.png') });
+
   /* Captura de la escalera del teléfono, abierta hasta el último panel: los dos
      indicadores con su gráfico de 32 px y la ✕ alcanzable. */
   await page.evaluate(() => {

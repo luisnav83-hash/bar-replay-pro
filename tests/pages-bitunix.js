@@ -675,6 +675,105 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
          `${etiqueta}: cerrar devuelve el estado anterior de verdad (aria ${AV.vuelta.aria}, ST ${AV.vuelta.st}, recorte ${AV.vuelta.recorte} = ${AV.antes.recorte}, ${AV.vuelta.hitos.join(' ')})`);
       ok(AV.vuelta.caja === G.chart, `${etiqueta}: y el gráfico recupera píxel a píxel lo que tenía antes de abrir (${AV.vuelta.caja} == ${G.chart})`);
     }
+
+    /* ─── La barra de dibujo, en lo publicado ───
+       Mismo contrato que tests/responsive.test.js (fila de la rejilla == caja de la barra,
+       todas las dianas ≥20 px dentro de la caja y lo que no cabe, alcanzable deslizando), y
+       encima la parte que una suite offline no puede probar: que el GESTO DE DEDO que empieza
+       encima de un botón desliza la barra sin cambiar de herramienta. Si el `click` del botón
+       se disparara al acabar el arrastre, cada pasada acabaría en otro lápiz —y el usuario
+       creería que está trazando una línea horizontal cuando solo quería llegar al ✕ de
+       «borrar dibujos»—. Por CDP, como en pages-pnl: cambiar el viewport con `hasTouch`
+       obliga a recargar y con recarga se pierde el estado que las comprobaciones de encima
+       acaban de medir. */
+    const DB = await p.evaluate(async () => {
+      const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+      const barra = document.getElementById('drawToolbar'), ca = document.getElementById('chartArea');
+      const R = (e) => { const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, height: r.height, width: r.width,
+                 top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+      const q = R(barra);
+      const pisa = (e) => { const r = R(e); if (!r.height || !r.width) return 'oculto';
+        const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return el && (e === el || e.contains(el) || el.contains(e)) ? 'si' : 'no'; };
+      const controles = [...barra.querySelectorAll('button, select, input[type="color"], #drawToolbar .switch')];
+      const geo = controles.map((e) => { const r = R(e);
+        return { height: Math.round(r.height), width: Math.round(r.width),
+          recortado: r.bottom > q.bottom + 0.5 || r.top < q.top - 0.5, pisa: pisa(e) }; });
+      const max = barra.scrollWidth - barra.clientWidth;
+      const alcance = geo.map((x) => x.pisa === 'si');
+      for (let s = 0.1; max > 0 && s <= 1.001; s += 0.12) {
+        barra.scrollLeft = Math.round(max * s); await esperar(50);
+        controles.forEach((e, k) => { if (pisa(e) === 'si') alcance[k] = true; });
+      }
+      barra.scrollLeft = 0; await esperar(60);
+      return { n: geo.length, fila: Math.round(parseFloat(getComputedStyle(ca).gridTemplateRows.split(' ')[0])),
+        caja: Math.round(q.height), minH: Math.min(...geo.map((x) => x.height)),
+        bajos: geo.filter((x) => x.height < 20 || x.width < 20).length,
+        recortados: geo.filter((x) => x.recortado).length, max,
+        sw: barra.scrollWidth, cw: barra.clientWidth, scb: barra.offsetHeight - barra.clientHeight,
+        sb: getComputedStyle(barra).scrollbarWidth,
+        inalcanzables: alcance.filter((x) => !x).length };
+    });
+    ok(DB.fila === DB.caja,
+       `${etiqueta}: la barra de dibujo mide ${DB.caja} px dentro de una fila de ${DB.fila} —la misma variable para las dos— y su scrollbar no cobra hueco (${DB.scb} px de reserva, scrollbar-width:${DB.sb})`);
+    ok(DB.bajos === 0 && DB.recortados === 0,
+       `${etiqueta}: ${DB.n} controles en la barra, el más bajo de ${DB.minH} px, y ninguno recortado por los cantos de la caja`);
+    ok(!DB.max || DB.inalcanzables === 0,
+       `${etiqueta}: ${DB.sw} px de contenido en ${DB.cw} de caja${DB.max ? ` (desliza ${DB.max})` : ''}: ${DB.inalcanzables ? DB.inalcanzables + ' controles quedan inaccesibles' : 'todo se pulsa en algún punto del deslizamiento'}`);
+    if (w === 390) {
+      const dedo = await p.evaluate(async () => {
+        const barra = document.getElementById('drawToolbar');
+        const btn = document.querySelector('#drawToolbar .tool[data-tool="hline"]');
+        barra.scrollLeft = 0;
+        await new Promise((r) => setTimeout(r, 80));
+        const q = barra.getBoundingClientRect(), r = btn.getBoundingClientRect();
+        return { cx: Math.round(r.x + r.width / 2), cy: Math.round(r.y + r.height / 2),
+                 herramienta: DT.tool, dibujos: document.querySelectorAll('#drawList li').length,
+                 dentro: r.top >= q.top - 0.5 && r.bottom <= q.bottom + 0.5 };
+      });
+      const cdp = await p.target().createCDPSession();
+      const toque = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
+        { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+      await toque('touchStart', dedo.cx, dedo.cy);
+      for (let i = 1; i <= 8; i++) { await toque('touchMove', dedo.cx - i * 25, dedo.cy); await esp(18); }
+      await toque('touchEnd');
+      await esp(320);
+      const trasPasada = await p.evaluate(() => ({ sw: document.getElementById('drawToolbar').scrollLeft,
+        herramienta: DT.tool, activa: (document.querySelector('#drawToolbar .tool.active') || {}).dataset?.tool,
+        dibujos: document.querySelectorAll('#drawList li').length }));
+      ok(trasPasada.sw > 60 && trasPasada.herramienta === dedo.herramienta && trasPasada.activa === dedo.herramienta && trasPasada.dibujos === dedo.dibujos,
+         `${etiqueta}: una pasada de 200 px que empieza ENCIMA del botón «hline» desliza la barra ${trasPasada.sw} px y no cambia la herramienta (sigue «${trasPasada.activa}») ni crea dibujos (${trasPasada.dibujos}) —si el tap se disparara al soltar, cada swipe cambiaría de lápiz—`);
+      /* Y el toque corto SÍ cambia de herramienta: la barra no se ha vuelto sorda. Para que
+         el navegador convierta el gesto en `click` hace falta la emulación de tacto activada
+         (sin ella, un touchEnd no sintetiza el click y el botón no se entera —lo primero que
+         probé, con `p.touchscreen.tap` a secas, daba «sigue en cursor» y el contrato era
+         falso del todo—). Se enciende y se apaga por CDP, que no obliga a recargar. */
+      /* Antes de pulsar hay que VOLVER a medir: la pasada de encima dejó la barra deslizaba
+         ~185 px, y con las coordenadas de reposo el dedo caía en otro botón (salió «arrow»
+         en lugar de «hline»: el test mentía, la app no). */
+      const punto = await p.evaluate(async () => {
+        const barra = document.getElementById('drawToolbar');
+        barra.scrollLeft = 0;
+        await new Promise((r) => setTimeout(r, 110));
+        const r = document.querySelector('#drawToolbar .tool[data-tool="hline"]').getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      });
+      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      await esp(120);
+      await toque('touchStart', punto.x, punto.y);
+      await esp(70);
+      await toque('touchEnd');
+      await esp(260);
+      const trasTap = await p.evaluate(() => ({ herramienta: DT.tool,
+        activa: (document.querySelector('#drawToolbar .tool.active') || {}).dataset?.tool }));
+      await p.evaluate(() => { DT.setTool('cursor'); document.getElementById('drawToolbar').scrollLeft = 0; });
+      await esp(140);
+      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+      await esp(120);
+      ok(trasTap.herramienta === 'hline' && trasTap.activa === 'hline',
+         `${etiqueta}: un toque en el mismo botón sí cambia a «${trasTap.activa}» (${dedo.dentro ? 'la caja del botón cabe entera en la barra' : 'botón fuera de la caja'}) —se recuperó la herramienta «cursor» y el scroll de la barra a 0 para no dejar huella—`);
+    }
   }
   await p.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await esp(500);

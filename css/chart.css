@@ -29,11 +29,25 @@
 /* --------------------------- Barra de herramientas --------------------------- */
 #drawToolbar{
   display:flex;align-items:center;gap:6px;padding:0 8px;
-  background:var(--bg-2);border-bottom:1px solid var(--line);overflow-x:auto;
+  background:var(--bg-2);border-bottom:1px solid var(--line);
 
   /* min-width:0 + scroll: los botones de dibujo caben o deslizan, pero nunca
-     obligan al grid a medir lo que miden ellos. */
-  min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+     obligan al grid a medir lo que miden ellos. Medido a 390 px de ancho: 736 px
+     de contenido en 389 de caja, o sea que desliza 347 px.
+
+     Y el scrollbar NO cobra fila. La barra mide 30 px (28 en pantallas de menos
+     de 700 px de alto) y sus controles 24: con la regla global de
+     ::-webkit-scrollbar (8 px) o con `scrollbar-width:thin` en Firefox, que no es
+     superpuesto, la fila útil se quedaba en 16-19 px y los botones salían
+     recortados por abajo. En este motor el scrollbar es superpuesto y no reserva
+     nada (medido: offsetHeight - clientHeight == 1, que es el borde inferior), así
+     que este arreglo no se ve en las capturas: es la garantía de que la fila sea
+     siempre de controles. Lo que no cabe se alcanza deslizando con el dedo —una
+     pasada de 200 px que empieza encima de un botón mueve scrollLeft de 0 a 290 y
+     NO cambia la herramienta ni dibuja; para eso hace falta un toque corto—. */
+  min-width:0;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none}
+#drawToolbar::-webkit-scrollbar{height:0;width:0}
 .tool-cluster{display:flex;align-items:center;gap:3px;padding-right:7px;border-right:1px solid var(--line-soft);}
 .tool-cluster:last-child{border-right:none;}
 .tool-cluster-right{margin-left:auto;padding-right:0;}
