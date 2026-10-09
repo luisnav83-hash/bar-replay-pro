@@ -1,0 +1,590 @@
+/* =========================================================================
+ * dataService.js — Obtención y normalización de velas OHLCV.
+ *
+ *  Fuentes:
+ *   1) Binance REST público  GET /api/v3/klines  (1000 velas por petición,
+ *      con paginación automática para rangos grandes). Varios hosts espejo.
+ *   2) CoinGecko (fallback de 2º nivel) usando velas agregadas.
+ *   3) CSV importado por el usuario.
+ *   4) Generador de datos sintéticos verificables (modo Demo / sin red).
+ *
+ *  Formato interno de vela (compatible con servicios de datos de librerías
+ *  de gráficos): { time, open, high, low, close, volume }  con time en
+ *  SEGUNDOS UNIX UTC.
+ * =======================================================================*/
+(function (global) {
+  'use strict';
+
+  const DS = {};
+
+  /* ----------------------------- Configuración ----------------------------- */
+
+  DS.TIMEFRAMES = {
+    '1m':  { ms: 60e3,          binance: '1m', label: '1 min' },
+    '5m':  { ms: 300e3,         binance: '5m', label: '5 min' },
+    '15m': { ms: 900e3,         binance: '15m', label: '15 min' },
+    '1h':  { ms: 3600e3,        binance: '1h', label: '1 hora' },
+    '4h':  { ms: 4 * 3600e3,    binance: '4h', label: '4 horas' },
+    '1d':  { ms: 86400e3,       binance: '1d', label: '1 día' },
+    '1w':  { ms: 7 * 86400e3,   binance: '1w', label: '1 semana' },
+  };
+
+  // Hosts de Binance, en orden de preferencia. `data-api.binance.vision` es el
+  // endpoint público de datos de mercado (el más accesible desde cualquier
+  // región); el resto son espejos por si hubiera bloqueos o caídas.
+  DS.BINANCE_HOSTS = [
+    'https://data-api.binance.vision',
+    'https://api.binance.com',
+    'https://api1.binance.com',
+    'https://api2.binance.com',
+    'https://api3.binance.com',
+    'https://api4.binance.com',
+  ];
+
+  // Si la aplicación se sirve por HTTP(S) mediante server.js, añadimos el
+  // mismo origen como último recurso: el backend opcional proxifica
+  // /api/v3/klines hacia Binance y evita bloqueos regionales o de CORS.
+  try {
+    if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
+      // El proxy del mismo origen SOLO existe donde hay un servidor detrás de
+      // la app (server.js en local o la tarjeta de preview). En un hosting
+      // estático como GitHub Pages esa ruta no existe: pedirla primero solo
+      // servía para perder un viaje y ensuciar la consola con un 404 antes de
+      // caer en data-api.binance.vision, que ya funciona desde el navegador.
+      const h = (location.hostname || '').toLowerCase();
+      const servidoConBackend =
+        h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h === '[::1]' ||
+        h.endsWith('.e2b.app');           // preview de la sandbox (proxy same-origin real)
+      if (servidoConBackend) DS.BINANCE_HOSTS.unshift('');
+      DS.MISMO_ORIGEN_UTIL = servidoConBackend;
+    }
+  } catch (e) { /* entorno sin location (tests) */ }
+
+  // Pares de referencia (los «principales»): se usan cuando no hay conexión o
+  // mientras llega la lista completa del exchange.
+  DS.PAIRS = {
+    BTCUSDT: 'BTC/USDT', ETHUSDT: 'ETH/USDT', SOLUSDT: 'SOL/USDT', BNBUSDT: 'BNB/USDT',
+    XRPUSDT: 'XRP/USDT', ADAUSDT: 'ADA/USDT', DOGEUSDT: 'DOGE/USDT', AVAXUSDT: 'AVAX/USDT',
+    LINKUSDT: 'LINK/USDT', MATICUSDT: 'MATIC/USDT', DOTUSDT: 'DOT/USDT', LTCUSDT: 'LTC/USDT',
+    TRXUSDT: 'TRX/USDT', TONUSDT: 'TON/USDT', SHIBUSDT: 'SHIB/USDT', ARBUSDT: 'ARB/USDT',
+    OPUSDT: 'OP/USDT', SUIUSDT: 'SUI/USDT', APTUSDT: 'APT/USDT', NEARUSDT: 'NEAR/USDT',
+    ATOMUSDT: 'ATOM/USDT', FILUSDT: 'FIL/USDT', INJUSDT: 'INJ/USDT', TIAUSDT: 'TIAUSDT',
+    SEIUSDT: 'SEI/USDT', BCHUSDT: 'BCH/USDT', ETCUSDT: 'ETC/USDT', XLMUSDT: 'XLM/USDT',
+    ALGOUSDT: 'ALGO/USDT', VETUSDT: 'VET/USDT', RNDRUSDT: 'RNDR/USDT', GRTUSDT: 'GRT/USDT',
+    AAVEUSDT: 'AAVE/USDT', UNIUSDT: 'UNI/USDT', PEPEUSDT: 'PEPE/USDT', WIFUSDT: 'WIF/USDT',
+    ORDIUSDT: 'ORDI/USDT', RUNEUSDT: 'RUNE/USDT', ENSUSDT: 'ENS/USDT', SANDUSDT: 'SAND/USDT',
+  };
+
+  /** Pares «principales» (los de arriba), en orden. */
+  DS.MAIN_SYMBOLS = Object.keys(DS.PAIRS);
+
+  /** Nombre de un par, aunque no esté en la lista de referencia. */
+  DS.label = function (symbol) {
+    if (DS.PAIRS[symbol]) return DS.PAIRS[symbol];
+    const m = /^(.+?)(USDT|USDC|FDUSD|BTC|ETH|EUR|TRY|BUSD)$/.exec(symbol);
+    return m ? m[1] + '/' + m[2] : symbol;
+  };
+
+  /** Divisa de cotización de un par (USDT, BTC, EUR…). */
+  DS.quoteOf = function (symbol) {
+    const m = /(USDT|USDC|FDUSD|BUSD|BTC|ETH|EUR|TRY)$/.exec(symbol);
+    return m ? m[1] : 'OTROS';
+  };
+  /** Moneda base de un par (BTC, ETH…). */
+  DS.baseOf = function (symbol) {
+    const q = DS.quoteOf(symbol);
+    return symbol.slice(0, symbol.length - (q === 'OTROS' ? 0 : q.length)) || symbol;
+  };
+
+  // CoinGecko ids para el fallback
+  DS.CG_IDS = {
+    BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin', XRP: 'ripple',
+    ADA: 'cardano', DOGE: 'dogecoin', AVAX: 'avalanche-2', LINK: 'chainlink', MATIC: 'matic-network',
+  };
+
+  /* ------------------------------ Utilidades ------------------------------ */
+
+  /** Timeout por petición. Corto a propósito: es mejor rotar de host rápido
+   *  que dejar al usuario mirando un spinner. */
+  DS.REQUEST_TIMEOUT = 6000;
+
+  /** Descarga JSON con timeout (AbortController). */
+  async function fetchJSON(url, timeoutMs = DS.REQUEST_TIMEOUT) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } finally { clearTimeout(t); }
+  }
+
+  /** Normaliza una fila de Binance klines a vela interna. */
+  function normBinanceRow(r) {
+    return {
+      time: Math.floor(r[0] / 1000),
+      open: +r[1], high: +r[2], low: +r[3], close: +r[4],
+      volume: +r[5], quoteVolume: +r[7], trades: +r[8],
+    };
+  }
+
+  /** Ordena por tiempo y elimina duplicados (por si se solapan páginas). */
+  DS.clean = function (candles) {
+    candles.sort((a, b) => a.time - b.time);
+    const out = [];
+    for (const c of candles) {
+      if (!out.length || out[out.length - 1].time !== c.time) out.push(c);
+    }
+    return out.filter((c) => Number.isFinite(c.open) && Number.isFinite(c.close) && c.high >= c.low);
+  };
+
+  /* ------------------------- Binance: klines paginadas ------------------------- */
+  /**
+   * Descarga velas de Binance entre startTs y endTs (segundos) recorriendo
+   * en páginas de 1000 velas con paginación automática hacia delante.
+   * @param {string} symbol    Ej: 'BTCUSDT'
+   * @param {string} interval  Ej: '1h'
+   * @param {number} startTs   epoch segundos
+   * @param {number} endTs     epoch segundos
+   * @param {function} onProgress  (cargadas, totalAprox, mensaje)
+   */
+  DS.fetchBinanceKlines = async function (symbol, interval, startTs, endTs, onProgress, opts) {
+    const tf = DS.TIMEFRAMES[interval];
+    if (!tf) throw new Error('Temporalidad no soportada: ' + interval);
+    const deadline = opts && opts.deadlineMs;   // límite de performance.now() (opcional)
+
+    const totalAprox = Math.ceil((endTs - startTs) * 1000 / tf.ms);
+    const all = [];
+    let cursor = startTs * 1000;      // Binance trabaja en milisegundos
+    const endMs = endTs * 1000;
+    let hostIdx = 0;
+    let firstPage = true;
+
+    while (cursor < endMs) {
+      // Presupuesto agotado: se devuelve lo descargado (la app decidirá si
+      // le sirve o si arranca directamente en modo DEMO).
+      if (deadline && performance.now() > deadline) {
+        if (all.length) {
+          U.log(`⏱️ Presupuesto de tiempo agotado: se usan las ${all.length} velas ya descargadas`, 'warn');
+          break;
+        }
+        throw new Error('Tiempo de espera agotado al descargar velas');
+      }
+      const url = `${DS.BINANCE_HOSTS[hostIdx]}/api/v3/klines?symbol=${symbol}` +
+                  `&interval=${tf.binance}&startTime=${cursor}&limit=1000`;
+      let rows;
+      try {
+        rows = await fetchJSON(url);
+      } catch (err) {
+        // Rotación de host espejo antes de rendirse
+        if (hostIdx < DS.BINANCE_HOSTS.length - 1) {
+          hostIdx++;
+          if (firstPage) U.log(`⚠ Binance no responde en el host principal, probando espejo ${hostIdx + 1}…`, 'warn');
+          continue;
+        }
+        throw new Error('No se pudo conectar con Binance (' + err.message + '). ' +
+                        'Prueba el botón Demo o importa un CSV.');
+      }
+      firstPage = false;
+      if (!Array.isArray(rows) || rows.length === 0) break;
+
+      for (const r of rows) all.push(normBinanceRow(r));
+
+      const lastOpen = rows[rows.length - 1][0];
+      const next = lastOpen + tf.ms;
+      if (next <= cursor) break;         // protección anti-bucle infinito
+      cursor = next;
+
+      if (onProgress) onProgress(all.length, totalAprox, `Descargando velas de Binance… ${all.length}`);
+
+      // Si la última vela ya supera el final pedido, terminamos
+      if (lastOpen >= endMs) break;
+      if (rows.length < 1000) break;     // no hay más histórico
+    }
+    return DS.clean(all.filter((c) => c.time <= endTs));
+  };
+
+  /* ----------------------------- CoinGecko fallback ----------------------------- */
+  /**
+   * Fallback: velas diarias/horarias de CoinGecko (1 día → 4h, 1h → 30m, etc.).
+   * Se usa solo si Binance no está accesible. Menos preciso en volumen.
+   */
+  DS.fetchCoinGeckoKlines = async function (symbol, interval, startTs, endTs) {
+    const base = symbol.replace(/USDT$/, '');
+    const id = DS.CG_IDS[base];
+    if (!id) throw new Error('Par no disponible en CoinGecko');
+
+    const days = Math.max(1, Math.ceil((Date.now() - startTs * 1000) / 86400e3));
+    const url = `https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${Math.min(days, 365)}`;
+    const raw = await fetchJSON(url, 20000);
+
+    const granularity = days <= 2 ? 1800 : days <= 30 ? 14400 : 86400; // seg. por vela
+    const candles = raw.map((r) => ({
+      time: Math.floor(r[0] / 1000),
+      open: r[1], high: r[2], low: r[3], close: r[4], volume: 0,
+    }));
+
+    // Reagrupar a la temporalidad solicitada si es mayor que la granularidad
+    const tf = DS.TIMEFRAMES[interval];
+    const grouped = DS.resample(candles, Math.max(tf.ms, granularity * 1000));
+    return DS.clean(grouped).filter((c) => c.time >= startTs && c.time <= endTs);
+  };
+
+  /** Reagrupa velas a un intervalo mayor (ms). */
+  DS.resample = function (candles, targetMs) {
+    const out = [];
+    let cur = null;
+    for (const c of candles) {
+      const bucket = Math.floor(c.time * 1000 / targetMs) * targetMs;
+      if (!cur || cur.time !== Math.floor(bucket / 1000)) {
+        if (cur) out.push(cur);
+        cur = { time: Math.floor(bucket / 1000), open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 };
+      } else {
+        cur.high = Math.max(cur.high, c.high);
+        cur.low = Math.min(cur.low, c.low);
+        cur.close = c.close;
+        cur.volume += c.volume || 0;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+
+  /* --------------------- Lista de símbolos del exchange --------------------- */
+
+  /**
+   * Descarga la lista REAL de pares disponibles (Binance /exchangeInfo) y la
+   * guarda en caché 24 h. Es lo que alimenta el buscador de símbolos.
+   * Si no hay conexión, se devuelve la lista de referencia local.
+   * @returns {Promise<Array<{symbol, base, quote, label, main}>>}
+   */
+  DS.fetchSymbols = async function () {
+    const cache = (global.ST && ST.get) ? ST.get('symbols', null) : null;
+    if (cache && cache.list && cache.at && (Date.now() - cache.at) < 24 * 3600 * 1000) {
+      return cache.list;
+    }
+    // Se prueban los hosts EN ORDEN: primero el proxy del mismo origen (solo
+    // existe si la app la sirve server.js) y después los hosts públicos de
+    // Binance. data-api.binance.vision envía «access-control-allow-origin: *»,
+    // así que el catálogo completo funciona igual en local y en GitHub Pages
+    // (donde NO hay /api/v3/exchangeInfo propio y antes solo se veía la lista
+    // de referencia de 40 pares).
+    const hosts = DS.BINANCE_HOSTS.slice();
+    let ultimoError = null;
+    for (let i = 0; i < hosts.length; i++) {
+      try {
+        const info = await fetchJSON(hosts[i] + '/api/v3/exchangeInfo', 8000);
+        const validas = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'EUR', 'TRY'];
+        const list = (info.symbols || [])
+          .filter((x) => x.status === 'TRADING' && validas.indexOf(x.quoteAsset) >= 0)
+          .map((x) => ({
+            symbol: x.symbol, base: x.baseAsset, quote: x.quoteAsset,
+            label: x.baseAsset + '/' + x.quoteAsset,
+            main: !!DS.PAIRS[x.symbol],
+          }))
+          .sort((a, b) => (b.main - a.main) || (DS.MAIN_SYMBOLS.indexOf(a.symbol) - DS.MAIN_SYMBOLS.indexOf(b.symbol)) || a.symbol.localeCompare(b.symbol));
+        if (!list.length) throw new Error('catálogo vacío');
+        if (global.ST && ST.set) ST.set('symbols', { at: Date.now(), list });
+        const via = hosts[i] ? hosts[i].replace('https://', '') : 'proxy local';
+        U.log('🔎 Lista de símbolos actualizada: ' + list.length + ' pares (' + via + ')', 'sys');
+        return list;
+      } catch (e) {
+        ultimoError = e;   // se prueba el host siguiente
+      }
+    }
+    U.log('⚠ No se pudo descargar la lista de símbolos (' + (ultimoError && ultimoError.message || 'sin conexión') + '): se usa la local', 'warn');
+    return DS.MAIN_SYMBOLS.map((s) => ({
+      symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
+    }));
+  };
+
+  /** Versión SIN red (para pintar el buscador al instante). */
+  DS.localSymbols = function () {
+    return DS.MAIN_SYMBOLS.map((s) => ({
+      symbol: s, base: DS.baseOf(s), quote: DS.quoteOf(s), label: DS.label(s), main: true,
+    }));
+  };
+
+  /* ------------------------ Instantánea incrustada ------------------------ */
+  /**
+   * Velas REALES incrustadas en el propio archivo (window.BRP_SNAPSHOT), útiles
+   * cuando el entorno bloquea toda salida a internet (visores embebidos).
+   * El archivo se genera con `node tools/build-single.js` a partir de
+   * snapshot/velas-reales.json.
+   */
+  DS.loadSnapshot = function (symbol, interval) {
+    const S = global.BRP_SNAPSHOT;
+    if (!S || !S.sets) return null;
+    const rows = S.sets[symbol + '|' + interval];
+    if (!rows || !rows.length) return null;
+    const candles = DS.clean(rows.map((r) => ({
+      time: r[0], open: r[1], high: r[2], low: r[3], close: r[4], volume: r[5],
+    })));
+    if (!candles.length) return null;
+    return {
+      candles,
+      source: 'Binance (guardada)',
+      savedAt: S.savedAt || '',
+    };
+  };
+
+  /** Lista legible de los conjuntos de velas incrustados: ['BTC/USDT 1h', …] */
+  DS.snapshotPairs = function () {
+    const S = global.BRP_SNAPSHOT;
+    if (!S || !S.sets) return [];
+    return Object.keys(S.sets).map((k) => k.replace('|', ' '));
+  };
+
+  /* ------------------------------ Carga unificada ------------------------------ */
+
+  /**
+   * Carga velas probando Binance → CoinGecko.
+   * @returns {Promise<{candles:Array, source:string}>}
+   */
+  DS.load = async function ({ symbol, interval, startTs, endTs, onProgress, deadlineMs }) {
+    // Deja margen para el fallback de CoinGecko dentro del mismo presupuesto
+    const binanceDeadline = deadlineMs ? deadlineMs - 3000 : null;
+    onProgress && onProgress(0, 0, 'Contactando con Binance…');
+    try {
+      const candles = await DS.fetchBinanceKlines(symbol, interval, startTs, endTs, onProgress, { deadlineMs: binanceDeadline });
+      if (candles.length) return { candles, source: 'Binance' };
+      U.log('⚠ Binance devolvió 0 velas, probando CoinGecko…', 'warn');
+    } catch (e) {
+      U.log('⚠ Binance falló: ' + e.message, 'warn');
+    }
+    if (deadlineMs && performance.now() > deadlineMs) {
+      const snap = DS.loadSnapshot(symbol, interval);
+      if (snap) return snap;                       // datos reales incrustados
+      throw new Error('Sin datos de Binance y sin tiempo para CoinGecko');
+    }
+    onProgress && onProgress(0, 0, 'Probando CoinGecko…');
+    try {
+      const candles2 = await DS.fetchCoinGeckoKlines(symbol, interval, startTs, endTs);
+      if (candles2.length) return { candles: candles2, source: 'CoinGecko' };
+    } catch (e) {
+      U.log('⚠ CoinGecko falló: ' + e.message, 'warn');
+    }
+    // Último recurso: instantánea de velas reales incrustada en el archivo
+    const snap = DS.loadSnapshot(symbol, interval);
+    if (snap) return snap;
+    throw new Error('Sin conexión y sin instantánea para ' + symbol + ' ' + interval);
+  };
+
+  /* -------------------------------- CSV -------------------------------- */
+  /**
+   * Parsea CSV de velas. Acepta con o sin cabecera y separador , o ;.
+   * Columnas reconocidas: fecha/time/timestamp + open/high/low/close/volume.
+   * El timestamp puede ser epoch (s o ms) o ISO 8601.
+   */
+  DS.parseCSV = function (text) {
+    const lines = String(text).split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return [];
+    const out = [];
+    let idx = { t: 0, o: 1, h: 2, l: 3, c: 4, v: 5 };
+
+    // Detectar cabecera
+    const head = lines[0].toLowerCase();
+    let start = 0;
+    if (/[a-z]/.test(head) && /open|close|date|fecha|time|hora/.test(head)) {
+      const cols = lines[0].split(/[,;\t]/).map((c) => c.trim().toLowerCase());
+      const find = (...keys) => cols.findIndex((c) => keys.some((k) => c.includes(k)));
+      idx = {
+        t: Math.max(0, find('date', 'fecha', 'time', 'hora', 'timestamp', 'open_time', 'unix')),
+        o: find('open', 'apertura'), h: find('high', 'max', 'máx'),
+        l: find('low', 'min'), c: find('close', 'cierre'), v: find('volume', 'volumen', 'vol'),
+      };
+      start = 1;
+    }
+    for (let i = start; i < lines.length; i++) {
+      const parts = lines[i].split(/[,;\t]/);
+      const parseTs = (s) => {
+        s = String(s).trim().replace(/^"|"$/g, '');
+        if (/^\d+$/.test(s)) { const n = +s; return n > 1e11 ? Math.floor(n / 1000) : n; }
+        const d = Date.parse(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+        return Number.isNaN(d) ? null : Math.floor(d / 1000);
+      };
+      const t = parseTs(parts[idx.t]);
+      if (t === null) continue;
+      const o = +parts[idx.o], h = +parts[idx.h], l = +parts[idx.l], c = +parts[idx.c];
+      const v = idx.v >= 0 ? +parts[idx.v] || 0 : 0;
+      if ([o, h, l, c].some((x) => !Number.isFinite(x))) continue;
+      out.push({ time: t, open: o, high: h, low: l, close: c, volume: v });
+    }
+    return DS.clean(out);
+  };
+
+  /* ------------------------- Datos sintéticos (Demo) ------------------------- */
+  /**
+   * Genera velas sintéticas con caminata aleatoria + tendencias y ciclos,
+   * pensadas para poder practicar sin conexión. NO son datos reales.
+   */
+  DS.synth = function ({ n = 3000, interval = '1h', startPrice = 60000, seed = 42, startTs }) {
+    // PRNG determinista (mulberry32): los mismos parámetros dan los mismos datos
+    let s = seed >>> 0;
+    const rnd = () => {
+      s += 0x6D2B79F5;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const gauss = () => {
+      // Box-Muller
+      const u = Math.max(1e-9, rnd()), v = rnd();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    };
+
+    const tfMs = DS.TIMEFRAMES[interval].ms;
+    const t0 = (startTs || Math.floor(Date.now() / 1000) - Math.floor(n * tfMs / 1000)) ;
+    const candles = [];
+    let price = startPrice;
+    let trend = 0;
+
+    for (let i = 0; i < n; i++) {
+      // El régimen de tendencia cambia lentamente (mercado con impulsos y rangos)
+      if (i % 240 === 0) trend = (rnd() - 0.45) * 0.0016;
+      const vol = 0.006 + 0.004 * Math.sin(i / 180);
+      const drift = trend + 0.00004 * Math.sin(i / 90);
+      const open = price;
+      const close = open * Math.exp(drift + vol * gauss());
+      const wick = Math.abs(open * vol * (0.35 + rnd()));
+      const high = Math.max(open, close) + wick * rnd();
+      const low = Math.min(open, close) - wick * rnd();
+      const volume = Math.round((900 + 2500 * rnd()) * (1 + Math.abs(close - open) / open * 60));
+      candles.push({
+        time: Math.floor((t0 * 1000 + i * tfMs) / 1000),
+        open: +open.toFixed(2), high: +high.toFixed(2), low: +low.toFixed(2), close: +close.toFixed(2),
+        volume,
+      });
+      price = close;
+    }
+    return candles;
+  };
+
+  /* ------------------------------- Caché ------------------------------- */
+  // La caché vive en localStorage (ver storage.js): aquí solo las claves.
+
+  DS.cacheKey = (symbol, interval) => `brp_kl_${symbol}_${interval}`;
+
+  /* =========================================================================
+   * DATOS DE MERCADO DEL TERMINAL (fila de estadísticas + libro de órdenes)
+   * -------------------------------------------------------------------------
+   * Dos procedencias y CADA VALOR lleva la suya, para no vender como de
+   * futuros lo que es de spot:
+   *   · «spot»    → espejo público de Binance (mismo mercado que las velas
+   *                 que usa la app): libro de órdenes y estadísticas de 24 h.
+   *   · «futuros» → API pública de Bitget (USDT-FUTURES, sin clave, CORS *):
+   *                 mark, índice, funding, interés abierto y reparto de
+   *                 cuentas long/short.
+   * Todo es opcional: si un endpoint no responde, js/orderBook.js deriva el
+   * valor de las velas cargadas y lo ETIQUETA como derivado.
+   * ======================================================================= */
+  DS.MARKET = {
+    TIMEOUT: 4200,
+    BITGET: 'https://api.bitget.com',
+    PRODUCT: 'USDT-FUTURES',
+    _cache: new Map(),
+
+    /** GET JSON con timeout y caché (ttl en ms; 0 = no cachear). */
+    async json(key, url, ttl) {
+      const now = Date.now();
+      const hit = DS.MARKET._cache.get(key);
+      if (ttl > 0 && hit && now - hit.t < ttl) return hit.d;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), DS.MARKET.TIMEOUT);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        if (ttl > 0) DS.MARKET._cache.set(key, { t: now, d });
+        return d;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
+    /**
+     * URL a través del proxy del mismo origen (server.js), si lo hay. Así, en
+     * la sandbox y en local, NINGUNA petición del terminal sale a internet
+     * directo: es la invariante que vigila tests/preview-live.test.js.
+     */
+    async proxied(pathAndQuery, directo, ttl) {
+      if (DS.MISMO_ORIGEN_UTIL) {
+        try { return await DS.MARKET.json('px|' + pathAndQuery, pathAndQuery, ttl); }
+        catch (e) { /* el proxy no está: se prueba la fuente directa */ }
+      }
+      return await DS.MARKET.json('dx|' + directo, directo, ttl);
+    },
+
+    /** Prueba los hosts de Binance (primero el proxy del mismo origen, si lo hay). */
+    async binance(pathAndQuery, ttl) {
+      let last = null;
+      for (const host of DS.BINANCE_HOSTS) {
+        try { return await DS.MARKET.json('bk|' + host + pathAndQuery, host + pathAndQuery, ttl); }
+        catch (e) { last = e; }
+      }
+      throw last || new Error('sin hosts que probar');
+    },
+
+    /** Libro real (bid/ask) del espejo spot: [[precio, cantidad], …]. */
+    async depth(symbol, limit = 30) {
+      const r = await DS.MARKET.binance(`/api/v3/depth?symbol=${symbol}&limit=${limit}`, 2500);
+      const f = (a) => (a || []).map((x) => [+x[0], +x[1]]);
+      if (!r || (!r.asks && !r.bids)) throw new Error('libro vacío');
+      return { asks: f(r.asks), bids: f(r.bids), id: +r.lastUpdateId || 0 };
+    },
+
+    /** Estadísticas de 24 h del espejo spot. */
+    async ticker24(symbol) {
+      const r = await DS.MARKET.binance(`/api/v3/ticker/24hr?symbol=${symbol}`, 15000);
+      return {
+        last: +r.lastPrice, chgPct: +r.priceChangePercent, open: +r.openPrice,
+        high: +r.highPrice, low: +r.lowPrice,
+        vol: +r.volume, quote: +r.quoteVolume, trades: +r.count || 0,
+      };
+    },
+
+    /** Mark, índice, funding, OI y long/short del perpetuo (Bitget). */
+    async futuresMeta(symbol) {
+      const B = DS.MARKET.BITGET;
+      const P = DS.MARKET.PRODUCT;
+      const q = `symbol=${symbol}&productType=${P}`;
+      // Cada dato intenta primero el proxy del mismo origen y si no, la API
+      // pública de Bitget (admite CORS, así que en Pages funciona igual).
+      const [tk, fr, ls] = await Promise.allSettled([
+        DS.MARKET.proxied(`/api/market/futures-ticker?${q}`, `${B}/api/v2/mix/market/ticker?${q}`, 15000),
+        DS.MARKET.proxied(`/api/market/funding?${q}`, `${B}/api/v2/mix/market/current-fund-rate?${q}`, 60000),
+        DS.MARKET.proxied(`/api/market/long-short?${q}&period=1h`, `${B}/api/v2/mix/market/account-long-short?${q}&period=1h`, 300000),
+      ]);
+      const pick = (r) => (r && r.status === 'fulfilled' && r.value && r.value.data ? r.value.data[0] : null);
+      const d = pick(tk);
+      const f = pick(fr);
+      const l = pick(ls);
+      if (!d && !f && !l) throw new Error('Bitget sin datos');
+      const out = { venues: [] };
+      if (d) {
+        out.mark = +d.markPrice;
+        out.index = +d.indexPrice;
+        out.oi = +d.holdingAmount;                 // unidades declaradas por el exchange
+        out.oiUsd = d.usdtVolume ? +d.usdtVolume : null;
+        out.high24 = +d.high24h;
+        out.low24 = +d.low24h;
+        out.venues.push('Bitget USDT-FUTURES');
+      }
+      if (f) {
+        out.funding = +f.fundingRate;
+        out.fundingEvery = +f.fundingRateInterval || 8;
+        out.nextFunding = +f.nextUpdate;
+        out.venues.push('funding Bitget');
+      }
+      if (l) {
+        out.longPct = +l.longAccountRatio * 100;
+        out.shortPct = +l.shortAccountRatio * 100;
+        out.lsTs = +l.ts;
+      }
+      return out;
+    },
+  };
+
+  global.DS = DS;
+})(window);

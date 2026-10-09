@@ -1,0 +1,63 @@
+{
+  "name": "bar-replay-pro",
+  "version": "1.0.0",
+  "description": "Bar Replay profesional para backtesting de Bitcoin y criptomonedas: replay vela a vela, indicadores técnicos, herramientas de dibujo y trading simulado con estadísticas.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tests/logic.test.js && node tests/dom.smoke.js && node tests/boot.test.js",
+    "test:net": "node tests/network.test.js",
+    "test:browser": "node tests/browser.capture.js",
+    "build:single": "node tools/build-single.js",
+    "test:single": "node tools/build-single.js && node tests/single.test.js",
+    "test:logic": "node tests/logic.test.js",
+    "test:dom": "node tests/dom.smoke.js",
+    "test:iframe": "node tests/iframe.test.js",
+    "test:all": "node tools/run-all.js",
+    "test:preview": "node tests/preview-live.test.js",
+    "test:layout": "node tests/responsive.test.js",
+    "test:incidencias": "node tests/incidencias.test.js",
+    "snapshot": "node tools/snapshot.js",
+    "test:sanitizado": "node tests/visor-sanitizado.test.js",
+    "demo:video": "node tools/demo-video.js",
+    "test:limites": "node tests/limites.test.js",
+    "test:gesto": "node tests/gesto.test.js",
+    "test:simbolos": "node tests/simbolos.test.js",
+    "test:pages": "node tests/pages-buscador.js",
+    "test:dibujos": "node tests/dibujos.test.js",
+    "test:pages-dibujos": "node tests/pages-dibujos.js",
+    "test:pages-promediar": "node tests/pages-promediar.js",
+    "test:pages-trailing": "node tests/pages-trailing.js",
+    "test:pages-bitunix": "node tests/pages-bitunix.js",
+    "test:pages-pnl": "node tests/pages-pnl.js",
+    "test:enlaces": "node tests/enlaces.test.js",
+    "test:temporalidad": "node tests/temporalidad.test.js",
+    "test:entradas": "node tests/entradas.test.js",
+    "test:arrastrar": "node tests/limite-arrastrar.test.js",
+    "test:promediar": "node tests/promediar.test.js",
+    "test:trailing": "node tests/trailing.test.js",
+    "test:bitunix": "node tests/bitunix.test.js",
+    "test:pnl": "node tests/pnl-chart.test.js"
+  },
+  "keywords": [
+    "backtesting",
+    "bar-replay",
+    "trading",
+    "bitcoin",
+    "criptomonedas",
+    "lightweight-charts",
+    "tradingview",
+    "replay"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

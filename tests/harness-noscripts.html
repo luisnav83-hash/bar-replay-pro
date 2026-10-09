@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<!-- =========================================================================
+     tests/harness-noscripts.html — Página de prueba: incrusta el archivo único
+     en un iframe SIN permiso para ejecutar scripts (sandbox="allow-same-origin").
+     Sirve para comprobar que, cuando el entorno bloquea JavaScript, el usuario
+     ve un aviso claro en vez de una pantalla en blanco.
+     ====================================================================== -->
+<html lang="es">
+<head><meta charset="utf-8"><title>Prueba: scripts bloqueados</title>
+<style>html,body{margin:0;background:#111;height:100%}iframe{border:0;width:100vw;height:100vh}</style>
+</head>
+<body>
+<iframe id="marco" sandbox="allow-same-origin" src="/bar-replay-pro-unico.html"></iframe>
+</body>
+</html>

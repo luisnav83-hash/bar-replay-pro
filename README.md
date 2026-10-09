@@ -1,0 +1,737 @@
+# 📈 Bar Replay Pro — Backtesting vela a vela de Bitcoin y criptomonedas
+
+Aplicación web completa para **practicar trading en tiempo simulado**: carga velas
+históricas reales de Binance, oculta el futuro y te deja avanzar la gráfica
+**vela a vela** mientras dibujas, analizas y operas con dinero virtual. Al terminar
+obtienes estadísticas profesionales de tu rendimiento (win rate, profit factor,
+drawdown, curva de capital y más).
+
+![tema](https://img.shields.io/badge/tema-terminal%20de%20trading-1a1a2e) ![sin dependencias](https://img.shields.io/badge/backend-sin%20dependencias-00c853) ![licencia](https://img.shields.io/badge/licencia-MIT-2979ff)
+
+> 🔗 **Proyecto hermano:** [**OpenMarket Chart — clon en React + Vite**](https://luisnav83-hash.github.io/openmarket-chart/) ·
+> reconstrucción propia del terminal de gráficos de `openmarket.xyz/chart/r8e6KKi7`
+> (mismo layout medido, gráfico real con indicadores, paneles y dibujos).
+> Código: [github.com/luisnav83-hash/openmarket-chart](https://github.com/luisnav83-hash/openmarket-chart)
+
+---
+
+## ✨ Funcionalidades
+
+### 1. Gráfico de velas
+- Renderizado con **TradingView Lightweight Charts v4** (incluida localmente en `vendor/`).
+- Temporalidades: **1m · 5m · 15m · 1h · 4h · 1d · 1w**.
+- Zoom, scroll, cruceta con precio/fecha, escala **automática o manual** (fija),
+  escala **lineal o logarítmica**, velas alcistas en verde y bajistas en rojo.
+- Bloqueo opcional del scroll para no mover la vista sin querer.
+
+### 2. Sistema de Bar Replay
+- **PLAY / PAUSA**, **avanzar** y **retroceder** una vela, **reset** al inicio y salto al final.
+- Velocidades **0.5x · 1x · 2x · 5x · 10x · 50x · MAX** (bucle con `requestAnimationFrame`
+  y acumulador: nada se pierde aunque la pestaña se ralentice).
+- Barra de progreso arrastrable, reloj de la vela actual (UTC) y **contador de velas ocultas**.
+- Las velas futuras **nunca** se envían al gráfico: solo se dibuja hasta el cursor.
+- Al **retroceder**, la cuenta se reconstruye desde *checkpoints*: balance, historial
+  de trades y posición vuelven exactamente al estado de esa vela.
+
+### 3. Herramientas de dibujo (persistentes)
+Línea de tendencia · línea extendida · soporte/resistencia horizontal · línea vertical ·
+rectángulo/zona · **canal paralelo** (3 clics) · **retroceso de Fibonacci** ·
+**medición** (Δprecio, Δ%, nº de velas y tiempo) · **flecha** (2 clics, atajo `A`) ·
+**camino/polilínea** (clics y doble clic o `Enter` para cerrar, atajo `P`).
+Color, grosor y estilo configurables, selección y arrastre con el ratón, imán a OHLC
+de las velas. Los dibujos se anclan a **tiempo + precio**, así que siguen en su sitio
+al hacer zoom, scroll o avanzar el replay.
+
+**Gestor de dibujos** (pestaña «✏️ Dibujos» del panel inferior): cada dibujo aparece
+con su color, su nombre y su punto de anclaje, y se puede **renombrar** (doble clic en
+el nombre), **ocultar sin borrar** (👁, desaparece del gráfico y no molesta al pasar el
+ratón) o **eliminar** (✕), además de «🚫 Ocultar todos» y «🗑️ Borrar todo» (con
+confirmación). Lo oculto y los nombres propios se guardan en la sesión y en la
+instantánea.
+
+### 4. Indicadores técnicos (cálculo propio, sin librerías)
+| Indicador | Parámetros | Panel |
+|---|---|---|
+| SMA | período | principal |
+| EMA | período | principal |
+| EMA 2 | período | principal |
+| Bollinger | período + k desviaciones | principal |
+| Volumen | color | principal (histograma inferior) |
+| RSI (Wilder) | período | panel inferior |
+| MACD | rápida / lenta / señal | panel inferior (línea + señal + histograma) |
+| ATR (Wilder) | período | panel inferior |
+
+Todos son **causales**: el valor de una vela solo depende de velas pasadas, así que
+mirar el indicador nunca revela el futuro.
+
+### 5. Trading simulado
+- **BUY/LONG** y **SELL/SHORT** con tamaño en **% del equity**, **USD de exposición** o **cantidad**.
+- **Capital inicial** configurable (por defecto 10.000 $) y **apalancamiento** 1x…100x
+  (deslizador `#levRange`, como en el panel de futuros) con **precio de liquidación estimado**.
+- **Modo de margen Cruzado / Aislado** (el seg de arriba del panel de órdenes). Cambia la
+  liquidación, no es un adorno: en **Aislado** vuelve la fórmula clásica
+  `entrada · (1 ∓ 1/apalancamiento)` y en **Cruzado** respalda también el **margen libre**
+  de la cuenta → `entrada − lado · (margen + margen libre) / cantidad`, que la aleja
+  (`js/tradingEngine.js`: `liquidationPrice`, `marginOf`, `freeMargin`). El modo elegido
+  se guarda con la sesión.
+- **Comisión** por operación (0,10 % por defecto) aplicada en apertura y cierre; con
+  promediado, el break-even mostrado **no** es el precio medio: incluye lo pagado en comisiones.
+- **Stop Loss** y **Take Profit**: por precio, con atajos por % o **arrastrando las
+  etiquetas SL/TP sobre el gráfico**.
+- Ejecución automática de SL/TP durante el replay, con **modelo realista**:
+  - si la vela toca SL y TP a la vez → modo **pesimista** por defecto (ejecuta el SL);
+  - si hay **hueco (gap)**, la orden se rellena en la apertura de la vela (peor precio).
+- **Comisiones** configurables (0,1 % por lado, ida y vuelta) y de **financiación**
+  opcional por vela.
+- PnL en tiempo real, líneas en el gráfico de entrada/SL/TP/liquidación y métricas
+  del trade (MFE/MAE, R múltiplo, duración en velas y tiempo).
+
+- **LA POSICIÓN QUEDA MARCADA EN EL GRÁFICO y su PnL se ve subir y bajar**
+  (`js/pnlChart.js`): al abrir, una **banda** va de la vela de entrada al precio
+  actual (verde si gana, roja si pierde), con un **tick** en la vela de entrada y
+  una **etiqueta** pegada al precio actual que dice lado, tamaño, precio de
+  entrada, PnL en $, % sobre el margen y una flecha ▲/▼/= con el movimiento de la
+  última vela. Debajo del gráfico se abre un **panel de PnL**: la curva del PnL no
+  realizado vela a vela (línea rellena, con líneas en el máximo y el mínimo del
+  recorrido) y el recuento «N velas desde la entrada».
+- **El número no se inventa**: sale de `TE.unrealized(App.currentPrice())`, el
+  mismo del que vive la tarjeta de la posición, y la marca **sigue a la vela** al
+  hacer scroll, zoom, cambiar de temporalidad o redimensionar. Las velas futuras
+  no se pintan: la curva se corta en el cursor del replay.
+- **Cada hito deja su marca sobre la vela**: la entrada, cada promediado
+  (`#2`, `#3`… con el precio media resultante), cada cierre parcial (con lo
+  realizado) y el `CERRADO` con el **PnL neto** de la operación (comisiones
+  incluidas, o sea el mismo que se cobra la cuenta). Al cerrar, el resumen **se
+  queda** en pantalla y la curva se queda congelada en sus velas: se puede seguir
+  moviendo el replay sin que crezca.
+- El marcaje se apaga y enciende con **📈 PnL** en la barra del gráfico y la
+  preferencia se recuerda (`ST 'pnlGrafico'`). La capa es `pointer-events: none`
+  y queda por debajo de la leyenda (`z-index` 5 < 6): no se come ni el dibujo a
+  mano ni el gesto, y en ≤640 px la etiqueta se encoge (176×48) y se coloca
+  **por debajo** de la leyenda OHLC cuando el precio está arriba del todo.
+
+### 6. Estadísticas y resultados
+Balance · equity · PnL total y abierto · margen usado y exposición · nº de trades ·
+ganadores/perdedores · **win rate** · **profit factor** · **payoff** · expectancy ·
+**R medio** · **máximo drawdown** ($ y %) · mejor y peor trade · rachas ·
+**curva de capital** en vivo · tabla completa del historial (entrada, salida, dirección,
+precios, tamaño, PnL, %, R, motivo de cierre y duración).
+
+### 7. Gestión de datos
+- **Binance** `/api/v3/klines` con **paginación automática** de 1000 velas y 6 hosts espejo.
+- **Catálogo de símbolos** `/api/v3/exchangeInfo` (1.100+ pares reales) para el buscador,
+  con proxy propio en `server.js` y caché de 6 h; si no hay red, lista local de 40 pares.
+- **Fallback a CoinGecko** si Binance no está disponible.
+- **Caché local** (localStorage) de lo descargado, con aviso de velas en caché.
+- Importación de **CSV** (con o sin cabecera, separador `,`/`;`/tabulador, fechas ISO o epoch).
+- Modo **Demo**: 3.000 velas sintéticas deterministas para practicar sin conexión.
+- Selector de **rango de fechas** y de **par** con **BUSCADOR DE SÍMBOLOS** (botón
+  del par o `Ctrl+K` / `/`): catálogo de Binance por **categorías** (⭐ Favoritos,
+  🕘 Recientes, 🔥 Principales, 💵 USDT, USDC, BTC, ETH y todos), **búsqueda en vivo**
+  por texto y ⭐ para marcar favoritos (se recuerdan en el navegador). 40 pares de
+  referencia siempre disponibles aunque no haya red.
+
+### 8. Extras
+- **DIBUJAR MANTENIENDO PULSADO** (gesto, estilo tableta gráfica): mantén pulsado
+  ⅓ s sobre el gráfico y traza una forma; al soltar, se reconoce sola y se
+  convierte en el dibujo que parece: un trazo horizontal → soporte/resistencia,
+  vertical → línea de tiempo, diagonal → línea de tendencia, cuatro lados →
+  rectángulo/zona, un bucle → elipse, un zigzag → retroceso de Fibonacci.
+  Un **garabato** encima de un dibujo lo borra. Mientras dibujas, el gráfico no
+  se desplaza (se bloquea la panorámica). Se puede desactivar en Ajustes
+  (`gestureDraw`). El reconocimiento es geométrico (giro acumulado, cierre,
+  rectitud), sin librerías externas.
+- **PANEL DE INDICADORES con valores en vivo** (estilo terminal de trading): la
+  tarjeta «📈 Paneles» lista todos los indicadores con su valor actual —Vol, SMA,
+  EMA, EMA2, BB, RSI, MACD (hist/macd/señal) y ATR— y se actualiza en cada vela
+  del replay. Cada fila lleva punto de color, ojo 👁 para mostrar/ocultar la serie
+  en el gráfico y abre la configuración al hacer clic.
+- **ÓRDENES LÍMITE**: se colocan y esperan; el replay las ejecuta solas al llegar
+  el precio (línea ámbar punteada + tarjeta «⏳ Órdenes pendientes» con botón ✖).
+- **BUSCADOR DE SÍMBOLOS Y TEMPORALIDADES RÁPIDAS**: el botón del par abre el catálogo
+  de Binance con categorías, buscador en vivo y favoritos ⭐; al lado, los botones
+  `1m · 5m · 15m · 1h · 4h · 1d · 1w` cambian la temporalidad al instante. El par
+  elegido se recuerda en «Recientes» y la leyenda del gráfico se sincroniza siempre.
+  Si no hay datos para esa combinación, avisa y cae a las velas guardadas o a DEMO
+  (nunca deja el gráfico desincronizado del par o la temporalidad elegidos).
+- **Guardar/cargar sesiones** completas (replay, dibujos, indicadores, trades, cuenta).
+- **Exportar**: trades a CSV · curva de capital a CSV · velas visibles a CSV ·
+  sesión a JSON · **informe imprimible → PDF** (incluye captura del gráfico).
+- **Captura de pantalla** del gráfico (velas + dibujos + paneles) en PNG.
+- **Modo práctica rápida**: fecha aleatoria y a operar.
+- **Atajos de teclado**, sonidos sintetizados (WebAudio) y diseño responsive.
+- **⚙️ Ajustes abre de verdad**: el botón rellena y abre el modal (`UI.openModal('modalSettings')`,
+  que es quien llama a `UI.openSettings`); al reabrir, los interruptores reflejan el estado real
+  del motor —no el valor con el que nació la página—, incluido «➕ Promediar entradas».
+
+---
+
+## 🖥 Interfaz: terminal de futuros (piel Bitunix)
+
+La interfaz es una **reproducción de la pantalla de futuros de Bitunix**: misma
+organización, misma jerarquía visual y mismas interacciones, escrita desde cero
+aquí. **No** se usa el logo, el nombre ni ningún recurso del exchange: es un
+*look & feel*, no una suplantación.
+
+**Las cinco zonas, como en el original**
+
+| Zona | Qué hay | Dónde |
+| --- | --- | --- |
+| 1 · Barra superior | par + temporalidades rápidas y **fila de estadísticas de 24 h** (último con flecha, %, máx/mín, volumen, mark & index, **funding con su cuenta atrás** y OI) | `#topbar` → `#bfStats` |
+| 2 · Gráfico | velas + toolbar de dibujo + paneles de indicadores + barra de replay | `#chartArea` |
+| 3 · Libro de órdenes | ventas en rojo leídas **de mayor a menor hacia el precio** (la mejor venta, justo encima del último), precio último centrado con flecha, compras en verde **de menor a mayor hacia abajo**, columna **Total** acumulada (máxima en la fila lejana) y **ratio B % / S %** al pie | `#bookCard` (`js/orderBook.js`) |
+| 4 · Panel de órdenes | modo de margen, apalancamiento, tipo (⚡ Mercado / ⏳ Límite), unidad (% equity / USD / Qty), **0 · 25 · 50 · 75 · 100**, TP/SL rápidos, **Coste** y **Margen** calculados en vivo y `Abrir Long` / `Abrir Short` | `#orderCard` |
+| 5 · Pestañas | Posiciones · Órdenes · Operaciones · Cuenta · Estadísticas · Registro · Dibujos, con contadores en las cabeceras | `#bottomPanel` |
+
+**Interacciones copiadas (y probadas)**
+
+* **Pulsar un precio del libro** rellena el campo de precio límite y salta al modo
+  «⏳ Límite», igual que en el exchange.
+* El botón **fijar** del libro ancla los niveles al precio de la vela del cursor:
+  en un replay el libro no puede «seguir» al reloj.
+* **0/25/50/75/100** convierte según la unidad elegida: el 50 % significa 50 % del
+  disponible en `% equity`, 50 % del notional en `USD` y media cantidad en `Qty`.
+* Con tamaño 0 los botones de compra/venta se **deshabilitan** (no hay orden posible),
+  y `#bfCostVal` / `#bfMarginVal` siempre dicen lo que el motor va a hacer.
+* Cambiar **Cruzado ↔ Aislado** con posición abierta **mueve la liquidación** visible
+  de la tarjeta `Posición abierta`.
+
+**Paleta medida de la captura de referencia** (no inventada): fondo `#0a0a0b`,
+sube `#25ca93`, baja `#f65b55`, acento lima `#b8f040`, ámbar para funding y
+liquidación `#f0b90b`, texto `#e6e7ea` / `#8b8e96`, **radio 0** en las tarjetas,
+cuerpo 12 px, precio 17 px, botones Long/Short de 38 px, fila de libro de 17 px.
+Todo vive en `css/bitunix.css`, que se carga **la última** para poder reescribir
+al tema anterior sin tocarlo.
+
+**De dónde sale cada dato (y qué no es real)**
+
+| Dato | Origen auténtico | Cómo se etiqueta |
+| --- | --- | --- |
+| Velas OHLCV | Binance **spot** por `server.js` (espejo `data-api.binance.vision`); en el archivo único, la instantánea de velas reales incrustada | leyenda del gráfico |
+| 24 h (%, máx/mín, volumen) | `GET /api/v3/ticker/24hr` por el **mismo origen** (proxy de `server.js`); sin red, `—` | `title` de `#bfChg24`: «Variación de 24 h REAL (espejo spot de Binance)» |
+| Niveles del libro | **DERIVADOS** de la vela del cursor de forma determinista (`OB.derivedBook`): no existe un libro histórico por vela y fingirlo sería mentira. Se piden 10+10 y se pintan con las lejanas recortadas (`.bf-asks`/`.bf-bids` con `max-height` y `overflow:hidden`), de modo que el precio central y las filas pegadas a él **siempre** se ven | `#bookSrc` = `derivado`; `#bfSource` = «libro: derivado del replay» |
+| Mark & Index | mark = cierre de la vela actual; index = media corta de cierres | etiqueta «derivado» en el `title` |
+| Funding, cuenta atrás, OI | **Bitget USDT-FUTURES** (`current-fund-rate` y `ticker`) vía `/api/market/*` de `server.js`; en Pages, CORS directo con la API pública | `#bfSource` añade «mark/OI/funding: Bitget» |
+| Ratio long/short | Bitget `account-long-short` (nº de cuentas, 1 h) | pie del libro `B % / S %` |
+| Comisión, margen, PnL | locales del motor de práctica | — |
+
+Regla: **un dato derivado jamás se presenta como real**. Si no hay red, funding, OI y
+long/short pasan a `—` y el libro sigue siendo utilizable porque nunca prometió ser real.
+
+**En el móvil, el panel de órdenes manda.** A ≤640 px la franja del terminal
+crece a 250 px y la barra `Abrir Long / Abrir Short` se queda **fija al pie** de
+la tarjeta: se puede operar sin rellenanar el formulario entero. Y ninguna fila
+del formulario se aplasta: con `max-height` en el cuerpo, el `flex-shrink` por
+defecto dejaba los segmentados a 2 px (botón vivo pero invisible), así que
+`#sidebar > .card > .card-body > *` es `flex: 0 0 auto`. Lo comprueba
+`tests/bitunix.test.js` trayendo cada fila a la vista y mirando qué elemento
+recibe el puntero. La misma suite exige además que **ningún control visible** del
+panel de órdenes mida menos de 20 px de alto: el deslizador de apalancamiento tenía
+la barra fina por diseño (`height: 3px`) y con el dedo era imposible de agarrar, así
+que ahora la caja del `input[type=range]` mide 22 px y la pista sigue viéndose de 3 px.
+
+Dos piezas del gráfico también estaban en su sitio solo «de casualidad» y se han
+colocado bien: el aviso de **velas ocultas** ya no es un `position:absolute` suelto
+sino un elemento más de la leyenda OHLC (va en su línea y no pisa nunca el `O/H/L/C`,
+que es lo que hacía cuando la leyenda ocupaba dos filas), y el crédito
+«Lightweight Charts™» se aparta de la franja derecha donde el eje pinta sus etiquetas.
+En ≤640 px la leyenda baja a 10 px de letra y deja de repetir el origen de los datos
+(esa información ya está en la fila de estadísticas de arriba), para no comerse 131 px
+de los ~200 px de gráfico que quedan: se queda en ~75 px. `tests/bitunix.test.js`
+mide los rectángulos y no deja solapar ninguna de las tres piezas (5 comprobaciones
+nuevas: aviso dentro de la leyenda, altura de la caja y holgura con el eje, medidos
+también a 1440 px).
+
+**En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
+los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
+barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
+`tests/responsive.test.js` (50 comprobaciones) y `tests/browser.capture.js`:
+el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
+altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
+el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
+regresivo que cazó `tests/limites.test.js`).
+
+---
+
+## 🌐 Publicada en GitHub Pages
+
+El repositorio incluye `.github/workflows/pages.yml`: al subirlo a GitHub, la app
+se publica sola y queda accesible desde cualquier navegador (también móvil) en
+`https://TU-USUARIO.github.io/TU-REPOSITORIO/`.
+
+- Repositorio: **https://github.com/luisnav83-hash/bar-replay-pro**
+- Aplicación completa: **https://luisnav83-hash.github.io/bar-replay-pro/**
+- Archivo único (ideal para el móvil): **https://luisnav83-hash.github.io/bar-replay-pro/bar-replay-pro-unico.html**
+
+Esto **ya está subido y publicado** en esas tres direcciones. Si alguna vez se
+parte de cero, no hace falta ninguna guía: crear el repositorio en GitHub y
+`git init && git add -A && git commit -m "Bar Replay Pro" && git branch -M main &&
+git remote add origin <URL> && git push -u origin main` — el workflow
+`.github/workflows/pages.yml` se encarga del resto (y el archivo único no
+necesita ni build: `bar-replay-pro-unico.html` se sube tal cual y funciona).
+
+---
+
+## 🔗 Proyectos relacionados
+
+### OpenMarket Chart — clon del terminal de `openmarket.xyz` (React + Vite)
+
+- Aplicación: **https://luisnav83-hash.github.io/openmarket-chart/**
+- Repositorio: **https://github.com/luisnav83-hash/openmarket-chart**
+- Referencia analizada: `https://openmarket.xyz/chart/r8e6KKi7`
+
+Reconstrucción **desde cero**, con código propio, del terminal de gráficos de
+OpenMarket: layout, medidas y colores tomados del original (cabecera 40 px, barra
+del gráfico 44 px, rail de 52 px, pie de 36 px, paleta `#c8ccd1`/`#d27a61`), gráfico
+real con Lightweight Charts, indicadores **calculados a mano** (EMA 20/50,
+Bollinger 20-2 con relleno, VWAP, RSI y MACD en panel sincronizado), píldoras
+High/Low, precio con cuenta atrás, paneles laterales (watchlist, libro de órdenes,
+cintas, chat, objetos), herramientas de dibujo y responsive verificado en 7 tamaños
+(1920×1080 → 375×812), sin API keys: los datos son ficticios y se generan en local.
+
+**Relación con este proyecto:** comparten enfoque —terminal de trading propio, sin
+dependencias pesadas— y la **comparación visual medida** contra la referencia;
+Bar Replay Pro aporta el replay vela a vela y la operativa simulada, el clon aporta
+la fidelidad de interfaz y los paneles de flujo de mercado.
+
+## 🔗 Enlace al proyecto hermano dentro de la app
+
+El botón **?** de la barra superior abre «Guía rápida y atajos», que termina con la
+sección **Proyectos relacionados** y un enlace directo a
+**[OpenMarket Chart](https://luisnav83-hash.github.io/openmarket-chart/)** (el clon
+del terminal de `openmarket.xyz` en React + Vite), con su código en GitHub. Los
+enlaces abren en pestaña nueva con `rel="noopener noreferrer"` y viajan también en el
+archivo único (`bar-replay-pro-unico.html`) y en la versión publicada; lo comprueba
+`tests/enlaces.test.js`.
+
+## 🎬 Vídeo de demostración
+
+Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
+**[docs/demo-bar-replay.mp4](docs/demo-bar-replay.mp4)** · se regenera con `npm run demo:video`.
+
+## 📸 Capturas
+
+**Vista general** — replay en marcha con SMA/EMA, volumen, RSI y estadísticas:
+
+![Vista general](docs/captura-00-portada.png)
+
+**Operando el replay** — posición LONG con líneas de entrada, SL y TP arrastrables, dibujos
+(lineal de tendencia y soporte) y velas futuras ocultas (🔒 contador):
+
+![Operando](docs/captura-02-replay-operando.png)
+
+**Indicadores en paneles sincronizados** — Bollinger, RSI, MACD y ATR:
+
+![Indicadores](docs/captura-03-indicadores.png)
+
+**PnL de la posición, marcado en el gráfico** — banda entrada→precio, tick en la vela de
+entrada, etiqueta con el PnL y el panel con la curva vela a vela (a la izquierda, el mismo
+marcaje a 390 px de ancho):
+
+![PnL en el gráfico](docs/captura-39-pnl-en-el-grafico.png)
+
+![PnL en el móvil](docs/captura-40-pnl-movil.png)
+
+**Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
+
+![Estadísticas](docs/captura-05-estadisticas.png)
+
+**Buscador de símbolos en vivo** — catálogo completo de Binance (1.183 pares) con
+categorías, búsqueda al escribir, favoritos ⭐ y recientes 🕘:
+
+![Buscador de símbolos](docs/captura-20-buscador-en-vivo.png)
+
+**Dibujar manteniendo pulsado** — el gesto reconoce el trazo y lo convierte en
+soporte/resistencia, línea de tendencia, rectángulo, elipse o Fibonacci:
+
+![Gesto de dibujo](docs/captura-18-gesto-dibujo.png)
+
+**Flecha, camino y gestor de dibujos** — flecha de proyección, polilíneas libres con su
+Δ precio/% y la lista de dibujos con 👁 ocultar, renombrar y borrar:
+
+![Dibujos](docs/captura-23-dibujos-flecha-camino.png)
+
+| 37 | **Terminal de futuros (piel Bitunix)**, escritorio 1440×900 |
+| 38 | El mismo terminal en **390 px**: gráfico arriba y libro + panel de órdenes en franja |
+
+*(37 y 38 las escribe `tests/bitunix.test.js`; el resto, `tests/browser.capture.js` en Chromium headless.)*
+
+---
+
+## 🚀 Cómo ejecutarlo
+
+### Opción A — Solo frontend (lo más rápido)
+Abre `index.html` en el navegador o levanta un servidor estático:
+
+```bash
+cd bar-replay-app
+python3 -m http.server 8080
+# → http://localhost:8080
+```
+
+### Opción A′ — Archivo único, sin servidor ni instalación
+`bar-replay-pro-unico.html` es **toda la aplicación en un solo archivo** (≈709 KB:
+HTML + CSS + JS + la librería de gráficos incrustados). Se abre con doble clic,
+se puede enviar por correo o incrustar en cualquier visor. Sin conexión arranca
+en modo DEMO automáticamente.
+
+```bash
+npm run build:single     # regenera bar-replay-pro-unico.html desde las fuentes
+npm run test:single      # lo verifica en un navegador real CON LA RED BLOQUEADA
+```
+
+### Opción B — Con backend Node (recomendado)
+El servidor sirve la app y además **proxifica las velas de Binance** en
+`/api/v3/klines` (útil si tu red bloquea Binance o hay problemas de CORS).
+**No necesita dependencias**: usa módulos nativos de Node ≥ 18.
+
+```bash
+cd bar-replay-app
+node server.js            # → http://localhost:8080
+PORT=3000 node server.js  # otro puerto
+```
+
+Si tienes `express` instalado, `server.js` lo detecta y lo usa automáticamente
+(`npm install express`). Comprueba el proxy con:
+
+```bash
+curl "http://localhost:8080/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=3"
+```
+
+### Pruebas
+
+```bash
+npm test                    # lógica + DOM simulado
+npm run test:net            # carga de velas reales (requiere red / server.js en marcha)
+npm run test:browser        # navegador real + capturas en docs/ (requiere puppeteer)
+
+node tests/logic.test.js      # 153 pruebas: indicadores, datos, trading, estadísticas y replay
+node tests/dom.smoke.js       #  51 comprobaciones en navegador simulado (requiere jsdom)
+node tests/boot.test.js       #  13 comprobaciones de arranque con red bloqueada
+node tests/network.test.js    #  10 comprobaciones de paginación y datos reales de Binance
+node tests/browser.capture.js #  47 comprobaciones en Chromium real + capturas PNG
+node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
+node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
+node tests/responsive.test.js #  50 comprobaciones de tamaño: 10 paneles, sin recortes
+node tests/visor-sanitizado.test.js # 9 comprobaciones del visor que no ejecuta JS
+node tests/limites.test.js    #  14 comprobaciones de las órdenes límite (ciclo completo)
+node tests/gesto.test.js      #  12 comprobaciones del gesto de dibujo (traza con el ratón)
+node tests/simbolos.test.js   #  27 comprobaciones del buscador de símbolos y las temporalidades
+node tests/pages-buscador.js  #  12 comprobaciones de LA APP PUBLICADA (catálogo real sin servidor propio)
+node tests/dibujos.test.js    #  18 comprobaciones de los dibujos: flecha, camino y gestor
+node tests/pages-dibujos.js   #  10 comprobaciones de los dibujos EN LA APP PUBLICADA
+node tests/pages-promediar.js #  46 comprobaciones del promediado/TP EN LA APP PUBLICADA (solo interfaz). El tramo
+                                #   donde el escalón es alcanzable se BUSCA avanzando con ⏭ y el replay se pone en
+                                #   pausa: con el azar de la serie de práctica, medir sobre el tramo que tocaba era
+                                #   una carrera contra el reloj (un rojo que solo salía con la batería cargada)
+node tests/pages-trailing.js  #  57 comprobaciones del trailing stop EN LA APP PUBLICADA (solo interfaz)
+node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
+node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
+node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
+node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)
+node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parcial, break-even y TP escalonado
+                                #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
+                                #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
+node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
+node tests/pnl-chart.test.js      #  82 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 6 bloques:
+                                #   posición viva (geometría medida contra CM.timeToX/priceToY, número igual al del
+                                #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
+                                #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
+                                #   navegador, para que el arranque sea de verdad nuevo) y móvil a 390 px
+node tests/pages-pnl.js          #   43 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+                                #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
+                                #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
+node tests/bitunix.test.js      # 132 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
+                                #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
+                                #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
+node tests/pages-bitunix.js     #   95 comprobaciones de la PIEL sobre LO PUBLICADO: se maneja solo con
+                                #   botones y deslizadores reales, y verifica libro, quick sizes, coste/
+                                #   margen, liquidación por modo, pestañas y lo que se ve en móvil
+node tests/incidencias.test.js # 14 comprobaciones de los avisos de error y diagnóstico
+node tests/single.test.js     # archivo único en navegador real sin red
+```
+
+```
+Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
+**992 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
+Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
+**1255 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(992 locales + 263 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `ca79ec6` — y el `md5` del archivo publicado (`40c0d76f…`) coincide byte
+a byte con el del build local: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
+57 del trailing + 95 de la piel Bitunix + 43 del marcaje de PnL)
+
+> `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
+> siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
+> suite que fallaba se llevaba por delante las siguientes y el informe quedaba a medias.
+> Las seis suites que comprueban **lo publicado** (`test:pages`, `test:pages-dibujos`,
+> `test:pages-promediar`, `test:pages-trailing`, `test:pages-bitunix`, `test:pages-pnl`) se quedan fuera de la
+> batería local porque dependen de la red y del despliegue: `node tools/run-all.js
+> --publicadas` las incluye (29 suites, y además se puede filtrar:
+> `node tools/run-all.js --publicadas bitunix`).
+> Cada suite imprime su propio recuento salvo `tests/single.test.js`, que es un escenario completo
+> (arranque sin red, operar, leyenda, errores JS) y termina con ✅ sin contador.
+> Las suites de navegador **regeneran** los `docs/captura-*.png` que documentan el estado
+> actual de la app: si `git status` los lista como modificados después de una batería, es
+> lo esperado (llevan el reloj de la máquina impreso), no un cambio de diseño.
+> Todas las que derivan precios del mercado lo hacen **de `App.candles` en tiempo de
+> ejecución** —nunca a mano— y esperan a que el motor tenga `lastPrice` válido: así no
+> dependen de la velocidad de la máquina (un `wait(600)` fijo fallaba bajo la carga de
+> la batería completa y hacía saltar el test, no la app).
+
+> Los tests que necesitan servidor (`boot`, `iframe`, `preview-live`, `browser`) **detectan
+> solos el puerto** donde escuche `server.js` (o aceptan `BASE_URL=http://host:puerto`).
+
+`tests/dom.smoke.js` necesita jsdom (`npm install jsdom`; si no está se omite solo).
+`tests/network.test.js` detecta si hay red o proxy y, si no la hay, se marca como
+omitido en lugar de fallar.
+
+---
+
+## 🎮 Flujo de uso
+
+1. Elige **par** y **temporalidad** → pulsa **Cargar datos** (o **Demo** si no hay red).
+2. Indica la **fecha de inicio del replay**; verás el histórico previo como contexto y
+   el resto oculto (contador «🔒 N velas ocultas»).
+3. Avanza con **PLAY**, **▶▶** o el slider de velocidad; retrocede con **◀◀**.
+4. Dibuja soportes, canales, Fibonacci… y activa indicadores en **📈**.
+5. Abre **LONG/SHORT** con tamaño, apalancamiento, SL y TP (por precio, por % o
+   arrastrando las etiquetas en el gráfico).
+6. Observa el PnL en vivo; la posición se cierra sola por SL/TP/liquidación o con **Esc**.
+7. Revisa **estadísticas**, **curva de capital** e **historial**, y **exporta** el informe.
+
+### ⌨️ Atajos de teclado
+| Tecla | Acción |
+|---|---|
+| `Espacio` | Play / Pausa |
+| `→` / `←` | Avanzar / retroceder una vela |
+| `B` / `S` | Comprar (Long) / Vender (Short) |
+| `Mayús+B` / `Mayús+S` | Colocar **orden límite** de compra / venta |
+| `T` | Alternar entre orden a **mercado** y **límite** |
+| `Esc` | Cerrar posición (y cancelar dibujo/cerrar modales) |
+| lado contrario | Con posición abierta: **invertir** (cierra y abre la nueva) |
+| `C` | Cerrar el **50 %** de la posición abierta (parcial) |
+| `E` | SL al **break-even** (solo si ya hay ganancia) |
+| `V` | **Trailing stop**: activar con el % de la tarjeta / quitar si ya está activo |
+| `R` | Reset del replay |
+| `Supr` | Borrar el dibujo seleccionado |
+| `+` / `-` | Subir / bajar velocidad |
+| `1`…`9` | Seleccionar herramienta de dibujo |
+| `A` / `P` | Herramienta **flecha** / **camino** |
+| `Enter` | Terminar el **camino** en curso |
+| `Ctrl+S` | Guardar sesión |
+
+---
+
+## 📁 Estructura
+
+```
+bar-replay-app/
+├── index.html                # Estructura de la interfaz (todo en español)
+├── bar-replay-pro-unico.html # Build de un solo archivo (generado)
+├── server.js                 # Backend opcional: estáticos + proxy de klines
+├── package.json
+├── css/responsive.css      ← reglas de tamaño del tema base
+├── css/bitunix.css         ← PIEL Bitunix: tokens medidos, topbar de 2 filas, libro,
+│                             panel de órdenes, pestañas y los escalones de altura
+│                             (se carga LA ÚLTIMA: puede reescribir al tema anterior)
+├── snapshot/velas-reales.json ← velas reales incrustadas (tools/snapshot.js)
+├── css/
+│   ├── main.css              # Variables del tema, layout, botones, tablas
+│   ├── chart.css             # Área de gráfico, toolbar de dibujo, paneles, replay
+│   ├── panels.css            # Barra lateral y panel inferior
+│   └── modals.css            # Modales (indicadores, ajustes, sesiones, export…)
+├── js/
+│   ├── utils.js              # Formateo, fechas UTC, toasts, sonidos, descargas
+│   ├── indicators.js         # SMA, EMA, RSI, MACD, Bollinger, ATR (puros)
+│   ├── dataService.js        # Binance paginado, CoinGecko, CSV, datos demo
+│   ├── storage.js            # localStorage: caché de velas, sesiones, ajustes
+│   ├── statistics.js         # Métricas de rendimiento y exportaciones
+│   ├── tradingEngine.js      # Cuenta, órdenes, SL/TP, liquidación, checkpoints
+│   ├── barReplay.js          # Motor del replay (play/pausa/velocidad/seek)
+│   ├── chart.js              # Gráfico principal, paneles y equity (Lightweight Charts)
+│   ├── pnlChart.js           # Marca la posición en el gráfico y su PnL vela a vela (banda,
+│                             #   etiqueta, panel con curva y marcas en las velas)
+│   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
+│   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
+│   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
+│   ├── uiController.js       # Cableado de la interfaz, modales y atajos
+│   └── app.js                # Inicialización y orquestación
+├── vendor/
+│   └── lightweight-charts.standalone.production.js   # v4.2.0 (Apache-2.0)
+├── tools/
+│   └── build-single.js       # Genera el archivo único autocontenido
+├── assets/
+│   ├── icons/                # favicon.svg
+│   └── sounds/               # (sonidos sintetizados con WebAudio)
+└── tests/
+    ├── logic.test.js         # Pruebas de lógica en Node (153)
+    ├── dom.smoke.js          # Prueba de humo con jsdom (51)
+    ├── network.test.js       # Carga de velas reales / paginación (10)
+    ├── browser.capture.js    # Navegador real (Chromium) + capturas (43)
+    ├── boot.test.js          # Arranque robusto sin red / sin localStorage (13)
+    ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
+    ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
+    ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
+    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (82)
+    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (43)
+    └── single.test.js        # Archivo único en navegador real sin red
+```
+
+---
+
+## 🧠 Notas técnicas
+
+- **Sin fuga de futuro**: el gráfico recibe solo las velas hasta el cursor. Los
+  indicadores se calculan sobre la serie completa porque son **causales** (el valor de
+  la vela *i* no depende de velas posteriores) — la prueba `logic.test.js` verifica
+  esta propiedad explícitamente.
+- **Rendimiento**: al avanzar una vela se usa `series.update()` (O(1)); al retroceder o
+  saltar se reconstruye con `setData()`. El avance rápido agrupa varias velas por
+  fotograma y los eventos de UI se silencian en lote (`TE.beginBatch/endBatch`) y se
+  refrescan una sola vez. La caché limita a 6.000 velas por par/temporalidad.
+- **Zona horaria**: todas las marcas de tiempo son **segundos UNIX en UTC**; los
+  `datetime-local` se interpretan como UTC explícitamente.
+- **Cambiar de temporalidad o de par**: el replay **conserva el instante exacto** (ancla
+  temporal `App.focusTs`) y la vela elegida es siempre la que *contiene* ese instante
+  (`time <= fecha`), nunca la siguiente: así pasar de 1h a 1d/1w no adelanta velas futuras.
+  Encadenar 15m → 4h → 15m vuelve al mismo minuto. Si estaba reproduciendo, **sigue**
+  después de cargar. Con posición abierta se cierra a mercado (motivo «cambio de serie»)
+  y los límites pendientes se cancelan, avisando en pantalla.
+- **Promediar entradas, TP escalonado y trailing (como Bitunix)**:
+  - **Add position / promediar**: con una posición abierta, `COMPRAR`/`VENDER` (o
+    `➕ Añadir` en la tarjeta de posición) **suma tamaño** al precio actual. La entrada pasa a
+    ser el **precio medio ponderado** (`TE.addToPosition`), el notional y el margen se suman y
+    la **liquidación se recalcula sobre el total**. Cada tandada queda en `position.parts`
+    (se dibuja su precio en el gráfico) y el número de promediados en `position.additions`.
+    Los niveles de **TP/SL se conservan** —es el comportamiento *Position TP/SL*, donde la
+    cantidad ejecutada se ajusta sola al cambiar el tamaño—; la casilla **re-aim** los
+    recoloca a la misma distancia porcentual del nuevo precio medio. Con el promediado
+    **desactivado** (Ajustes → `➕ Promediar entradas`) se vuelve al aviso clásico.
+  - **Cierre parcial**: `➗ 25 / 50 / 75 %` o la tecla `C` realizan el PnL de una fracción
+    (`TE.reducePosition`) y dejan el resto vivo con su SL/TP. Cada parcial es una fila en el
+    historial con `parcial: true` y motivo `cierre parcial`, y **descuenta su parte** de la
+    comisión de apertura, de modo que `balance = capital + Σ PnL` sigue cuadrando al cerrar.
+  - **Break-even**: `TE.breakEvenPrice()` resuelve el PnL neto cero
+    (`x = (openFee + media·q·dir) / (q·(dir − fee))`), así que **no** coincide con el precio
+    medio: incluye comisiones. `🛡 BE` o `E` llevan el SL ahí (`TE.setSL(x, {force:true})`);
+    si la posición está en pérdida se **niega** y lo explica, porque un SL por encima del
+    precio en un long sería un cierre inmediato.
+  - **Partial TP/SL**: `🎯 TP escalonado` acepta varios precios, cada uno con el % de la
+    posición que cierra (`TE.addTpLevel`). En `TE.onCandle` se evalúan **antes** del TP de la
+    posición y después del SL: cada nivel tocado cierra su fracción y se retira de la lista;
+    lo que sigue abierto conserva su SL.
+  - **Trailing stop** (`🌀` en la tarjeta de posición, tecla `V`): el stop no tiene un precio
+    fijo, sino que persigue al **mejor precio alcanzado** (el *pico*) separado siempre el mismo
+    % —el *Callback ratio* del exchange—. `TE.setTrailing({pct, activation, frac})`:
+    - `pct` es el retroceso que dispara; `activation` (opcional, *Activation price*) es el
+      precio a partir del cual empieza a seguir, para que el primer ruido en contra no cierre
+      la posición; `frac` permite que cierre solo una parte (100 % por defecto, como el
+      *Partial TP/SL* pero en el lado del stop).
+    - Con el pico ya definido, el nivel es `pico·(1 − pct)` en longs y `pico·(1 + pct)` en
+      shorts; **el pico solo sube** (baja en shorts) y nunca se afloja.
+    - Se ejecuta **como un stop**: si la vela abre con el nivel cruzado (hueco) se rellena a la
+      apertura, con deslizamiento (`TE._fillPrice`), igual que el SL.
+    - **Criterio con velas OHLC**: el pico se actualiza al *cerrar* la vela, después de evaluar
+      el disparo. Una vela no puede disparar un nivel que ella misma acaba de crear, porque
+      dentro de ella no se sabe si el `high` pasó antes o después del `low`. Es el mismo sesgo
+      pesimista que se usa cuando SL y TP caen en la misma vela, y está fijado por test
+      (`B) el pico sube al cerrar la vela, y la vela no se dispara a sí misma`).
+    - Si el **SL fijo y el trailing** se tocan en la misma vela ejecuta **el más cercano** al
+      precio (en un long, el nivel más alto), que es lo que haría el bróker.
+    - Al promediar, el trailing **se queda donde está**: defiende el pico de la *posición*, no
+      el precio medio nuevo (así lo hacen los exchanges), y el log lo dice. Sobrevive a
+      checkpoints, a `serialize()` y a guardar/cargar sesión.
+    - En el gráfico se ve como línea `TRAIL` morada que se mueve sola; en la tarjeta, como
+      `pico → nivel (distancia %)`, y «arma en …» mientras espera la activación.
+  - **Órdenes límite del mismo lado** con posición abierta **promedian** al tocarse (los del
+    lado contrario siguen en espera hasta cerrar, como antes).
+- **Arrastre sin ratón perdido**: los handles de SL/TP y de límite se consuelidan al soltar
+  (`DT._onUp`), y también si se **pierde el foco** de la ventana (`blur`/`pointercancel`): antes,
+  soltar fuera del navegador dejaba la pestaña pegada al cursor. Durante el arrastre los cambios
+  se aplican **en silencio** (un log por cada `mousemove` llenaba el registro) y solo el gesto
+  terminado deja línea en el log y sonido.
+- **Órdenes límite arrastrables**: la línea ámbar de cada orden pendiente tiene una pestaña
+  `⏳▲ ⇕` en el borde derecho y se puede **arrastrar** para reubicar el nivel, con la misma
+  mecánica que los handles de SL/TP (`DT.setPendingHandles` → `App.moveLimitOrder`). Con el
+  puntero sobre la línea el cursor cambia a `grab`; el campo de precio del panel y la lista
+  de pendientes siguen el arrastre en vivo. Si al soltar el nivel queda **cruzado** con el
+  precio actual, la orden se ejecuta a mercado (`TE.executeNow`). También con el dedo
+  (`touchstart/move/end`, capturado solo cuando el gesto empieza sobre un handle).
+- **Una posición a la vez**: con posición abierta, las **órdenes límite quedan en espera** y
+  se ejecutan al cerrarla (queda anotado en el log y se avisa con un toast).
+- **Invertir**: con una posición abierta, pedir el **lado contrario** (botón o tecla)
+  cierra la actual y abre la nueva; el historial anota el motivo «inversión». Pedir el
+  mismo lado avisa y no toca la posición.
+- **La entrada, siempre visible**: mientras la posición vive, el historial muestra una
+  fila «ABIERTA» con PnL flotante, %, R y barras actualizadas **en cada vela**
+  (`UI.updateOpenTradeRow`); el contador de la pestaña cuenta solo las cerradas.
+- **Modelo de ejecución intrabar**: con OHLC no se conoce el orden de los precios dentro
+  de la vela, así que la ambigüedad SL/TP se resuelve de forma **pesimista** por defecto
+  (configurable en Ajustes) y los huecos se rellenan al precio de apertura.
+- **Comisiones**: se cobran al abrir y al cerrar; el PnL del trade las incluye ambas,
+  de modo que `balance = capital inicial + Σ PnL` siempre cuadra.
+- **Reinicio por checkpoints**: cada vela avanzada guarda un estado compacto de la
+  cuenta (balance, longitud del historial, copia de la posición abierta y longitud de la
+  curva de capital), así retroceder es instantáneo y determinista.
+- **Privacidad**: todo se ejecuta en tu navegador; no hay telemetría ni servidores
+  propios. La caché y las sesiones viven en `localStorage`.
+- **Arranque a prueba de bloqueos**: el orden de hosts prueba PRIMERO el proxy del
+  mismo origen (respuesta en ~1,4 s con `server.js`), cada petición tiene un timeout
+  de 6 s y todo el arranque un presupuesto de tiempo. Si la red no responde en 9 s,
+  la app carga datos DEMO y sigue siendo totalmente usable (probado en
+  `tests/boot.test.js` con un `fetch` que nunca contesta y `localStorage` bloqueado).
+  Si los datos reales llegan más tarde y aún no has operado, se avisa con un toast.
+- **Velas REALES dentro del archivo**: `bar-replay-pro-unico.html` lleva incrustadas
+  4.000 velas reales de Binance (BTC/USDT 1h + 15m, ETH/USDT 1h) en
+  `snapshot/velas-reales.json`. En un entorno sin internet la app **no** enseña
+  datos inventados: usa esas velas reales (leyenda `· Binance (guardada)`).
+  Para actualizarlas: `node server.js` + `node tools/snapshot.js` + `node tools/build-single.js`.
+  Los datos sintéticos DEMO quedan solo como último recurso (pares/temporalidades
+  sin instantánea), siempre señalados en ámbar.
+- **A prueba de visores que "sanean" el HTML**: algunos visores (p. ej. la vista
+  previa en móvil) eliminan las etiquetas `<script>` pero dejan su CONTENIDO, con lo
+  que el código aparecía como texto suelto por la pantalla. Ahora el `<script>` va
+  dentro de un contenedor oculto (`#brpJS`): si el visor borra las etiquetas, el
+  código queda invisible; si el navegador es normal, se ejecuta igual. Además, el
+  aviso de emergencia explica cómo abrir la app en un navegador de verdad.
+- **Nunca se queda muda**: si el entorno bloquea JavaScript, aparece un cartel de
+  emergencia que lo explica (`#brpNoJS`); si algo falla al arrancar, se muestra un
+  informe rojo con el error exacto y 13 datos de diagnóstico (módulos cargados,
+  almacenamiento, canvas, si está dentro de un iframe…) y un botón **Copiar informe**.
+  El arranque es resistente a visores que inyectan el HTML ya cargado
+  (`document.readyState !== 'loading'`).
+- **Layout adaptable a CUALQUIER entorno**: el cuerpo es una columna flexible, así que
+  el gráfico se ajusta al alto/ancho disponible. Verificado a 1680×950, 1280×700,
+  900×700 y 480×900 con **0 px de desbordamiento** en todos los casos, manteniendo el
+  gráfico ≥200 px de alto y los controles de replay/compra siempre accesibles
+  (`captura-06-ventana-pequena.png`, `captura-10-movil.png`).
+- **Un `grid` puede estar mintiendo por su contenido mínimo** (caza de esta sesión,
+  `css/chart.css`): al estrechar la ventana, `#chartWrap` y `#mainChart` **no volvían
+  a encogerse** —se quedaban en 1102 px dentro de un viewport de 390 px, recortados—
+  porque la columna implícita de `#chartArea` la fijaba el *min-content* de
+  `#drawToolbar` (un flex `nowrap` de 1102 px). Tres líneas lo arreglan y son la
+  lección: `#chartArea { grid-template-columns: minmax(0,1fr) }` (así la pista puede
+  bajar de su mínimo), `#chartWrap { min-width:0; overflow:hidden }` y
+  `#drawToolbar { min-width:0; overflow-x:auto }` (la barra de dibujo, si no cabe,
+  se desplaza en vez de estirar el gráfico). Medido tras el arreglo: pista de 389 px
+  y `#chartWrap` de 389 px con 0 px de scroll horizontal. Es un `min-width:auto`
+  heredado del flex/grid: **un `1fr` sin `minmax(0,…)` no es un «ocupa lo que
+  sobre», es un «ocupa lo que sobre, pero nunca menos que tu contenido más ancho»**.
+  `tests/pnl-chart.test.js` (bloque F) y `tests/responsive.test.js` lo vigilan.
+- **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
+  `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
+  de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).
+
+## ⚠️ Descargo de responsabilidad
+
+Herramienta **educativa**. La simulación simplifica la realidad (liquidaciones, slippage,
+profundidad de mercado, funding real) y los datos pueden contener errores de la fuente.
+Nada de lo que muestra constituye asesoramiento financiero. Practica, aprende y arriesga
+solo lo que puedas permitirte.
+
+## 📜 Licencia
+
+MIT. Incluye **TradingView Lightweight Charts v4.2.0** (licencia Apache-2.0, © TradingView Inc.)
+y datos públicos de Binance/CoinGecko.

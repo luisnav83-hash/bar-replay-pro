@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Replay Pro — Backtesting de Criptomonedas</title>
+<meta name="description" content="Bar Replay profesional para backtesting de Bitcoin y criptomonedas: replay vela a vela, indicadores técnicos, herramientas de dibujo y trading simulado.">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+
+<!-- ============ HOJAS DE ESTILO ============ -->
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/chart.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/modals.css">
+<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/bitunix.css">
+
+<!-- ============ LIBRERÍA DE GRÁFICOS (TradingView Lightweight Charts v4) ============ -->
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+
+<!-- =====================================================================
+     AVISO DE EMERGENCIA (brpNoJS)
+     Este bloque SOLO se ve si el JavaScript no llega a ejecutarse (visor que
+     bloquea scripts, CSP restrictiva, etc.). El primer módulo que arranca lo
+     elimina. Si lo ves, el problema NO es la aplicación: el entorno está
+     bloqueando JavaScript.
+     ===================================================================== -->
+<div id="brpNoJS" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;overflow:auto;background:#1a1a2e;padding:24px">
+  <div style="max-width:600px;background:#2a1020;border:2px solid #ff1744;border-radius:12px;padding:20px 22px;color:#fff;font:14px/1.65 system-ui,Segoe UI,Roboto,sans-serif">
+    <div style="font-size:17px;font-weight:700;color:#ff8a9c;margin-bottom:10px">⚠ Esta vista previa no ejecuta JavaScript</div>
+    El visor donde se está mostrando el archivo no ejecuta su código, así que la app no puede dibujar el gráfico.
+    <b>La aplicación funciona perfectamente</b>: solo hay que abrirla en un navegador.
+    <div style="margin-top:12px;color:#ffd0d8;font-weight:600">Cómo usarla</div>
+    <ol style="margin:6px 0 0 20px;padding:0;color:#e6e9f5">
+      <li><b>Descarga el archivo</b> (botón de descarga de esta vista previa) y ábrelo con Chrome, Safari o Firefox.
+          Funciona sin servidor y <b>sin internet</b>: lleva dentro 4.000 velas reales de Binance.</li>
+      <li>Si tienes servidor, ábrela desde <code style="color:#7defff">http://localhost:8080</code>.</li>
+      <li>Si es una vista previa embebida, pruébala en una pestaña completa del navegador.</li>
+    </ol>
+    <div id="brpNoJSInfo" style="margin-top:12px;color:#8b93b0;font-size:11.5px"></div>
+  </div>
+</div>
+
+<div hidden style="display:none"><script>
+  /* Este script diminuto se ejecuta siempre (si el entorno permite scripts):
+     sirve para distinguir «no se ejecuta nada» de «arranca la app y falla».
+     Va dentro de un contenedor OCULTO: si el visor elimina la etiqueta <script>
+     pero deja su contenido, ese código no se verá como texto por la página. */
+  window.__BRP_SEEN__ = true;
+  setTimeout(function () {
+    var n = document.getElementById('brpNoJSInfo');
+    if (n) n.textContent = 'Comprobación: los scripts SÍ se ejecutan (si ves este cartel, el fallo está al iniciar la app).';
+  }, 1500);
+</script></div>
+
+<!-- =====================================================================
+     BARRA SUPERIOR: par, temporalidad, fecha, datos, ajustes
+     ===================================================================== -->
+<header id="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" class="brand-logo" aria-hidden="true">
+      <rect x="3" y="10" width="3.6" height="9" rx="1" fill="#ff1744"/>
+      <rect x="5.1" y="6" width="1.6" height="16" rx="0.8" fill="#ff1744" opacity=".55"/>
+      <rect x="10.2" y="4" width="3.6" height="11" rx="1" fill="#00c853"/>
+      <rect x="12.3" y="1" width="1.6" height="17" rx="0.8" fill="#00c853" opacity=".55"/>
+      <rect x="17.4" y="8" width="3.6" height="8" rx="1" fill="#ff1744"/>
+      <rect x="19.5" y="5" width="1.6" height="14" rx="0.8" fill="#ff1744" opacity=".55"/>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-name">BAR REPLAY <b>PRO</b></span>
+      <span class="brand-sub">Backtesting vela a vela</span>
+    </div>
+  </div>
+
+  <div class="topbar-group">
+    <label class="field" title="Par de trading (se descargan velas OHLCV de Binance)">
+      <span class="field-label">Par</span>
+      <!-- El <select> sigue siendo la fuente de verdad (lo lee el resto de la app),
+           pero se oculta: el usuario elige con el buscador de símbolos. -->
+      <select id="pairSelect" class="visually-hidden" aria-hidden="true" tabindex="-1">
+        <option value="BTCUSDT" selected>BTC/USDT</option>
+        <option value="ETHUSDT">ETH/USDT</option>
+        <option value="SOLUSDT">SOL/USDT</option>
+        <option value="BNBUSDT">BNB/USDT</option>
+        <option value="XRPUSDT">XRP/USDT</option>
+        <option value="ADAUSDT">ADA/USDT</option>
+        <option value="DOGEUSDT">DOGE/USDT</option>
+        <option value="AVAXUSDT">AVAX/USDT</option>
+        <option value="LINKUSDT">LINK/USDT</option>
+        <option value="MATICUSDT">MATIC/USDT</option>
+      </select>
+      <button class="symbol-btn" id="btnSymbols" title="Buscar símbolo (Ctrl+K o /)">
+        <span class="sb-ico" id="sbIco">₿</span>
+        <span class="sb-text">
+          <span class="sb-pair" id="sbPair">BTC/USDT</span>
+          <span class="sb-quote" id="sbQuote">USDT · Binance</span>
+        </span>
+        <span class="sb-caret">▾</span>
+      </button>
+    </label>
+
+    <label class="field" title="Temporalidad de cada vela">
+      <span class="field-label">Temporalidad</span>
+      <div class="tf-quick" id="tfQuick" role="group" aria-label="Temporalidad rápida">
+        <button class="tf-btn" data-tf="1m" title="1 minuto">1m</button>
+        <button class="tf-btn" data-tf="5m" title="5 minutos">5m</button>
+        <button class="tf-btn" data-tf="15m" title="15 minutos">15m</button>
+        <button class="tf-btn active" data-tf="1h" title="1 hora">1h</button>
+        <button class="tf-btn" data-tf="4h" title="4 horas">4h</button>
+        <button class="tf-btn" data-tf="1d" title="1 día">1d</button>
+        <button class="tf-btn" data-tf="1w" title="1 semana">1w</button>
+      </div>
+      <select id="tfSelect" class="visually-hidden" aria-hidden="true" tabindex="-1">
+        <option value="1m">1 min</option>
+        <option value="5m">5 min</option>
+        <option value="15m">15 min</option>
+        <option value="1h" selected>1 hora</option>
+        <option value="4h">4 horas</option>
+        <option value="1d">1 día</option>
+        <option value="1w">1 semana</option>
+      </select>
+    </label>
+
+    <label class="field" title="Fecha y hora en la que empieza el replay (las velas anteriores sirven de contexto)">
+      <span class="field-label">Inicio replay</span>
+      <input type="datetime-local" id="startDate">
+    </label>
+
+    <button class="btn btn-primary" id="btnLoad" title="Descargar velas históricas de Binance (paginado de 1000 en 1000)">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 19h16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Cargar datos
+    </button>
+
+    <button class="btn" id="btnQuick" title="Modo práctica rápida: elige una fecha aleatoria y empieza a tradear ya">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2Z" fill="currentColor"/></svg>
+      Práctica rápida
+    </button>
+
+    <button class="btn" id="btnImport" title="Importar velas OHLCV desde un archivo CSV">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 16V4m0 0 4 4m-4-4-4 4M4 20h16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      CSV
+    </button>
+    <input type="file" id="fileCsv" accept=".csv,.txt" hidden>
+
+    <button class="btn" id="btnDemo" title="Generar datos sintéticos verificables para practicar sin conexión">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5v7l5 3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      Demo
+    </button>
+  </div>
+
+  <div class="topbar-group topbar-right">
+    <button class="btn btn-icon" id="btnIndicators" title="Indicadores técnicos: SMA, EMA, RSI, MACD, Bollinger, ATR">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M3 17l4-7 4 4 4-9 6 8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn btn-icon" id="btnSessions" title="Guardar / cargar sesión de backtest">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M5 3h11l3 3v15H5V3Zm3 0v6h8V3M8 14h8v7H8v-7Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn btn-icon" id="btnExport" title="Exportar resultados (CSV / JSON)">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M9 3h6l4 4v14H5V3h4Zm-1 9h8M12 8v8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn btn-icon" id="btnShot" title="Captura de pantalla del gráfico (PNG)">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M4 8h3l1.5-2h7L17 8h3v11H4V8Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+    </button>
+    <button class="btn btn-icon" id="btnSettings" title="Ajustes: capital, comisiones, apalancamiento, sonido">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <button class="btn btn-icon" id="btnHelp" title="Ayuda y atajos de teclado">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6v.3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="12" cy="17" r="1.15" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <!-- =====================================================================
+       FILA DE ESTADÍSTICAS (Bitunix): último precio, 24 h, mark/index,
+       financiación, interés abierto, volumen y reparto long/short.
+       Cada valor lleva su procedencia en el title (dato real o del replay).
+       ===================================================================== -->
+  <div class="bf-stats" id="bfStats">
+    <div class="bf-stat bf-last"><span class="bf-k">Último</span><b class="bf-v" id="bfLast">—</b></div>
+    <div class="bf-stat"><span class="bf-k">24 h</span><b class="bf-v" id="bfChg24">—</b><span class="bf-sub" id="bfHighLow">máx — · mín —</span></div>
+    <div class="bf-stat"><span class="bf-k">Mark</span><b class="bf-v" id="bfMark">—</b><span class="bf-sub" id="bfIndex">índice —</span></div>
+    <div class="bf-stat"><span class="bf-k">Funding</span><b class="bf-v" id="bfFunding">—</b><span class="bf-sub" id="bfFundingNext">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Interés abierto</span><b class="bf-v" id="bfOi">—</b><span class="bf-sub" id="bfOiVal">—</span></div>
+    <div class="bf-stat"><span class="bf-k">Vol. 24 h</span><b class="bf-v" id="bfVol">—</b><span class="bf-sub" id="bfVolQuote">—</span></div>
+    <div class="bf-stat bf-frac"><span class="bf-k">Long / Short</span><span class="bf-bar"><i id="bfLsLong"></i></span><span class="bf-sub" id="bfLs">—</span></div>
+    <div class="bf-stat bf-acct"><span class="bf-k">Disponible</span><b class="bf-v" id="bfAvail">—</b><span class="bf-sub" id="bfEquity">—</span></div>
+    <div class="bf-stat bf-src" id="bfSource" title="De dónde sale cada número">—</div>
+  </div>
+</header>
+<!-- =====================================================================
+     ÁREA PRINCIPAL
+     ===================================================================== -->
+<main id="workspace">
+
+  <!-- ---------- COLUMNA DEL GRÁFICO ---------- -->
+  <section id="chartArea">
+
+    <!-- Barra de herramientas de dibujo -->
+    <div id="drawToolbar">
+      <div class="tool-cluster" role="group" aria-label="Herramientas de dibujo">
+        <button class="tool active" data-tool="cursor" title="Cursor: seleccionar y mover dibujos">↖</button>
+        <button class="tool" data-tool="trend" title="Línea de tendencia">╱</button>
+        <button class="tool" data-tool="ray" title="Línea de tendencia extendida (rayo)">➚</button>
+        <button class="tool" data-tool="hline" title="Línea horizontal de soporte / resistencia">─</button>
+        <button class="tool" data-tool="vline" title="Línea vertical (marca temporal)">│</button>
+        <button class="tool" data-tool="rect" title="Rectángulo / zona de interés">▭</button>
+        <button class="tool" data-tool="channel" title="Canal paralelo (3 clics: base + ancho)">≣</button>
+        <button class="tool" data-tool="fib" title="Retroceso de Fibonacci (2 clics)">𝔉</button>
+        <button class="tool" data-tool="measure" title="Medición: distancia en precio y velas entre dos puntos" title2="">↔</button>
+        <button class="tool" data-tool="arrow" title="Flecha: marca un movimiento o una proyección (2 clics) · atajo A">➤</button>
+        <button class="tool" data-tool="path" title="Camino: polilínea libre, une varios puntos (clics y doble clic o Enter para cerrar) · atajo P">✎</button>
+      </div>
+
+      <div class="tool-cluster">
+        <label class="color-pick" title="Color del dibujo"><input type="color" id="drawColor" value="#00e5ff"></label>
+        <select id="drawWidth" class="mini-select" title="Grosor de línea">
+          <option value="1">1 px</option>
+          <option value="2" selected>2 px</option>
+          <option value="3">3 px</option>
+          <option value="4">4 px</option>
+        </select>
+        <select id="drawStyle" class="mini-select" title="Estilo de línea">
+          <option value="solid" selected>———</option>
+          <option value="dashed">- - -</option>
+          <option value="dotted">· · ·</option>
+        </select>
+      </div>
+
+      <div class="tool-cluster">
+        <button class="tool" id="btnDeleteDrawing" title="Borrar el dibujo seleccionado (o Supr)">⌫</button>
+        <button class="tool" id="btnClearDrawings" title="Borrar todos los dibujos">✕</button>
+        <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">◎</button>
+      </div>
+
+      <div class="tool-cluster">
+        <!-- Marcar la posición en el gráfico y pintar su PnL (js/pnlChart.js):
+             marcadores en la vela de entrada, banda entre entrada y precio actual
+             y una curva de PnL en su propio panel. El estado se recuerda. -->
+        <button class="tool active" id="btnPnl" aria-pressed="true"
+                title="Marcar la posición en el gráfico y ver su PnL (banda, etiqueta y curva)">📈 PnL</button>
+      </div>
+
+      <div class="tool-cluster tool-cluster-right">
+        <button class="tool" id="btnAutoScale" title="Escala de precios: automática / fijar rango manual">📐A</button>
+        <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
+        <label class="switch" title="Bloquear desplazamiento del chart al arrastrar en él">
+          <input type="checkbox" id="chkLockScroll">
+          <span>⊘ scroll</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Gráfico principal + canvas de dibujos -->
+    <div id="chartWrap">
+      <div id="mainChart"></div>
+      <canvas id="overlayCanvas"></canvas>
+
+      <!-- Leyenda OHLC flotante -->
+      <div id="ohlcLegend">
+        <span class="lg-pair" id="lgPair">—</span>
+        <span class="lg-tf" id="lgTf">—</span>
+        <span class="lg-item">O <b id="lgO">—</b></span>
+        <span class="lg-item">H <b id="lgH">—</b></span>
+        <span class="lg-item">L <b id="lgL">—</b></span>
+        <span class="lg-item">C <b id="lgC">—</b></span>
+        <span class="lg-item" id="lgChg">—</span>
+        <span class="lg-item lg-vol">Vol <b id="lgV">—</b></span>
+        <span class="lg-item lg-src" id="lgSource"></span>
+        <span class="lg-item" id="lgInd"></span>
+        <!-- Aviso de velas ocultas: DENTRO de la leyenda para que ocupe su
+             propia línea y no pise nunca el OHLC (antes era absolute y en móvil
+             caía encima de la primera fila). -->
+        <span id="hiddenNotice" title="El replay oculta las velas posteriores al punto actual">
+          <span class="lock">🔒</span><span id="hiddenCount">0 velas ocultas</span>
+        </span>
+      </div>
+
+      <!-- Crédito de la librería de gráficos -->
+      <div id="tvCredit" title="Gráficos renderizados con TradingView Lightweight Charts (Apache-2.0)">Lightweight Charts™ · TradingView</div>
+
+      <!-- Estado de carga -->
+      <div id="loader" class="hidden"><div class="spinner"></div><span id="loaderText">Cargando…</span></div>
+
+      <!-- HUD de medición -->
+      <div id="measureHud" class="hidden"></div>
+
+      <!-- Capa de PnL (js/pnlChart.js). No captura el puntero: se puede operar,
+             dibujar y arrastrar líneas igual que sin ella. -->
+      <div id="pnlLayer" class="hidden" aria-hidden="true">
+        <div id="pnlEntryTick" class="hidden" title="vela de entrada"></div>
+        <div id="pnlBand" class="hidden"></div>
+        <div id="pnlBadge" class="hidden">
+          <span id="pnlBadgeQty">—</span>
+          <b id="pnlBadgeVal">—</b><span id="pnlBadgePct">—</span>
+          <span id="pnlBadgeDelta">—</span>
+          <span id="pnlBadgeReal" class="hidden"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paneles de indicadores inferiores (RSI / MACD / ATR) -->
+    <div id="paneArea">
+      <!-- Panel de PnL (js/pnlChart.js): la curva del PnL no realizado de la
+           posición, en dólares, con su máximo y su mínimo marcados. -->
+      <div class="indPane hidden" id="panePnl" data-pane="pnl">
+        <div class="pane-head"><span class="pane-title">PnL <b id="pnlPaneNote">sin posición</b></span><span class="pane-val" id="pnlPaneVal">—</span><button class="pane-close" id="pnlPaneClose" title="Ocultar el panel de PnL">✕</button></div>
+        <div class="pane-chart" id="chartPnl"></div>
+      </div>
+      <div class="indPane hidden" id="paneRsi" data-pane="rsi">
+        <div class="pane-head"><span class="pane-title">RSI <b id="rsiParams">14</b></span><span class="pane-val" id="rsiValue">—</span><button class="pane-close" data-close-pane="rsi" title="Ocultar panel">✕</button></div>
+        <div class="pane-chart" id="chartRsi"></div>
+      </div>
+      <div class="indPane hidden" id="paneMacd" data-pane="macd">
+        <div class="pane-head"><span class="pane-title">MACD <b id="macdParams">12 26 9</b></span><span class="pane-val" id="macdValue">—</span><button class="pane-close" data-close-pane="macd" title="Ocultar panel">✕</button></div>
+        <div class="pane-chart" id="chartMacd"></div>
+      </div>
+      <div class="indPane hidden" id="paneAtr" data-pane="atr">
+        <div class="pane-head"><span class="pane-title">ATR <b id="atrParams">14</b></span><span class="pane-val" id="atrValue">—</span><button class="pane-close" data-close-pane="atr" title="Ocultar panel">✕</button></div>
+        <div class="pane-chart" id="chartAtr"></div>
+      </div>
+    </div>
+
+    <!-- Controles de Bar Replay -->
+    <div id="replayBar">
+      <div class="rb-buttons">
+        <button class="rb-btn" id="btnReset" title="Reset: volver al inicio del replay (R)">⏮</button>
+        <button class="rb-btn" id="btnStepBack" title="Retroceder una vela (←)">◀◀</button>
+        <button class="rb-btn rb-play" id="btnPlay" title="Play / Pause (Espacio)">▶</button>
+        <button class="rb-btn" id="btnStepFwd" title="Avanzar una vela (→)">▶▶</button>
+        <button class="rb-btn" id="btnJumpEnd" title="Ir al final del histórico cargado (salta al último punto)">⏭</button>
+      </div>
+
+      <div class="rb-speed" role="group" aria-label="Velocidad del replay">
+        <button class="speed-btn" data-speed="0.5">0.5x</button>
+        <button class="speed-btn active" data-speed="1">1x</button>
+        <button class="speed-btn" data-speed="2">2x</button>
+        <button class="speed-btn" data-speed="5">5x</button>
+        <button class="speed-btn" data-speed="10">10x</button>
+        <button class="speed-btn" data-speed="50">50x</button>
+        <button class="speed-btn speed-max" data-speed="max" title="Velocidad máxima: avanza lo más rápido posible">MAX</button>
+      </div>
+
+      <div class="rb-progress">
+        <input type="range" id="progressRange" min="0" max="100" value="0" step="1" title="Posición del replay: arrastra para saltar">
+        <div class="rb-info">
+          <span id="pbTime">—</span>
+          <span class="rb-sep">·</span>
+          <span id="pbIndex">vela 0 / 0</span>
+          <span class="rb-sep">·</span>
+          <span id="pbPct">0%</span>
+          <span class="rb-sep">·</span>
+          <span id="pbSpeed">1x</span>
+          <span id="pbStatus" class="rb-status paused">PAUSA</span>
+        </div>
+      </div>
+
+      <div class="rb-clock" title="Vela actual / hora de cierre (UTC)">
+        <span class="rb-clock-label">VELA ACTUAL</span>
+        <span id="rbClock" class="rb-clock-val">—</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- BARRA LATERAL ---------- -->
+  <aside id="sidebar">
+    <!-- =============================================================
+         LIBRO DE ÓRDENES (esquilo Bitunix)
+         Ventas en rojo de mayor a menor, precio último en el centro con su
+         flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
+         salen del espejo público de Binance cuando hay red y, si no, se
+         derivan de las velas del replay (js/orderBook.js lo etiqueta).
+         ============================================================= -->
+    <div class="card bf-book" id="bookCard">
+      <div class="card-head">
+        <span class="card-title">Libro de órdenes</span>
+        <span class="tag tag-muted" id="bookSrc">—</span>
+        <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
+      </div>
+      <div class="card-body">
+        <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+        <div class="bf-asks" id="bookAsks"></div>
+        <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
+        <div class="bf-bids" id="bookBids"></div>
+        <div class="bf-book-frac">
+          <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
+          <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
+         actuales de cada indicador, que se refrescan en cada vela del replay.
+         El botón 👁 muestra u oculta la serie; clic en la fila configura. -->
+
+    <!-- CUENTA -->
+
+    <!-- NUEVA ORDEN -->
+    <div class="card bf-order" id="orderCard">
+      <div class="card-head"><span class="card-title">Nueva orden</span>
+        <span class="tag tag-muted" id="tagPrice">—</span>
+      </div>
+      <div class="card-body">
+        <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
+             apalancamiento y unidad. El modo cambia el cálculo de liquidación
+             (js/tradingEngine.js: `marginMode`). -->
+        <div class="bf-margin-row">
+          <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
+            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzado</button>
+            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislado</button>
+          </div>
+          <div class="bf-lev" title="Apalancamiento actual">
+            <b id="bfLevVal">1x</b>
+            <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
+          </div>
+        </div>
+        <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
+          <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
+          <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+        </div>
+
+        <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
+        <div id="limitRow" style="display:none">
+          <label class="field full">
+            <span class="field-label">Precio límite</span>
+            <span class="input-row">
+              <input type="number" id="limitInput" step="any" placeholder="ej. 64000">
+              <span class="suffix">USD</span>
+            </span>
+          </label>
+          <div class="quick-row" id="quickLimit">
+            <button class="chip" data-limpct="-2">−2%</button>
+            <button class="chip" data-limpct="-1">−1%</button>
+            <button class="chip" data-limpct="-0.5">−0,5%</button>
+            <button class="chip" data-limpct="actual">= precio</button>
+            <button class="chip" data-limpct="0.5">+0,5%</button>
+            <button class="chip" data-limpct="1">+1%</button>
+            <button class="chip" data-limpct="2">+2%</button>
+          </div>
+          <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
+        </div>
+
+        <div class="seg" id="segSize">
+          <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
+          <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
+          <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
+        </div>
+
+        <label class="field full">
+          <span class="field-label" id="sizeLabel">Tamaño (% del equity)</span>
+          <span class="input-row">
+            <input type="number" id="sizeInput" value="100" min="0.1" step="1">
+            <span class="suffix" id="sizeSuffix">%</span>
+          </span>
+        </label>
+
+        <div class="bf-slide-quick" id="quickSize" role="group" aria-label="Fracción del disponible">
+          <button class="q0" data-pct="0">0</button><button class="q1" data-pct="25">25</button><button class="q2" data-pct="50">50</button><button class="q3" data-pct="75">75</button><button class="q4 active" data-pct="100">100</button>
+        </div>
+
+        <div class="grid-2 bf-fee-row">
+          <!-- Control HEREDADO del tema anterior: sigue existiendo porque
+               `UI.syncLeverage` y varias pruebas lo usan como fuente de verdad
+               del apalancamiento, pero no se pinta (lo visible es el deslizador
+               de arriba). La etiqueta también se oculta: decía «Comisión
+               taker (%)» y no correspondía a ningún campo. -->
+          <label class="field visually-hidden" aria-hidden="true">
+            <span class="field-label">Apalancamiento (control heredado)</span>
+            <select id="leverageSelect" tabindex="-1">
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+              <option value="5">5x</option>
+              <option value="10">10x</option>
+              <option value="25">25x</option>
+              <option value="50">50x</option>
+              <option value="75">75x</option>
+              <option value="100">100x</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Comisión por operación (%)</span>
+            <input type="number" id="feeInput" value="0.1" min="0" max="1" step="0.01">
+          </label>
+        </div>
+
+        <div class="grid-2">
+          <label class="field">
+            <span class="field-label" id="lbSl">Stop Loss (precio)</span>
+            <input type="number" id="slInput" step="any" placeholder="opcional">
+          </label>
+          <label class="field">
+            <span class="field-label" id="lbTp">Take Profit (precio)</span>
+            <input type="number" id="tpInput" step="any" placeholder="opcional">
+          </label>
+        </div>
+
+        <div class="quick-row" id="quickSlTp">
+          <button class="chip" data-slpct="0.5">SL 0.5%</button>
+          <button class="chip" data-slpct="1">SL 1%</button>
+          <button class="chip" data-slpct="2">SL 2%</button>
+          <button class="chip" data-tppct="1">TP 1%</button>
+          <button class="chip" data-tppct="2">TP 2%</button>
+          <button class="chip" data-tppct="4">TP 4%</button>
+        </div>
+
+        <div class="order-actions">
+          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Long</button>
+          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Short</button>
+        </div>
+        <div class="bf-cost" id="bfCost">
+          <span class="c">Coste <b id="bfCostVal">—</b></span>
+          <span class="m">Margen <b id="bfMarginVal">—</b></span>
+          <button class="bf-flat" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">Cerrar todo</button>
+        </div>
+
+        <div class="hint" id="orderHint">Sin posición abierta.</div>
+      </div>
+    </div>
+
+    <!-- ÓRDENES LÍMITE PENDIENTES -->
+
+    <!-- POSICIÓN ABIERTA -->
+
+    <!-- ESTADÍSTICAS -->
+    
+
+<div class="card" id="panelsCard">
+      <div class="card-head">
+        <span class="card-title">Paneles</span>
+        <span class="tag tag-muted" id="panelsCount">0 indicadores</span>
+        <button class="mini-btn" id="btnPanelsConfig" title="Configurar indicadores">⚙</button>
+      </div>
+      <div class="card-body">
+        <div id="panelsList" class="panels-list"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- =====================================================================
+     PANEL INFERIOR: historial de trades + log de eventos
+     ===================================================================== -->
+<section id="bottomPanel">
+  <div class="tabs">
+    <button class="tab active" data-tab="positions">Posiciones <span id="tabPosCount">0</span></button>
+    <button class="tab" data-tab="openorders">Órdenes abiertas <span id="tabPendCount">0</span></button>
+    <button class="tab" data-tab="trades">Historial de trades (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab" data-tab="account">Cuenta</button>
+    <button class="tab" data-tab="stats">Estadísticas</button>
+    <button class="tab" data-tab="log">Log</button>
+    <button class="tab" data-tab="drawings">Dibujos (<span id="tabDrawCount">0</span>)</button>
+    <div class="tabs-right">
+      <button class="mini-btn" id="btnClearLog" title="Vaciar el log">limpiar log</button>
+      <button class="mini-btn" id="btnBottomToggle" title="Plegar / desplegar panel inferior">⌄</button>
+    </div>
+  </div>
+
+  <div class="tab-body active" id="tab-positions">
+    <div class="bf-tabrow">
+
+    <div class="card" id="positionCard">
+          <div class="card-head"><span class="card-title">Posición abierta</span>
+            <span class="tag" id="posSide">FLAT</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
+            <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
+            <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
+            <div class="kv"><span>Precio actual</span><b id="posMark">—</b></div>
+            <div class="kv"><span>Distancia SL</span><b id="posSlDist">—</b></div>
+            <div class="kv"><span>Distancia TP</span><b id="posTpDist">—</b></div>
+            <div class="kv"><span>Liq. estimada</span><b id="posLiq">—</b></div>
+            <div class="kv"><span>Riesgo / Beneficio</span><b id="posRR">—</b></div>
+            <div class="kv"><span>Entradas</span><b id="posAvg">—</b></div>
+            <div class="kv"><span>Break-even</span><b id="posBE">—</b></div>
+            <div class="kv"><span>Trailing</span><b id="posTrail">—</b></div>
+            <div class="kv small"><span id="posDuration">—</span><span id="posBars">—</span></div>
+    
+            <!-- GESTIÓN DE LA POSICIÓN: promediar, cerrar parcial y TP escalonado -->
+            <div class="pos-mgmt" id="posMgmt">
+              <div class="pm-row">
+                <span class="pm-label">Promediar</span>
+                <input type="number" id="avgSize" value="25" min="1" step="1"
+                       title="Tamaño a añadir, con la unidad elegida arriba (% del capital, USD o unidades)">
+                <button class="mini-btn" id="btnAverage" title="Añadir a la posición al precio actual: mueve el precio medio y suma margen (Add position)">Añadir</button>
+                <label class="pm-check" title="Recoloca SL y TP a la misma distancia porcentual del NUEVO precio medio (por defecto se conservan los niveles, como el «Position TP/SL» de Bitunix)">
+                  <input type="checkbox" id="avgReaim"> re-aim</label>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">Cerrar parcial</span>
+                <button class="mini-btn" data-partial="25" title="Realiza el PnL del 25% de la posición y deja el resto vivo">25%</button>
+                <button class="mini-btn" data-partial="50" title="Realiza el PnL del 50% de la posición y deja el resto vivo">50%</button>
+                <button class="mini-btn" data-partial="75" title="Realiza el PnL del 75% de la posición y deja el resto vivo">75%</button>
+                <button class="mini-btn" id="btnSlBE" title="SL al break-even (precio medio + comisiones, no al precio de entrada)">🛡 BE</button>
+              </div>
+              <div class="pm-row">
+                <span class="pm-label">TP escalonado</span>
+                <input type="number" id="tpLvlPrice" class="pm-wide" placeholder="precio TP" step="any">
+                <input type="number" id="tpLvlPct" value="50" min="1" max="100" step="5" title="Porcentaje de la posición que cierra este nivel">
+                <button class="mini-btn" id="btnTpLevel" title="Añadir nivel de TP parcial">＋</button>
+              </div>
+              <div class="pm-row" title="Trailing Stop: el stop sigue al mejor precio y solo cierra cuando retrocede el % indicado (Callback ratio de Bitunix)">
+                <span class="pm-label">Trailing</span>
+                <input type="number" id="trailPct" class="pm-pct" value="0.5" min="0.05" max="50" step="0.05"
+                       title="Retracement (%) desde el pico que dispara el cierre">
+                <input type="number" id="trailAct" class="pm-wide" placeholder="activación" step="any"
+                       title="Opcional (Activation price): no empieza a seguir hasta tocar ese precio. Vacío = sigue desde el precio actual">
+                <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
+                <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
+              </div>
+              <div id="tpLevelsList" class="tp-levels"></div>
+            </div>
+          </div>
+        </div>
+
+    <div class="card" id="pendingCard">
+          <div class="card-head"><span class="card-title">Órdenes pendientes</span>
+            <span class="tag" id="pendingCount">0</span>
+            <button class="mini-btn" id="btnCancelOrders" title="Cancelar todas las órdenes pendientes">✖</button>
+          </div>
+          <div class="card-body">
+            <div id="pendingList" class="pending-list">
+              <div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="tab-body" id="tab-trades">
+    <table id="tradesTable">
+      <thead>
+        <tr>
+          <th>#</th><th>Dir</th><th>Entrada (UTC)</th><th>Salida (UTC)</th>
+          <th class="num">P. entrada</th><th class="num">P. salida</th>
+          <th class="num">Tamaño</th><th class="num">PnL</th><th class="num">%</th>
+          <th class="num">R</th><th>Motivo</th><th>Velas</th>
+        </tr>
+      </thead>
+      <tbody id="tradesBody"></tbody>
+    </table>
+    <div class="empty" id="tradesEmpty">Todavía no hay trades cerrados. Abre una posición con los botones LONG / SHORT y avanza el replay.</div>
+  </div>
+
+  <!-- PESTAÑA «ÓRDENES»: en Bitunix las órdenes en espera tienen pestaña propia.
+       La lista VIVA (con botón de cancelar) vive en la tarjeta de Posiciones para
+       que los atajos y las pruebas la alcancen sin cambiar de pestaña; aquí se
+       pinta una copia de solo lectura, actualizada por `UI.renderPending`. -->
+  <div class="tab-body" id="tab-openorders">
+    <div class="bf-tabnote">Las órdenes en espera se gestionan en la pestaña Posiciones (✖ cancela). Esta es su lista de solo lectura.</div>
+    <div class="pending-list" id="pendingListTab"></div>
+  </div>
+
+  <div class="tab-body" id="tab-account"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Cuenta</span>
+            <span class="tag" id="tagLeverage">1x</span>
+          </div>
+          <div class="card-body">
+            <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
+            <div class="kv"><span>Equity</span><b id="acEquity">$10,000.00</b></div>
+            <div class="kv"><span>PnL total</span><b id="acTotalPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>PnL abierto</span><b id="acOpenPnl" class="pnl">$0.00</b></div>
+            <div class="kv"><span>Margen usado</span><b id="acMargin">$0.00</b></div>
+            <div class="kv"><span>Balance libre</span><b id="acFree">$10,000.00</b></div>
+            <div class="meter"><div class="meter-fill" id="marginMeter"></div></div>
+            <div class="kv small"><span id="acExposure">Exposición 0%</span><span id="acFees">Comisiones $0.00</span></div>
+          </div>
+        </div></div></div>
+
+  <div class="tab-body" id="tab-stats"><div class="bf-tabrow">
+    <div class="card">
+          <div class="card-head"><span class="card-title">Estadísticas</span>
+            <button class="mini-btn" id="btnResetStats" title="Reiniciar estadísticas y trades">↺</button>
+          </div>
+          <div class="card-body">
+            <div class="stat-grid">
+              <div class="stat"><span class="stat-label">Trades</span><b id="stTrades">0</b></div>
+              <div class="stat"><span class="stat-label">Win Rate</span><b id="stWinRate">—</b></div>
+              <div class="stat"><span class="stat-label">Profit Factor</span><b id="stPf">—</b></div>
+              <div class="stat"><span class="stat-label">Máx. Drawdown</span><b id="stDd">—</b></div>
+              <div class="stat"><span class="stat-label">R:R medio</span><b id="stRr">—</b></div>
+              <div class="stat"><span class="stat-label">W / L</span><b id="stWl">0 / 0</b></div>
+              <div class="stat"><span class="stat-label">Mejor trade</span><b id="stBest" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Peor trade</span><b id="stWorst" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Expectancy</span><b id="stExp" class="pnl">—</b></div>
+              <div class="stat"><span class="stat-label">Racha actual</span><b id="stStreak">—</b></div>
+            </div>
+            <div class="equity-head"><span>Curva de capital</span><b id="eqValue">$10,000.00</b></div>
+            <div id="equityChart"></div>
+          </div>
+        </div></div></div>
+
+  <div class="tab-body" id="tab-log">
+    <div id="logList" class="log-list"></div>
+  </div>
+
+  <div class="tab-body" id="tab-drawings">
+    <div id="drawList" class="draw-list"></div>
+  </div>
+</section>
+
+<!-- =====================================================================
+     MODALES
+     ===================================================================== -->
+
+<!-- Indicadores -->
+<div class="modal" id="modalIndicators">
+  <div class="modal-box wide">
+    <div class="modal-head"><h3>Indicadores técnicos</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="ind-list">
+
+        <div class="ind-row" data-ind="sma">
+          <label class="ind-toggle"><input type="checkbox" id="indSma"><span>SMA</span></label>
+          <span class="ind-desc">Media móvil simple sobre el cierre. Se dibuja en el panel principal.</span>
+          <span class="ind-params">Período <input type="number" id="smaP" value="50" min="1" max="500"></span>
+          <span class="ind-color"><input type="color" id="smaColor" value="#ffd54f"></span>
+        </div>
+
+        <div class="ind-row" data-ind="ema">
+          <label class="ind-toggle"><input type="checkbox" id="indEma"><span>EMA</span></label>
+          <span class="ind-desc">Media móvil exponencial (más reactiva que la SMA).</span>
+          <span class="ind-params">Período <input type="number" id="emaP" value="21" min="1" max="500"></span>
+          <span class="ind-color"><input type="color" id="emaColor" value="#00e5ff"></span>
+        </div>
+
+        <div class="ind-row" data-ind="ema2">
+          <label class="ind-toggle"><input type="checkbox" id="indEma2"><span>EMA 2</span></label>
+          <span class="ind-desc">Segunda EMA para cruces (por ejemplo 9/21 o 50/200).</span>
+          <span class="ind-params">Período <input type="number" id="ema2P" value="200" min="1" max="1000"></span>
+          <span class="ind-color"><input type="color" id="ema2Color" value="#e040fb"></span>
+        </div>
+
+        <div class="ind-row" data-ind="bb">
+          <label class="ind-toggle"><input type="checkbox" id="indBb"><span>Bollinger</span></label>
+          <span class="ind-desc">Bandas de Bollinger (media ± N desviaciones típicas).</span>
+          <span class="ind-params">Período <input type="number" id="bbP" value="20" min="2" max="200"> Desv. <input type="number" id="bbK" value="2" step="0.1" min="0.5" max="5"></span>
+          <span class="ind-color"><input type="color" id="bbColor" value="#7c4dff"></span>
+        </div>
+
+        <div class="ind-row" data-ind="rsi">
+          <label class="ind-toggle"><input type="checkbox" id="indRsi"><span>RSI</span></label>
+          <span class="ind-desc">Índice de fuerza relativa (Wilder) en panel inferior separado.</span>
+          <span class="ind-params">Período <input type="number" id="rsiP" value="14" min="2" max="100"></span>
+          <span class="ind-color"><input type="color" id="rsiColor" value="#b388ff"></span>
+        </div>
+
+        <div class="ind-row" data-ind="macd">
+          <label class="ind-toggle"><input type="checkbox" id="indMacd"><span>MACD</span></label>
+          <span class="ind-desc">Convergencia/divergencia de medias + histograma.</span>
+          <span class="ind-params">Rápida <input type="number" id="macdF" value="12" min="2" max="100">
+            Lenta <input type="number" id="macdS" value="26" min="3" max="200">
+            Señal <input type="number" id="macdSig" value="9" min="1" max="100"></span>
+          <span class="ind-color"><input type="color" id="macdColor" value="#40c4ff"></span>
+        </div>
+
+        <div class="ind-row" data-ind="atr">
+          <label class="ind-toggle"><input type="checkbox" id="indAtr"><span>ATR</span></label>
+          <span class="ind-desc">Average True Range: volatilidad media, útil para situar stops.</span>
+          <span class="ind-params">Período <input type="number" id="atrP" value="14" min="2" max="100"></span>
+          <span class="ind-color"><input type="color" id="atrColor" value="#ffab40"></span>
+        </div>
+
+        <div class="ind-row" data-ind="vol">
+          <label class="ind-toggle"><input type="checkbox" id="indVol" checked><span>Volumen</span></label>
+          <span class="ind-desc">Histograma de volumen en la parte inferior del gráfico principal.</span>
+          <span class="ind-params">—</span>
+          <span class="ind-color"><input type="color" id="volColor" value="#5c6bc0"></span>
+        </div>
+      </div>
+      <div class="modal-note">El periodo mínimo de velas necesario es el parámetro del indicador; con menos velas visibles no se dibujará.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cerrar</button>
+      <button class="btn btn-primary" id="btnApplyInd">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ajustes -->
+<div class="modal" id="modalSettings">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Ajustes de la sesión</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <label class="field full"><span class="field-label">Capital inicial (USD)</span>
+          <input type="number" id="setCapital" value="10000" min="100" step="100"></label>
+        <label class="field"><span class="field-label">Comisión por operación (%)</span>
+          <input type="number" id="setFee" value="0.1" min="0" step="0.01"></label>
+        <label class="field"><span class="field-label">Apalancamiento por defecto</span>
+          <select id="setLeverage">
+            <option>1</option><option>2</option><option>5</option><option>10</option><option>25</option><option>50</option>
+          </select></label>
+        <label class="field"><span class="field-label">Velas de contexto iniciales</span>
+          <input type="number" id="setWarmup" value="150" min="0" max="2000" step="10"></label>
+        <label class="field"><span class="field-label">Comisión de financiación (≈%)</span>
+          <input type="number" id="setFunding" value="0" min="0" step="0.001" title="Coste opcional aplicado por vela a las posiciones abiertas (simula funding de perpetuos)"></label>
+        <label class="field full"><span class="field-label">Modo de simulación de SL/TP en la misma vela</span>
+          <select id="setSlFirst">
+            <option value="worst" selected>Pesimista (si toca SL y TP en la misma vela, ejecuta el SL)</option>
+            <option value="best">Optimista (ejecuta primero el TP)</option>
+          </select></label>
+      </div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setSound" checked><span>🔊 Sonido al ejecutar órdenes</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setAutoReveal" checked><span>🔎 Auto-scroll al avanzar el replay</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setAveraging" checked><span>➕ Promediar entradas: COMPRAR/VENDER con posición abierta del mismo lado <b>añade</b> a la posición (precio medio ponderado) en vez de avisar</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setGesture" checked><span>✍️ Dibujar manteniendo pulsado (⅓ s y trazar: recta = tendencia, horizontal = soporte, rectángulo, elipse, Fibonacci; garabato = borrar)</span></label></div>
+      <div class="modal-note">Los cambios de capital reinician la cuenta. La comisión se cobra al abrir y al cerrar (ida y vuelta).</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-danger" id="btnHardReset">Reiniciar sesión completa</button>
+      <button class="btn btn-primary" id="btnApplySettings">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Buscador de símbolos (estilo terminal: buscador + categorías + favoritos) -->
+<div class="modal" id="modalSymbols">
+  <div class="modal-box wide">
+    <div class="modal-head"><h3>🔎 Buscar símbolo</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="sym-search">
+        <input type="text" id="symQuery" placeholder="Escribe para buscar… (BTC, ETH, SOL, PEPE…)" autocomplete="off">
+        <span class="sym-count" id="symCount">—</span>
+      </div>
+      <div class="sym-cats" id="symCats" role="group" aria-label="Categorías">
+        <button class="sym-cat active" data-cat="favoritos">⭐ Favoritos</button>
+        <button class="sym-cat" data-cat="recientes">🕘 Recientes</button>
+        <button class="sym-cat" data-cat="principales">🔥 Principales</button>
+        <button class="sym-cat" data-cat="USDT">💵 USDT</button>
+        <button class="sym-cat" data-cat="USDC">🔷 USDC</button>
+        <button class="sym-cat" data-cat="BTC">₿ BTC</button>
+        <button class="sym-cat" data-cat="ETH">Ξ ETH</button>
+        <button class="sym-cat" data-cat="todos">🌐 Todos</button>
+      </div>
+      <div class="sym-list" id="symList"></div>
+      <div class="modal-note" id="symNote">Los pares vienen de Binance (spot). Marca con ⭐ los que más uses para tenerlos a mano.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Sesiones -->
+<div class="modal" id="modalSessions">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Sesiones guardadas</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <label class="field full"><span class="field-label">Nombre de la sesión</span>
+          <span class="input-row"><input type="text" id="sessionName" placeholder="Ej: BTC 1H — estrategia soportes"><button class="btn btn-primary" id="btnSaveSession">Guardar</button></span></label>
+      </div>
+      <p class="modal-note">Se guardan: par, temporalidad, posición del replay, dibujos, indicadores, trades, capital y estadísticas.</p>
+      <div id="sessionList" class="session-list"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Exportar -->
+<div class="modal" id="modalExport">
+  <div class="modal-box">
+    <div class="modal-head"><h3>Exportar resultados</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="export-grid">
+        <button class="btn" id="expTradesCsv">📄 Trades → CSV</button>
+        <button class="btn" id="expEquityCsv">📈 Curva de capital → CSV</button>
+        <button class="btn" id="expJson">🧾 Sesión completa → JSON</button>
+        <button class="btn" id="expReport">🖨️ Informe imprimible / PDF</button>
+        <button class="btn" id="expCandlesCsv">🕯️ Velas visibles → CSV</button>
+        <button class="btn" id="expPng">🖼️ Gráfico → PNG</button>
+      </div>
+      <p class="modal-note">El informe imprimible abre una vista con todas las métricas y el historial; usa «Guardar como PDF» en el diálogo de impresión.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Ayuda -->
+<div class="modal" id="modalHelp">
+  <div class="modal-box wide">
+    <div class="modal-head"><h3>Guía rápida y atajos</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body help-body">
+      <h4>Flujo de trabajo</h4>
+      <ol>
+        <li>Elige <b>par</b> y <b>temporalidad</b>: los datos se cargan al instante (de Binance, con paginación automática de 1000 velas). También puedes pulsar <b>Cargar datos</b>.</li>
+        <li>Indica la <b>fecha de inicio del replay</b>: el gráfico mostrará solo las velas anteriores (contexto) y el resto quedará oculto.</li>
+        <li>Avanza con <b>PLAY</b>, <b>▶▶</b> (una vela) o el <b>slider de velocidad</b>. Puedes retroceder con <b>◀◀</b>.</li>
+        <li>Dibuja soportes, canales, Fibonacci… y añade indicadores desde el botón 📈 de la barra superior.</li>
+        <li>Abre posiciones <b>LONG/SHORT</b> con tamaño, apalancamiento, SL y TP (por precio o por %). Las líneas de SL/TP se pueden <b>arrastrar</b> en el gráfico.</li>
+        <li>Con una posición abierta, pulsar el lado <b>contrario</b> la cierra a mercado y abre la nueva (<b>inversión</b>): el historial anota el motivo «inversión».</li>
+        <li><b>Promediar entrada</b> (como «Add position» de Bitunix): con posición abierta, pulsar el <b>mismo lado</b> añade tamaño al precio actual → la entrada pasa a ser el <b>precio medio ponderado</b>, se suma el margen y se recalcula la liquidación. Los niveles de <b>TP/SL se conservan</b> (Position TP/SL); marca <b>re-aim</b> en la tarjeta de posición si quieres recolocarlos a la misma distancia porcentual del nuevo medio.</li>
+        <li><b>Gestión de la posición</b> (tarjeta «📈 Posición abierta»): <b>➕ Añadir</b> con el tamaño que quieras, <b>➗ 25 / 50 / 75 %</b> para tomar ganancias parciales (el resto sigue vivo con su SL), <b>🛡 BE</b> para llevar el SL al break-even (precio medio + comisiones) y <b>🎯 TP escalonado</b> para cerrar un % de la posición al tocar cada precio.</li>
+        <li>Solo hay <b>una posición a la vez</b>: si colocas una orden límite del <b>lado contrario</b> con posición abierta, queda <b>en espera</b> y se ejecutará al cerrar (se avisa en el log). Los límites del <b>mismo lado</b> sí se ejecutan y promedian.</li>
+        <li><b>Mover una orden límite en el gráfico</b>: arrastra su línea ámbar (o la pestaña <kbd>⏳▲ ⇕</kbd> del borde derecho) para cambiar el nivel, igual que <b>SL/TP</b>. Funciona con ratón y con el dedo. Si al soltarla el nivel queda cruzado con el precio, se ejecuta a mercado.</li>
+        <li>Revisa resultados en el panel de estadísticas, la curva de capital y el historial de trades.</li>
+      </ol>
+      <h4>Atajos de teclado</h4>
+      <table class="kbd-table">
+        <tr><td><kbd>Espacio</kbd></td><td>Play / Pausa del replay</td></tr>
+        <tr><td><kbd>→</kbd></td><td>Avanzar una vela</td></tr>
+        <tr><td><kbd>←</kbd></td><td>Retroceder una vela</td></tr>
+        <tr><td><kbd>B</kbd></td><td>Comprar (Long)</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Vender (Short)</td></tr>
+        <tr><td><kbd>Mayús</kbd>+<kbd>B</kbd> / <kbd>Mayús</kbd>+<kbd>S</kbd></td><td>Orden límite (Long / Short)</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Cerrar posición abierta</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Cerrar el 50 % de la posición (parcial)</td></tr>
+        <tr><td><kbd>E</kbd></td><td>SL al break-even</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Trailing stop on/off (usa el % de la tarjeta)</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Reset del replay al inicio</td></tr>
+        <tr><td><kbd>Supr</kbd></td><td>Borrar el dibujo seleccionado</td></tr>
+        <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>Subir / bajar velocidad</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Guardar sesión</td></tr>
+        <tr><td><kbd>1</kbd>…<kbd>9</kbd></td><td>Seleccionar herramienta de dibujo</td></tr>
+      </table>
+      <h4>Notas técnicas</h4>
+      <ul>
+        <li>Datos: API pública de Binance <code>/api/v3/klines</code> con paginación (1000 velas por petición), <i>fallback</i> a hosts espejo y a CoinGecko, y caché local de lo descargado.</li>
+        <li>Todo el cálculo de indicadores y de PnL es propio, en JavaScript, sin librerías externas (solo Lightweight Charts para el render).</li>
+        <li>Todas las marcas de tiempo se manejan en <b>UTC</b>. La ejecución de SL/TP dentro de una vela se simula de forma pesimista por defecto.</li>
+        <li>En modo sin conexión usa el botón <b>Demo</b> (datos sintéticos) o importa un CSV propio.</li>
+        <li><b>Cambiar de temporalidad o de par</b> mantiene el replay en la misma fecha. La posición abierta se cierra a mercado y las órdenes límite pendientes se cancelan (con aviso), porque sus precios pertenecen a la serie anterior.</li>
+        <li>La <b>posición abierta</b> aparece en el historial como una fila <b>ABIERTA</b> con su PnL flotante, que se actualiza en cada vela.</li>
+      </ul>
+
+      <h4>Proyectos relacionados</h4>
+      <ul class="help-links">
+        <li>
+          <a href="https://luisnav83-hash.github.io/openmarket-chart/" target="_blank" rel="noopener noreferrer">
+            <b>OpenMarket Chart</b> — clon del terminal de <code>openmarket.xyz</code> en React + Vite
+          </a>
+          <span class="help-link-note">Mismo enfoque (terminal propio, sin librerías pesadas) aplicado a la
+            fidelidad de interfaz: layout medido del original, gráfico real con indicadores calculados a mano
+            y paneles de flujo de mercado. <a href="https://github.com/luisnav83-hash/openmarket-chart" target="_blank" rel="noopener noreferrer">Código en GitHub</a>.</span>
+        </li>
+        <li>
+          <a href="https://github.com/luisnav83-hash/bar-replay-pro" target="_blank" rel="noopener noreferrer">
+            <b>Bar Replay Pro</b> — este proyecto: código, documento de publicación y capturas
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Visor de capturas -->
+<div class="modal" id="modalShot">
+  <div class="modal-box wide">
+    <div class="modal-head"><h3>Captura del gráfico</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body"><img id="shotImg" alt="Captura del gráfico de velas"></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cerrar</button><a class="btn btn-primary" id="shotDownload" download="bar-replay.png">⬇ Descargar PNG</a></div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<!-- ============ SCRIPTS (orden de dependencias) ============ -->
+<script src="js/utils.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/dataService.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/statistics.js"></script>
+<script src="js/tradingEngine.js"></script>
+<script src="js/barReplay.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/pnlChart.js"></script>
+<script src="js/drawingTools.js"></script>
+<script src="js/orderBook.js"></script>
+<script src="js/uiController.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
