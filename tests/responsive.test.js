@@ -64,16 +64,29 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       const play = R('btnPlay');
       return {
         chart: Math.round(wrap.height), panes: panes.length,
+        fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
+        sobrePaneles: Math.max(0, Math.round(wrap.bottom - (R('paneArea') || { bottom: wrap.bottom }).bottom)),
         solape: paneBottom > rp.top + 2 ? Math.round(paneBottom - rp.top) : 0,
         ovx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
         recorteInterno: Math.round(Math.max(0, ca.bottom - ws.bottom)) + Math.round(Math.max(0, ws.bottom - R('bottomPanel').top)),
         playVisible: play.width > 0 && play.top >= 0 && play.bottom <= window.innerHeight + 2,
       };
     });
-    const minChart = h >= 720 ? 200 : 150;
+    /* QUÉ SE PROMETE AQUÍ, y por qué no es «200 px siempre». Este bloque abre RSI + MACD
+       ANTES de medir —es el PEOR caso de la escalera—, y en un panel de 780 px de alto
+       con tres paneles no hay 200 px de velas sin robarle el sitio al formulario de
+       órdenes o a las tarjetas del registro (medido con los 240 px de `min-height` del
+       gráfico: se pintaban 66 px ENCIMA de sus propios paneles; ver PC.comprimeEscalera).
+       Lo que este contrato sí exige, y es lo que deja la app usable, es geométrico: la
+       caja del gráfico mide lo que hay (caja == fila), 0 px pintados sobre la escalera y
+       al menos el suelo duro de 120 px. La promesa numérica de «≥200 px de alto útil»
+       vive donde se mide con la escalera por defecto (un solo panel de indicadores):
+       tests/browser.capture.js, en 480×900 —204 px medidos, y 146 px honestos en el
+       teléfono de 390×844, que es lo que cabe sin tocar nada alcanzable—. */
     const etiqueta = `${w}×${h}`;
-    ok(m.chart >= minChart, `${etiqueta}: el gráfico conserva altura útil (${m.chart}px, mínimo ${minChart})`);
+    ok(m.chart >= 120 && m.chart === m.fila, `${etiqueta}: el gráfico conserva ${m.chart}px en el PEOR caso de escalera (fila ${m.fila}px, suelo 120px)`);
     ok(m.solape === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay`);
+    ok(m.sobrePaneles === 0, `${etiqueta}: y el gráfico no pinta encima de los paneles de indicadores (${m.sobrePaneles}px)`);
     ok(m.ovx === 0, `${etiqueta}: sin desbordamiento horizontal (${m.ovx}px)`);
     ok(m.recorteInterno === 0, `${etiqueta}: nada se recorta entre el gráfico y el panel inferior`);
     ok(m.playVisible, `${etiqueta}: el botón PLAY es visible sin desplazar`);

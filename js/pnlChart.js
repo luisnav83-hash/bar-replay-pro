@@ -227,6 +227,7 @@
     // en la vista previa embebida de 1280x700). Solo manda un alto cuando la persona
     // lo eligió (o había guardado).
     if (h !== null) PC.setAlto(h, false); else { PC._alto = null; PC.ajustaEscalera(); }
+    PC.vigilaEscalera();   // y a partir de aquí, cualquier cambio de la escalera se reparte solo
   };
 
   /**
@@ -234,10 +235,11 @@
    * encima de su alto de CSS: en 390×844 no hay 844 px para velas grandes, PnL grande
    * y RSI a la vez. Es el sitio que el arrastre PIDE PRESTADO, y se devuelve solo (al
    * volver al alto de defecto, con el doble clic o girando el teléfono).
-   * En escritorio no se pliega nada: allí el reparto es de verdad flexible y el
-   * contrato del gráfico (≥240 px) lo vigilan otras suites.
+   * En escritorio NUNCA se pliega un panel por no caber —allí lo que se hace es apretarlo
+   * (PC.comprimeEscalera), porque ocultar un indicador que la persona acaba de abrir es
+   * peor que verlo bajo—.
    */
-  PC.ajustaEscalera = function () {
+  PC._plieguePnL = function () {
     const area = el('chartArea'), wrap = el('chartWrap'), pa = el('paneArea'), p = el('panePnl');
     if (!pa) return false;
     const h = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
@@ -254,6 +256,138 @@
     const solo = PC._alto !== null && h(p) > (PC._pnlDefecto || 0);
     pa.classList.toggle('pnl-solo', solo);
     return solo;
+  };
+
+  /**
+   * Reparto honesto de la escalera: si el gráfico se sale de su fila, se APRIETAN los
+   * paneles de indicadores —no se tapan ni se ocultan—.
+   *
+   * Por qué hace falta (medido en esta pasada, con RSI + MACD abiertos): el lienzo
+   * desbordaba su fila y se pintaba ENCIMA de sus propios paneles también en escritorio
+   * —66 px de solape a 1024×768, 69 px a 1440×900, 46 px a 900×700, 18 px a 390×844—.
+   * La causa es el `min-height` del gráfico (240 px, 150 por debajo de 1000 px de ancho y
+   * 120 en el teléfono): el suelo es legítimo, pero en una fila `1fr` dentro de un
+   * contenedor de alto fijo el `min-height` NO agranda la fila —el item simplemente
+   * rebosa—, así que los píxeles había que devolverlos por otro lado. Ninguna suite lo
+   * veía porque las comparaciones eran «paneles contra la barra de replay» y «área contra
+   * el workspace», nunca «caja del gráfico contra su fila».
+   *
+   * Reglas: solo se tocan los paneles AJENOS al de PnL (ese tiene su propio arrastre y es
+   * el que la persona está mirando), nunca por debajo de `MIN_PANE`, y el `style.height`
+   * se limpia en cuanto deja de hacer falta —un alto en línea «por si acaso» gana a la
+   * escalera de CSS y ya rompió una vez el mini de la tarjeta de posición—.
+   */
+  const MIN_PANE = 40;
+  PC.MIN_PANE = MIN_PANE;
+  const SUELO_MIN = 90;      // por debajo de 90 px de velas ya no hay gráfico que leer
+  PC.comprimeEscalera = function () {
+    const area = el('chartArea'), wrap = el('chartWrap'), pa = el('paneArea'), p = el('panePnl');
+    if (!area || !wrap || !pa) return 0;
+    const alto = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
+    const fila = (id) => alto(el(id));
+    const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetParent !== null);
+    const otros = visibles.filter((e) => e !== p);
+
+    /* La decisión se toma CONTRA EL CSS, no contra lo que escribió la pasada anterior:
+       se quitan los `style.height` de los indicadores y el `min-height` en línea del
+       gráfico, se fuerza un reflow y se mide. Sin esto el reparto era un bucle —el
+       propio ResizeObserver de la escalera volvía a llamar aquí, medía lo que él mismo
+       había apretado, veía que «ya no sobra nada» y devolvía las alturas, que volvía a
+       desbordar— y por eso se quedaban los 69 px de solape a 1440×900. */
+    const guardado = new Map();
+    otros.forEach((e) => { if (e.style.height) { guardado.set(e, e.style.height); e.style.height = ''; } });
+    const sueloInline = wrap.style.minHeight;
+    if (sueloInline) wrap.style.minHeight = '';
+    void pa.offsetHeight;
+
+    /* `floor` a propósito: las filas de un grid reparten píxeles fraccionarios y, si se
+       redondea hacia arriba, el reparto se queda a 1 px de desbordar (con un
+       ResizeObserver mirando, ese 1 px es un bucle de idas y venidas). Un píxel de
+       sobra en la escalera no lo ve nadie; un solape sí. */
+    const escaleraLibre = Math.max(0, Math.floor(alto(area) - fila('drawToolbar') - fila('replayBar')));
+    const pnl = alto(p);
+    const sueloCss = Math.max(SUELO_GRAFICO, Math.round(parseFloat(getComputedStyle(wrap).minHeight) || 0) || SUELO_GRAFICO);
+    const alturas = otros.map((e) => alto(e));
+    const suma = alturas.reduce((s, x) => s + x, 0);
+    /* Los marcos y las líneas de separación de `#paneArea` también comen píxeles: sin
+       contarlos, el reparto se quedaba a 1 px de desbordar y ese píxel, con un
+       ResizeObserver mirando, era un vaivén sin fin. Se mide de una vez cuánto le cuesta
+       al contenedor albergar la escalera. */
+    const gaps = Math.max(0, alto(pa) - pnl - suma);
+    const pide = sueloCss + pnl + suma + gaps;
+
+    let aplica = null, bajoSuelo = '';
+    if (pide > escaleraLibre && otros.length) {
+      const diana = escaleraLibre - sueloCss - pnl - gaps;          // lo que les queda a los demás
+      const alvo = Math.max(MIN_PANE, Math.floor(diana / otros.length));
+      aplica = alvo;
+      const tras = pnl + alvo * otros.length + gaps;
+      if (sueloCss + tras > escaleraLibre) bajoSuelo = Math.max(SUELO_MIN, escaleraLibre - tras) + 'px';
+    }
+
+    // Se devuelve el CSS a su sitio y se aplica lo que salga (o nada, si el CSS cabe).
+    otros.forEach((e) => { if (guardado.has(e)) e.style.height = guardado.get(e); });
+    if (sueloInline) wrap.style.minHeight = sueloInline;
+
+    let movido = false;
+    /* Al soltar, se limpia la escalera ENTERA —también los paneles OCULTOS (menos el de
+       PnL, que es el que la persona arrastra y cuyo alto en línea es SU preferencia): si se cerró un
+       indicador con el alto apretado puesto, su `style.height` seguía ahí y volvía a
+       aparecer la próxima vez que se abría (lo cazó el bloque J de
+       tests/pnl-chart.test.js: «2 de 0 esperados» de inline vivos). */
+    const todos = [...pa.querySelectorAll('.indPane')].filter((e) => e !== p);
+    (aplica === null ? todos : otros).forEach((e) => {
+      const s = aplica === null ? '' : aplica + 'px';
+      if (e.style.height !== s) { e.style.height = s; movido = true; }
+    });
+    if (wrap.style.minHeight !== bajoSuelo) { wrap.style.minHeight = bajoSuelo; movido = true; }
+    if (movido) void pa.offsetHeight;
+    /* Corrección final con la geometría YA escrita: el reparto se decide contra el CSS
+       (para ser determinista) y eso deja margen a que queden 2-3 px de más por los
+       bordes del contenedor. Si al mirar de verdad el gráfico aún rebasa su fila, se le
+       baja el suelo a esa fila —solo hacia abajo, nunca hacia arriba—, que es la única
+       forma de que el solape sea 0 sin depender de cuántos píxeles redondea el navegador. */
+    const filaReal = Math.floor(parseFloat(getComputedStyle(area).gridTemplateRows.split(' ')[1] || '0') || 0);
+    if (filaReal && alto(wrap) > filaReal) {
+      const s = Math.max(SUELO_MIN, filaReal) + 'px';
+      if (wrap.style.minHeight !== s) { wrap.style.minHeight = s; void pa.offsetHeight; movido = true; }
+    }
+    if (movido) {
+      try { CM._syncPanes(CM.main.timeScale().getVisibleLogicalRange()); } catch (err) {}
+    }
+    if (aplica !== null) PC._debugComprime = { apretados: otros.length, alto: aplica, suelo: bajoSuelo || 'css' };
+    return movido ? 1 : 0;
+  };
+
+  /**
+   * Los dos ajustes de la escalera, en un solo sitio para que TODOS los caminos los
+   * llamen (arrastre del asa, cambio de preferencia, indicador que se abre o se cierra,
+   * resize de la ventana): primero se pliega lo que el PnL tenga pedido prestado en el
+   * teléfono y después se aprieta lo que todavía sobre.
+   */
+  PC.ajustaEscalera = function () {
+    const plegado = PC._plieguePnL();
+    PC.comprimeEscalera();
+    return plegado;
+  };
+
+  /**
+   * Vigía de la escalera: un ResizeObserver en `#paneArea` vuelve a repartir cada vez que
+   * un indicador entra o sale (los botones de `App.applyIndicators` no avisan a PC y, sin
+   * esto, abrir MACD dejaba el solape puesto hasta el siguiente resize de ventana). Se
+   * autocita con rAF y con una bandera: el propio repartido cambia alturas, y sin corte
+   * esto sería un bucle infinito de observadores.
+   */
+  PC.vigilaEscalera = function () {
+    const pa = el('paneArea');
+    if (!pa || pa.dataset.pcVigil || !('ResizeObserver' in global)) return false;
+    pa.dataset.pcVigil = '1';
+    let pendiente = 0;
+    new global.ResizeObserver(() => {
+      if (pendiente) return;
+      pendiente = global.requestAnimationFrame(() => { pendiente = 0; PC.ajustaEscalera(); });
+    }).observe(pa);
+    return true;
   };
 
   /** Asa: puntero (ratón, lápiz y dedo) + teclado + doble clic para volver al defecto. */
