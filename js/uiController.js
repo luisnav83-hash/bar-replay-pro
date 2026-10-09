@@ -150,8 +150,32 @@
 
     const slider = document.getElementById('progressRange');
     slider.addEventListener('input', () => App.seekFromSlider(+slider.value / 1000));
-    slider.addEventListener('pointerdown', () => { UI._wasPlaying = BR.isPlaying(); BR.pause(); });
-    slider.addEventListener('pointerup', () => { if (UI._wasPlaying) BR.play(); });
+    /* Arrastrar la perilla tiene que hacer dos cosas y deshacerlas SIEMPRE: parar el replay
+       (para no competir con la mano) y avisar de que el repintado no le escriba el valor por
+       encima. El aviso vive en `_arrastrandoSlider`, no en el foco: con el guard viejo
+       (`document.activeElement !== slider`) la perilla se congelaba en cuanto el deslizador
+       se quedaba enfocado —medido: soltarlo con el replay sonando dejaba «vela 850 / 2000»
+       con la perilla todavía en el 20 %—, y en el teléfono el gesto se convierte en scroll
+       de la barra (que ahora desliza) y no llega a `pointerup`: sin `pointercancel` el replay
+       se quedaba pausado y la perilla pillada hasta recargar. `pointerup` se escucha en
+       `window` porque al soltar fuera del `<input>` el evento no vuelve al deslizador. */
+    const acabarDrag = () => {
+      if (!UI._arrastrandoSlider) return;
+      UI._arrastrandoSlider = false;
+      if (UI._wasPlaying) { UI._wasPlaying = false; BR.play(); }
+      /* Y se refresca YA: sin esto la perilla se quedaba en el punto donde la soltaste
+         hasta la siguiente vela (a 1×, un segundo entero; medido: valor 24 con el replay
+         en el 42,6 %). El repintado no espera al arrastre, así que hay que pedirlo a mano. */
+      UI.refreshReplayBar();
+    };
+    slider.addEventListener('pointerdown', () => {
+      UI._arrastrandoSlider = true;
+      UI._wasPlaying = BR.isPlaying();
+      BR.pause();
+      window.addEventListener('pointerup', acabarDrag, { once: true });
+      window.addEventListener('pointercancel', acabarDrag, { once: true });
+    });
+    window.addEventListener('blur', acabarDrag);   // ventana que pierde el foco a media arrastre
   };
 
   /* ------------------------------- Barra lateral ------------------------------- */
@@ -1509,7 +1533,8 @@
     setText('pbSpeed', BR.speedLabel());
     setText('rbClock', c ? U.fmtDateSec(c.time) : '—');
     const slider = document.getElementById('progressRange');
-    if (slider && document.activeElement !== slider) slider.value = Math.round(BR.progressTotal() * 1000);
+    // Solo se respeta al usuario mientras ARRASTRA (ver `_arrastrandoSlider` en el cableado).
+    if (slider && !UI._arrastrandoSlider) slider.value = Math.round(BR.progressTotal() * 1000);
     U.$$('.speed-btn').forEach((b) => {
       const v = b.dataset.speed === 'max' ? 'max' : +b.dataset.speed;
       b.classList.toggle('active', v === BR.state.speed);

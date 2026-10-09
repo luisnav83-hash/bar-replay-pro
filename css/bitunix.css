@@ -1310,6 +1310,66 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      fila, como el resto de las estadísticas. */
   #topbar .bf-stat.bf-src { flex: 0 0 auto; max-width: none; }
 
+  /* ───────── LA BARRA DE REPLAY DEL TELÉFONO: la POSICIÓN, a la vista ─────────
+     Medido a 390 px antes de esto: la barra es deslizable (`overflow-x:auto`, contenido
+     795 px en 389), pero el orden era transportante → 7 velocidades → deslizador+info,
+     así que TODO lo que dice «por dónde vas» quedaba fuera del hueco: `#progressRange`
+     en x 458, `#pbTime`, `#pbIndex`, `#pbPct` y `#pbStatus`, fuera. Y el deslizador
+     medía 4 px de alto: incluso yendo a buscarlo con el dedo, no se agarra.
+     Se cambia el ORDEN (el mismo truco de la fila de segmentados del formulario: nada
+     oculto, solo reorganizado): transportante, posición, y las velocidades detrás del
+     deslizador horizontal —que es el grupo menos usado con el dedo y donde la activa
+     se ve igualmente, porque el chip `1x` va el primero del grupo—. Y la caja del
+     `input[type=range]` pasa a 20 px, como ya se hizo con el apalancamiento: la pista
+     pinta fina, lo que se agarra es la caja. */
+  /* `flex-wrap:nowrap`, porque en `css/responsive.css` (≤900 px) la barra pasa a DOS
+     FILAS —`.rb-progress{flex:1 1 100%}` para que el deslizador vaya debajo de los
+     controles— y aquí la barra mide 34 px: la segunda línea quedaba fuera, por abajo, sin
+     scroll vertical que la rescate. Una línea y `overflow-x:auto` (ya lo pone el propio
+     responsive.css en su tier estrecho): lo que sobre, se desliza. */
+  #replayBar { height: 34px; padding: 0 8px; gap: 8px; flex-wrap: nowrap; }
+  #replayBar .rb-buttons { order: 1; flex: 0 0 auto; }
+  /* `flex-direction:row`, y es la clave: en `css/chart.css` el bloque va en
+     `flex-direction:column` (deslizador encima, línea de posición debajo) porque en el
+     escritorio la barra mide 44 px —en el teléfono, con 34, la SEGUNDA línea quedaba
+     ENTERA bajo el borde inferior: «vela 1152 / 1200», el «96%» y el chip PAUSA no se
+     veían nunca, ni deslizando, porque la barra no desliza en vertical. En una línea, la
+     posición cabe y se lee. */
+  /* `flex: 0 0 auto`, no `1 1 auto`: con `min-width:0` y el resto del grupo sin
+     encogerse, TODO el déficit de espacio se lo comía el bloque de progreso (medido:
+     `width: 0` con sus hijos desbordando por encima de los chips de velocidad, y el
+     deslizador «tapado» por un `.speed-btn`). Que ceda el grupo que debe ceder —las
+     velocidades, que son la cola deslizable— y la posición se quede con su hueco. */
+  #replayBar .rb-progress { order: 2; flex: 0 0 auto; gap: 6px;
+                            flex-direction: row; align-items: center; }
+  #replayBar .rb-speed { order: 3; flex: 0 0 auto; gap: 3px; }
+  #replayBar #progressRange { flex: 0 0 76px; width: 76px; height: 20px; }
+  #replayBar .rb-info .rb-sep { display: none; }
+  /* El chip de estado (PAUSA / REPRODUCIENDO) se aprieta aquí, no se quita: con 40 px de
+     ancho la línea acababa 27 px más allá de la caja y «por qué está parado el replay»
+     volvía a estar detrás de un dedo. Sin separadores, con 8 px de letra y 4 de padding
+     entra entero (medido: 389 px justos). */
+  #replayBar .rb-status { font-size: 8px; padding: 0 4px; letter-spacing: .3px; }
+  /* El «96%» fuera en el teléfono: el contador de al lado («vela 1152 / 1200») dice lo
+     mismo con más precisión y el propio deslizador ya ES la barra de porcentaje. Con los
+     dos, la línea de posición se salía 27 px de la caja y lo que se perdía era el chip de
+     estado —que es lo que explica por qué el replay no avanza—. */
+  #replayBar #pbPct { display: none; }
+  /* 27×24 en vez de 30×26: los mismos tamaños que ya usa el tier «≤700 px de alto», que
+     siguen siendo diana (≥20) y aquí compran los 31 px que hacen falta para que la línea
+     de posición quepa ENTERA: botones 147 + deslizador 76 + «vela N / Total» y el chip de
+     estado, 145 ≈ 389 px de caja (medido: contenido total 644 px deslizando). */
+  #replayBar .rb-buttons .rb-btn { width: 27px; height: 24px; }
+  #replayBar .rb-buttons .rb-play { width: 34px; }
+  #replayBar .rb-info { gap: 5px; white-space: nowrap; font-size: 9px; }
+  /* En la línea de posición sobran las dos piezas que ya se ven en otro sitio a este
+     ancho: la HORA (la leyenda OHLC del propio gráfico la repite, con el cierre de la
+     vela) y la VELOCIDAD (el chip activo del grupo de al lado), y con ellos los `·`
+     separadores, que sin las piezas que unían solo comen hueco. Se quedan el contador
+     «vela N / Total» y el estado (PAUSA/REPRODUCIENDO): es lo único que esta barra dice y
+     no está en ningún otro sitio. */
+  #replayBar #pbTime, #replayBar #pbSpeed, #replayBar .rb-clock { display: none; }
+
   /* En el móvil el gráfico mide ~200px: la etiqueta se aprieta y el panel de PnL
      baja a 92px para no quedarse con medio terminal. */
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }

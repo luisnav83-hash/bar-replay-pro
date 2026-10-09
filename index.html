@@ -346,7 +346,13 @@
       </div>
 
       <div class="rb-progress">
-        <input type="range" id="progressRange" min="0" max="100" value="0" step="1" title="Posición del replay: arrastra para saltar">
+        <!-- `max="1000"` y NO 100: `UI.refreshReplayBar` escribe `Math.round(fracción*1000)` y
+             `App.seekFromSlider` divide por 1000 —con el tope viejo el navegador CLAMPABA
+             el valor a 100, así que la perilla se quedaba pegada a la derecha desde la
+             primera vela (medido: índice 299/1500 → `value` 100; índice 1050 → 100) y
+             arrastrarla solo alcanzaba el 10 % del histórico (meter 500 se leía 100 →
+             10 %). La escala del elemento y la del código tienen que ser la misma. -->
+        <input type="range" id="progressRange" min="0" max="1000" value="0" step="1" aria-label="Posición del replay" title="Posición del replay: arrastra para saltar">
         <div class="rb-info">
           <span id="pbTime">—</span>
           <span class="rb-sep">·</span>
