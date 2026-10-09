@@ -25,7 +25,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8'))
 // está en GitHub Pages: tardan, dependen de la red y fallan durante el minuto que
 // Pages tarda en desplegar. No van en la batería local; se piden con --publicadas.
 const PUBLICADAS = ['test:pages', 'test:pages-dibujos', 'test:pages-promediar', 'test:pages-trailing',
-  'test:pages-bitunix'];   // las cinco abren LO PUBLICADO: sin despliegue no valen
+  'test:pages-bitunix', 'test:pages-pnl'];   // las seis abren LO PUBLICADO: sin despliegue no valen
 const pedirPublicadas = process.argv.includes('--publicadas');
 const nombres = Object.keys(pkg.scripts)
   .filter((k) => k.startsWith('test') && k !== 'test:all')

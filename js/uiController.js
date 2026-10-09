@@ -1077,6 +1077,9 @@
     // se refrescan con la misma cadencia que el resto de paneles.
     if (global.OB && OB.onTick) OB.onTick();
     UI.updateLimitHint && UI.updateLimitHint();
+    // Marcaje de posición + banda/etiqueta/curva de PnL (js/pnlChart.js): misma
+    // cadencia que el resto de paneles, y barato cuando no hay posición.
+    if (global.PC && PC.refresh) PC.refresh();
   };
 
   UI.refreshPriceTag = function () {
@@ -1123,6 +1126,7 @@
     const p = TE.state.position;
     const price = App.currentPrice();
     const tag = document.getElementById('posSide');
+    if (global.PC && PC.place) PC.place();   // la etiqueta va pegada al precio actual
     setText('tabPosCount', p ? '1' : '0');   // aviso en la pestaña «Posiciones»
     UI.syncPositionGraphics(p);
     if (!p) {

@@ -75,6 +75,10 @@
 
     // 3) Gráfico + herramientas de dibujo
     CM.init();
+    // Marcaje de la posición y PnL en el gráfico (js/pnlChart.js). Va después de
+    // CM.init porque necesita el chart ya creado, y antes de UI.init para que el
+    // panel esté en su sitio cuando la UI pinta por primera vez.
+    if (global.PC && PC.init) PC.init();
     DT.init(document.getElementById('overlayCanvas'));
     DT.defaultStyle = { color: '#00e5ff', width: 2, style: 'solid' };
 
@@ -376,6 +380,9 @@
     }
     App.candles = candles;
     App.source = opts.source || '—';
+    // Serie nueva = el resumen de la operación anterior ya no tiene sentido (sus
+    // tiempos no existen en esta vela-serie): se limpia el marcaje.
+    if (global.PC && PC.forgetSeries) PC.forgetSeries();
 
     // 1) Datos en el gráfico
     CM.setCandleData(candles);

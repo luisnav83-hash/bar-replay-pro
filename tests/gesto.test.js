@@ -107,7 +107,12 @@ const borrarTodo = (page) => page.evaluate(() => { DT.clearAll(true); App.refres
   /* ---------------- Recta inclinada ---------------- */
   console.log('\n▸ Trazo diagonal (línea de tendencia)');
   await borrarTodo(page);
-  await gesto(page, [{ x: X(0.22), y: Y(0.7) }, { x: X(0.45), y: Y(0.55) }, { x: X(0.68), y: Y(0.35) }]);
+  /* El clasificador de la app llama «horizontal» a un trazo cuya altura es menos
+     del 22 % de su ancho: con el gráfico encogido (ahora #chartWrap mide lo que le
+     toca, no lo que exige la barra de herramientas) un 0.70→0.35 se quedaba a
+     caballo de ese umbral. Se pide una diagonal CLARA (0.88 → 0.16), que es lo que
+     se quiere comprobar, no un caso límite del reconocimiento. */
+  await gesto(page, [{ x: X(0.22), y: Y(0.88) }, { x: X(0.45), y: Y(0.52) }, { x: X(0.68), y: Y(0.16) }]);
   d = await ultimoDibujo(page);
   ok(d && d.tipo === 'trend', `se reconoce como línea de tendencia (${d && d.tipo})`);
 

@@ -998,3 +998,36 @@ kbd {
   #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
   #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
 }
+
+/* ========================== PnL EN EL GRÁFICO (js/pnlChart.js) ==========================
+   La capa va encima del chart pero SIN capturar el puntero (pointer-events:none):
+   se puede dibujar, arrastrar SL/TP y hacer clic igual que sin ella. Z-index 5:
+   por debajo de la leyenda OHLC (6) para no comérsela nunca. */
+#pnlLayer { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+#pnlBand { position: absolute; border-top: 1px solid; border-bottom: 1px solid; }
+#pnlBand.pos { border-color: rgba(37, 202, 147, .55); background: rgba(37, 202, 147, .12); }
+#pnlBand.neg { border-color: rgba(246, 91, 85, .55); background: rgba(246, 91, 85, .12); }
+#pnlEntryTick { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(230, 231, 234, .34); }
+#pnlBadge {
+  position: absolute; display: flex; align-items: center; gap: 7px; padding: 4px 8px;
+  background: rgba(10, 10, 11, .93); border: 1px solid var(--line); border-left: 3px solid var(--tx-3);
+  font-family: var(--mono); font-size: 11px; color: var(--tx-1); white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+}
+#pnlBadge.ganando { border-left-color: var(--up); }
+#pnlBadge.perdiendo { border-left-color: var(--down); }
+#pnlBadgeQty { color: var(--tx-3); font-size: 10px; letter-spacing: .3px; }
+#pnlBadgeVal { font-size: 12.5px; font-weight: 700; }
+#pnlBadgePct, #pnlBadgeDelta { color: var(--tx-3); font-size: 10px; }
+#pnlBadgeReal { color: var(--tx-4); font-size: 10px; }
+#pnlPaneVal { font-family: var(--mono); }
+#panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
+
+@media (max-width: 640px) {
+  /* En el móvil el gráfico mide ~200px: la etiqueta se aprieta y el panel de PnL
+     baja a 92px para no quedarse con medio terminal. */
+  #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
+  #pnlBadgeVal { font-size: 11px; }
+  #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
+  #panePnl.indPane, #panePnl { height: 92px; }
+}

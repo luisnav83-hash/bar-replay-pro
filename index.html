@@ -232,6 +232,14 @@
         <button class="tool" id="btnSnap" title="Imán: ajustar los puntos a OHLC de la vela">◎</button>
       </div>
 
+      <div class="tool-cluster">
+        <!-- Marcar la posición en el gráfico y pintar su PnL (js/pnlChart.js):
+             marcadores en la vela de entrada, banda entre entrada y precio actual
+             y una curva de PnL en su propio panel. El estado se recuerda. -->
+        <button class="tool active" id="btnPnl" aria-pressed="true"
+                title="Marcar la posición en el gráfico y ver su PnL (banda, etiqueta y curva)">📈 PnL</button>
+      </div>
+
       <div class="tool-cluster tool-cluster-right">
         <button class="tool" id="btnAutoScale" title="Escala de precios: automática / fijar rango manual">📐A</button>
         <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
@@ -275,10 +283,29 @@
 
       <!-- HUD de medición -->
       <div id="measureHud" class="hidden"></div>
+
+      <!-- Capa de PnL (js/pnlChart.js). No captura el puntero: se puede operar,
+             dibujar y arrastrar líneas igual que sin ella. -->
+      <div id="pnlLayer" class="hidden" aria-hidden="true">
+        <div id="pnlEntryTick" class="hidden" title="vela de entrada"></div>
+        <div id="pnlBand" class="hidden"></div>
+        <div id="pnlBadge" class="hidden">
+          <span id="pnlBadgeQty">—</span>
+          <b id="pnlBadgeVal">—</b><span id="pnlBadgePct">—</span>
+          <span id="pnlBadgeDelta">—</span>
+          <span id="pnlBadgeReal" class="hidden"></span>
+        </div>
+      </div>
     </div>
 
     <!-- Paneles de indicadores inferiores (RSI / MACD / ATR) -->
     <div id="paneArea">
+      <!-- Panel de PnL (js/pnlChart.js): la curva del PnL no realizado de la
+           posición, en dólares, con su máximo y su mínimo marcados. -->
+      <div class="indPane hidden" id="panePnl" data-pane="pnl">
+        <div class="pane-head"><span class="pane-title">PnL <b id="pnlPaneNote">sin posición</b></span><span class="pane-val" id="pnlPaneVal">—</span><button class="pane-close" id="pnlPaneClose" title="Ocultar el panel de PnL">✕</button></div>
+        <div class="pane-chart" id="chartPnl"></div>
+      </div>
       <div class="indPane hidden" id="paneRsi" data-pane="rsi">
         <div class="pane-head"><span class="pane-title">RSI <b id="rsiParams">14</b></span><span class="pane-val" id="rsiValue">—</span><button class="pane-close" data-close-pane="rsi" title="Ocultar panel">✕</button></div>
         <div class="pane-chart" id="chartRsi"></div>
@@ -940,6 +967,7 @@
 <script src="js/tradingEngine.js"></script>
 <script src="js/barReplay.js"></script>
 <script src="js/chart.js"></script>
+<script src="js/pnlChart.js"></script>
 <script src="js/drawingTools.js"></script>
 <script src="js/orderBook.js"></script>
 <script src="js/uiController.js"></script>

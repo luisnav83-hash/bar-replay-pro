@@ -16,6 +16,12 @@
   /* toolbar · gráfico (flexible) · paneles de indicadores · barra de replay
      (auto: cabe aunque los controles pasen a dos filas) */
   grid-template-rows:var(--toolbar-h) minmax(0,1fr) auto auto;
+  /* minmax(0,1fr), y no 1fr a secas: la columna la dimensionan los MÍNIMOS de sus
+     items, y la barra de dibujo (#drawToolbar, flex con nowrap) mide 1102px de
+     contenido. Con 1fr el track se negaba a encoger y, al reducir la ventana, el
+     gráfico se quedaba de 1102px dentro de un viewport de 390 (recortado y con la
+     capa de PnL fuera de la pantalla). */
+  grid-template-columns:minmax(0,1fr);
   min-width:0;min-height:0;
   border-right:1px solid var(--line);
 }
@@ -24,7 +30,10 @@
 #drawToolbar{
   display:flex;align-items:center;gap:6px;padding:0 8px;
   background:var(--bg-2);border-bottom:1px solid var(--line);overflow-x:auto;
-}
+
+  /* min-width:0 + scroll: los botones de dibujo caben o deslizan, pero nunca
+     obligan al grid a medir lo que miden ellos. */
+  min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
 .tool-cluster{display:flex;align-items:center;gap:3px;padding-right:7px;border-right:1px solid var(--line-soft);}
 .tool-cluster:last-child{border-right:none;}
 .tool-cluster-right{margin-left:auto;padding-right:0;}
@@ -153,8 +162,14 @@
 }
 #tvCredit:hover{opacity:.9;}
 
-/* El gráfico nunca debe quedarse en una franja: tamaño mínimo garantizado */
-#chartWrap{min-height:240px;}
+/* El gráfico nunca debe quedarse en una franja: tamaño mínimo garantizado.
+   Y min-width:0, que no es decoración: #chartWrap es item del grid de #chartArea y
+   su contenido (el <div> de Lightweight Charts, que mide píxeles FIJOS) fijaba el
+   ancho mínimo del track. Resultado: al estrechar la ventana el gráfico no volvía a
+   encogerse (se quedaba de 1102 px dentro de un viewport de 390 y el recorte se lo
+   comía). Con min-width:0 el track puede reducir y el autoSize de la librería
+   re-mide solo ✓ */
+#chartWrap{min-height:240px;min-width:0;overflow:hidden;}
 #chartArea{min-height:340px;}
 
 /* ------------- Paneles estrechos (vista previa lateral o móvil) ------------- */

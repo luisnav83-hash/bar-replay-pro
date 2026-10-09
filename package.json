@@ -30,13 +30,15 @@
     "test:pages-promediar": "node tests/pages-promediar.js",
     "test:pages-trailing": "node tests/pages-trailing.js",
     "test:pages-bitunix": "node tests/pages-bitunix.js",
+    "test:pages-pnl": "node tests/pages-pnl.js",
     "test:enlaces": "node tests/enlaces.test.js",
     "test:temporalidad": "node tests/temporalidad.test.js",
     "test:entradas": "node tests/entradas.test.js",
     "test:arrastrar": "node tests/limite-arrastrar.test.js",
     "test:promediar": "node tests/promediar.test.js",
     "test:trailing": "node tests/trailing.test.js",
-    "test:bitunix": "node tests/bitunix.test.js"
+    "test:bitunix": "node tests/bitunix.test.js",
+    "test:pnl": "node tests/pnl-chart.test.js"
   },
   "keywords": [
     "backtesting",

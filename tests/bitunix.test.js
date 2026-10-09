@@ -90,7 +90,17 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const R = (el) => { const r = el.getBoundingClientRect(); return { y: Math.round(r.y), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height) }; };
     const dentro = (padre, id) => !!(g(id) && g(padre) && g(id).closest('#' + padre) === g(padre));
     const ids = [...document.querySelectorAll('[id]')].map((e) => e.id);
-    const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+    /* Lightweight Charts mete su marca de agua (id="tv-attr-logo") y un clipPath
+       interno (id="a") DENTRO de cada chart que se crea (principal, paneles de
+       indicadores, panel de PnL y equity): se repiten por construcción y no son del
+       HTML de la app. Se miden aparte, para que un duplicado REAL del marcado siga
+       saltando. */
+    const CHARTS = '#mainChart, #chartRsi, #chartMacd, #chartAtr, #chartPnl, #equityChart';
+    const propios = [...document.querySelectorAll('[id]')].filter((e) => !e.closest(CHARTS));
+    const idsPropios = propios.map((e) => e.id);
+    const dup = idsPropios.filter((x, i) => idsPropios.indexOf(x) !== i);
+    const dupLib = [...document.querySelectorAll('[id]')].filter((e) => e.closest(CHARTS)).map((e) => e.id)
+      .filter((x, i, arr) => arr.indexOf(x) !== i);
     return {
       statsEnBarra: dentro('topbar', 'bfStats'),
       statsAltura: g('bfStats') ? Math.round(g('bfStats').getBoundingClientRect().height) : 0,
@@ -110,6 +120,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       indicadoresVivos: dentro('sidebar', 'panelsCard'),
       tabs: [...document.querySelectorAll('.tabs .tab')].map((t) => t.dataset.tab),
       duplicados: [...new Set(dup)],
+      duplicadosLib: [...new Set(dupLib)],
       cajas: { ws: R(g('workspace')), chart: R(g('chartArea')), bottom: R(g('bottomPanel')) },
       faltanHeredados: ['pairSelect', 'tfQuick', 'startDate', 'btnLoad', 'btnQuick', 'btnImport', 'btnDemo', 'btnIndicators',
         'btnSessions', 'btnExport', 'btnShot', 'btnSettings', 'btnHelp', 'mainChart', 'overlayCanvas', 'paneArea', 'replayBar',
@@ -136,7 +147,9 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est.tradesEnPestañas && est.logEnPestañas && est.dibujosEnPestañas, 'trades, log y dibujos siguen accesibles por pestaña');
   ok(est.indicadoresVivos, 'los paneles de indicadores se reubican, no se eliminan');
   ok(est.tabs.join() === 'positions,openorders,trades,account,stats,log,drawings', `pestañas: ${est.tabs.join(' · ')}`);
-  ok(est.duplicados.length === 0, `sin ids duplicados${est.duplicados.length ? ' → ' + est.duplicados.join(',') : ''}`);
+  ok(est.duplicados.length === 0, `sin ids duplicados en el marcado de la app${est.duplicados.length ? ' → ' + est.duplicados.join(',') : ''}`);
+  ok(est.duplicadosLib.every((x) => x === 'tv-attr-logo' || x === 'a'),
+     `lo único que se repite dentro de los charts es lo que inyecta la librería (${est.duplicadosLib.join(', ') || 'nada'})`);
   ok(est.faltanHeredados.length === 0, est.faltanHeredados.length ? 'FALTAN ids heredados: ' + est.faltanHeredados.join(',') : 'los 55 ids que consumen motor y suites siguen en el DOM');
   ok(est.faltanNuevos.length === 0, est.faltanNuevos.length ? 'FALTAN ids nuevos: ' + est.faltanNuevos.join(',') : 'los 41 ids nuevos del terminal existen');
   ok(est.cajas.bottom.y >= est.cajas.ws.bottom - 2 && est.cajas.chart.h > 200, 'el panel inferior cierra la ventana sin solapar el workspace');
