@@ -1249,6 +1249,67 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 #panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
 
 @media (max-width: 640px) {
+  /* ───────────── LA BARRA SUPERIOR DEL TELÉFONO: 135 → ~106 px ─────────────
+     Medido a 390×844 antes de esto, las tres filas gastaban 38 (marca + iconos) + 51
+     (par, temporalidad, fechas, DEMO) + 36 (estadísticas 24 h) = 125, más 10 de padding
+     de la barra. Con el formulario de órdenes ya compactado, el andamio es lo único que
+     separa al gráfico de 200 px, así que se aprietan las tres filas a la vez SIN OCULTAR
+     NADA: la fila del par ya era deslizable en horizontal (`.topbar-group{overflow-x:auto}`
+     en el bloque de ≤1000), luego las siete temporalidades y los botones de carga siguen
+     todos ahí; lo que cambia es la FORMA:
+       · la marca, a 22 px de logo y 12 de letra (es logotipo, no información);
+       · los iconos de la derecha, diana de 24 —el mínimo táctil de 20 que mide
+         `tests/bitunix.test.js` se mantiene—;
+       · par, temporalidad y fechas con la ETIQUETA EN LÍNEA (44 → 30 por campo), igual que
+         en los campos del formulario;
+       · la fila de estadísticas, con la cifra a 12 px en vez de 15 (valor y subtítulo se
+         siguen leyendo: 12 y 8 px). */
+  /* El alto de la fila de estadísticas es UNA VARIABLE (`--stats-h`, y `@media
+     ≤1000` la deja en 34 px), no el contenido: por eso poner los chips en una línea no
+     bastaba —la fila seguía midiendo 36 con 22 de contenido—. Se baja el escalón del
+     teléfono a 24, que es lo que piden etiqueta + cifra + subtítulo en línea. */
+  :root { --stats-h: 24px; }
+  #topbar { padding: 2px 8px 3px; }
+  #topbar .brand { padding: 1px 0; gap: 6px; }
+  #topbar .brand-logo { width: 22px; height: 22px; }
+  #topbar .brand-name { font-size: 12px; line-height: 1.05; }
+  #topbar .topbar-right { padding: 1px 0; gap: 4px; }
+  #topbar .topbar-right .btn-icon { height: 24px; padding: 0 5px; }
+  #topbar .topbar-group:not(.topbar-right) { padding: 2px 0; gap: 8px; }
+  #topbar .topbar-group .field { flex-direction: row; align-items: center; gap: 5px; min-height: 26px;
+                                margin-bottom: 0; }
+  /* `margin-bottom:0`, que no es adorno: `.field` arrastra 7 px de margen para los
+     formularios en columna y aquí se sumaban a la fila (30 de campo + 7 + 4 de padding
+     = 41 de fila). Con eso fuera, la fila del par mide 34. */
+  #topbar .topbar-group input[type="date"], #topbar .topbar-group input[type="datetime-local"] { height: 26px; padding: 0 6px; font-size: 11px; }
+  #topbar .topbar-group .field-label { font-size: 9px; white-space: nowrap; }
+  #topbar .topbar-group .btn { height: 26px; padding: 0 8px; font-size: 11px; }
+  #topbar #btnSymbols { height: 26px; padding: 0 7px; font-size: 11px; }
+  #topbar #tfQuick { gap: 2px; }
+  #topbar #tfQuick .tf-btn { height: 24px; padding: 0 6px; font-size: 10.5px; }
+  /* Estadísticas 24 h en UNA LÍNEA por chip (36 → 22 px de fila): con la etiqueta
+     encima del valor cada chip medía 35 y la fila entera 36, el triple de lo que ocupa
+     «Último 72,690.76» escrito seguido —que es además como las muestra la app de
+     Bitunix en el teléfono—. La fila ya es deslizable, así que el ancho extra no cuesta
+     nada; lo que se gana van 14 px para el gráfico. */
+  #topbar .bf-stat { flex-direction: row; align-items: center; gap: 4px; padding: 2px 8px;
+                     max-width: none; }
+  /* `max-width:none` no es decorativo: la regla base topa cada chip a 230 px (bien en
+     escritorio, con la etiqueta encima de la cifra), y al pasar las tres piezas a una
+     línea el subtítulo ya no cabía —`.bf-sub` tiene `text-overflow:ellipsis`, así que
+     en el teléfono se leía «máx 72,966.00 · mín 68,39…» y el mínimo del día se perdía
+     (medido: 258 px de contenido contra 230 de caja)—. Sin tope, el chip ocupa lo que
+     pide y la fila, que ya es deslizable, se desliza 30 px más: ningún dato fuera. */
+  #topbar .bf-stat .bf-k { font-size: 8px; }
+  #topbar .bf-stat .bf-v { font-size: 12px; line-height: 1.1; }
+  #topbar .bf-stat .bf-sub { font-size: 8px; }
+  #topbar .bf-stat .bf-bar { width: 46px; flex: 0 0 auto; }
+  /* La nota del origen de los datos (`#bfSource`) viene con `flex:1 1 auto` para ceder
+     sitio en el escritorio, y en el teléfono se quedaba en 16 px: ni una letra de «libro:
+     derivado del replay · futuros: sí». Pide su ancho natural y se alcanza deslizando la
+     fila, como el resto de las estadísticas. */
+  #topbar .bf-stat.bf-src { flex: 0 0 auto; max-width: none; }
+
   /* En el móvil el gráfico mide ~200px: la etiqueta se aprieta y el panel de PnL
      baja a 92px para no quedarse con medio terminal. */
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }

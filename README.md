@@ -320,7 +320,7 @@ también a 1440 px).
 **En ventana baja, el andamio se encoge; el gráfico, no.** `css/bitunix.css` define
 los escalones de altura (≤860 / ≤820 / ≤700 / ≤560 px) que recortan estadísticas,
 barra de replay y panel inferior hasta ~104 px. Dos leyes probadas por
-`tests/responsive.test.js` (74 comprobaciones) y `tests/browser.capture.js`:
+`tests/responsive.test.js` (81 comprobaciones) y `tests/browser.capture.js`:
 el gráfico conserva ≥150 px (≥200 px si el hueco es de ≥720) y **ningún tope de
 altura se pone sin su `overflow`** —un `max-height` con `overflow:visible` dejaba
 el botón «⏳ Límite`» fuera de la caja y era inclicable a 1280×820 (de ahí el
@@ -520,7 +520,7 @@ node tests/network.test.js    #  10 comprobaciones de paginación y datos reales
 node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  74 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  81 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
                               #   + el bloque «Avanzado» del teléfono, medido pulsando
@@ -570,7 +570,7 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1088 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1095 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1382 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
@@ -868,6 +868,35 @@ bar-replay-app/
   **72** y RSI 52 → **44 px**. Resultado: la fila del gráfico en 390×844 pasa de 43 a
   **146 px** y en 480×900 a **204 px** —los 200 que pide `tests/browser.capture.js`, que
   se cumplen sin tocar nada más—, con caja == fila y 0 px de solape en las dos.
+- **La barra superior del teléfono, 135 → 90 px (2026-10-09).** Con el formulario de
+  órdenes ya compactado, lo único que separaba al gráfico de 200 px era el andamio de
+  arriba: 38 (marca + iconos) + 51 (par, temporalidad, fechas, DEMO) + 36 (estadísticas
+  24 h) + 10 de padding. Se aprieta **sin ocultar nada** (la fila del par ya era
+  deslizable en horizontal, así que las siete temporalidades y los botones de carga siguen
+  todos ahí), y todo lo que baja es medido:
+  · marca a 22 px de logo y 12 de letra; iconos a 26 de diana (el mínimo táctil de 20 del
+    contrato se respeta);
+  · par, temporalidad y fechas con la **etiqueta en línea** y `margin-bottom:0` en
+    `.field` —dentro de la barra esos 7 px del margen de los formularios en columna eran
+    la diferencia entre una fila de 41 y una de 32—: fila 51 → **32 px**;
+  · estadísticas 24 h con cifra a 12 px, etiqueta y subtítulo **en la misma línea**, y
+    `--stats-h: 24px` en el teléfono: fila 36 → **24 px**. Ese `--stats-h` es la trampa:
+    la regla base le da un `height` fijo a `.bf-stats`, así que poner los chips en una
+    línea no bastaba —la fila seguía midiendo 36 con 22 de contenido—;
+  · y la que sí era un defecto de verdad: `.bf-stat` tope a `max-width:230px` con
+    `text-overflow:ellipsis`. Al pasar a una línea, «máx 72,966.00 · mín 68,390.00»
+    medía 258 contra 230 de caja y **el mínimo del día se leía roto en el móvil**. Sin
+    tope, cada chip pide su ancho y la fila desliza 30 px más: ningún dato fuera (lo
+    comprueba `tests/responsive.test.js` midiendo `scrollWidth > clientWidth` de cada
+    cifra y `tests/pages-bitunix.js` sobre lo publicado).
+  Resultado medido en 390×844: barra **90 px** (filas 28/32/24), fila del gráfico
+  **189 px** con la escalera por defecto del propio build publicado y **234 px** con los
+  paneles de indicadores cerrados (antes 146 y 189), **146 px** en el peor caso de tres
+  paneles —ahí el límite lo fija el mínimo de los paneles, no el andamio, y la ganancia
+  se la comen ellos: por eso el contrato de esta fila es geométrico (caja == fila,
+  solape 0) y no un número—; `docH == vh` (la página sigue sin deslizar), 0 px de scroll
+  horizontal y la temporalidad activa y el botón DEMO, alcanzables deslizando su fila
+  (`no → sí` con `elementFromPoint` en el centro).
   **La franja de órdenes se quedó en 250 px, y no fue pereza**: bajarla a 200 metía 48 px
   de velas más en el gráfico pero sacaba del recorte el botón del trailing y las filas de
   TP/SL —`tests/pages-trailing.js` lo cantó sobre lo publicado («el centro del botón está
