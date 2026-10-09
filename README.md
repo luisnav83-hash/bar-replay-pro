@@ -499,7 +499,7 @@ node tests/pnl-chart.test.js      # 151 comprobaciones del MARCAJE DE PnL sobre 
                                 #   (gesto táctil por CDP), alto del panel y mini de la tarjeta, y el recorrido sellado
                                 #   en el historial (I): 13 celdas contra 13 cabeceras, picos conservados por
                                 #   PC.reduce, title con máx/mín, y celda vacía en un trade sin recorrido
-node tests/pages-pnl.js          #   64 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+node tests/pages-pnl.js          #   65 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
                                 #   (sobre el build local son 60 ✓ y 2 omitidas: las 3 comprobaciones de la
                                 #   pestaña nueva se cambian por 2 skip, porque en file:// no hay origen
                                 #   compartido donde medir la preferencia cruzada)
@@ -520,11 +520,11 @@ Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue
 **1073 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1333 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1053 locales + 284 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `13418fa` — y el `md5` del archivo publicado (`d7f3af9e…`, 921 425 B)
+**1360 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1073 locales + 287 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `78ec625` — y el `md5` del archivo publicado (`9ef3ff5d…`, 934 257 B)
 coincide byte a byte con el del build local: 12 del buscador + 10 de dibujos +
-46 de promediado/TP + 57 del trailing + 95 de la piel Bitunix + 64 del marcaje de PnL)
+46 de promediado/TP + 57 del trailing + 97 de la piel Bitunix + 65 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
@@ -642,7 +642,7 @@ bar-replay-app/
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
     ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (151)
-    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (64)
+    ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (65)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
 
