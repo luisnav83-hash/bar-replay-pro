@@ -135,10 +135,16 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(B.d.marcas >= 1 && B.d.velas >= 2, `hay ${B.d.marcas} marcador(es) y una curva de ${B.d.velas} velas desde la entrada`);
   ok(/LONG/.test(B.qtyTxt) && B.qtyTxt.includes(B.fmtEntrada), `la etiqueta dice el lado, el tamaño y la entrada: «${B.qtyTxt}»`);
   ok(B.qtyTxt.includes(B.fmtCifras), 'y el tamaño, con separadores españoles');
-  ok(/^\+\$/.test(B.etiqueta), `el PnL de la etiqueta va en dólares y con signo (${B.etiqueta})`);
+  // Que la recién abierta vaya en VERDE depende del tramo que haya tocado; lo que se
+  // comprueba aquí es el FORMATO: dólares, con su signo y con decimales.
+  ok(/^[+\u2212-]\$[\d.,]+$/.test(B.etiqueta), `el PnL de la etiqueta va en dólares, con signo y decimales (${B.etiqueta})`);
   ok(/%\s*$/.test(B.pct), `y el porcentaje con su símbolo (${B.pct})`);
   ok(/[▲▼=]/.test(B.delta), `la etiqueta muestra cómo se ha movido la última vela (${B.delta})`);
-  ok(B.d.colores.banda === 'pos' && B.d.colores.badge === 'ganando', 'banda y etiqueta en verde mientras el PnL es positivo');
+  // Y el color se exige CONTRA EL SIGNO del motor (el paseo puede empezar ganando o
+  // perdiendo según el tramo de la serie de práctica: la semana pasada tocó perder).
+  const esperadoB = B.actual > 0 ? ['pos', 'ganando'] : B.actual < 0 ? ['neg', 'perdiendo'] : [B.d.colores.banda, B.d.colores.badge];
+  ok(B.d.colores.banda === esperadoB[0] && B.d.colores.badge === esperadoB[1],
+     `banda y etiqueta van en el color que marca el motor (PnL ${B.actual.toFixed(2)} → ${B.d.colores.banda}/${B.d.colores.badge})`);
   ok(B.d.marcasTxt.some((t) => /LONG/.test(t)), `el marcador de entrada está sobre la vela («${B.d.marcasTxt[0] || ''}»)`);
   ok(B.d.serie === B.velasTraza, `la serie del panel tiene los mismos puntos que la traza (${B.d.serie})`);
   ok(B.geom.banda.w > 0 && B.geom.banda.h >= 2, `la banda mide ${B.geom.banda.w}×${B.geom.banda.h} px entre la entrada y el precio actual`);
@@ -324,6 +330,213 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(numNeg < 0 && cerca(numNeg, neg.pnl, 0.02), `y el número es el negativo del motor (${numNeg} ≈ ${neg.pnl.toFixed(4)})`);
   ok(neg.panel.startsWith('−'), `el panel también lo pinta en negativo (${neg.panel})`);
 
+  /* ═════════ G) ASA DEL ALTO DEL PANEL: ARRASTRE, TOPE, TECLADO, PERSISTENCIA ═════════ */
+  console.log('\n▸ G) El panel de PnL se estira arrastrando su asa');
+  const Rs0 = await page.evaluate(() => {
+    const a = document.getElementById('pnlPaneResize'), p = document.getElementById('panePnl');
+    const r = a.getBoundingClientRect(), cs = getComputedStyle(a);
+    return {
+      alto: PC.alto(), guardado: ST.get('pnlPaneAlto', null),
+      asa: { w: Math.round(r.width), h: Math.round(r.height), role: a.getAttribute('role'),
+             tab: a.getAttribute('tabindex'), label: a.getAttribute('aria-label') || '',
+             curso: cs.cursor, tacto: cs.touchAction },
+      lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
+      dentro: !!(p && p.contains(a)),
+    };
+  });
+  ok(Rs0.asa.role === 'separator' && Rs0.asa.tab === '0' && /pnL|PnL/.test(Rs0.asa.label),
+     `el asa es un separador accesible (role ${Rs0.asa.role}, tabindex ${Rs0.asa.tab}, «${Rs0.asa.label}»)`);
+  ok(Rs0.asa.curso === 'ns-resize' && Rs0.asa.tacto === 'none',
+     `el asa anuncia ns-resize y corta el scroll del dedo (${Rs0.asa.curso} / ${Rs0.asa.tacto})`);
+  ok(Rs0.dentro && Rs0.asa.h >= 6 && Rs0.asa.w > 200, `asa medible DENTRO del panel: ${Rs0.asa.w}×${Rs0.asa.h} px`);
+  ok(Rs0.guardado === null, 'sin tocar nada no hay alto guardado: manda lo que dice el CSS');
+
+  // Arrastre real con el ratón, desde el centro del asa, 8 pasos de 12 px hacia arriba.
+  const caja = await page.evaluate(() => {
+    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
+  await page.mouse.move(caja.x, caja.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) { await page.mouse.move(caja.x, caja.y - i * 12); await espera(25); }
+  await page.mouse.up();
+  await espera(400);
+  const Rs1 = await page.evaluate(() => ({
+    d: PC.debug(),
+    lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
+  }));
+  ok(Rs1.d.alto === Rs0.alto + 96, `arrastrar 96 px hacia arriba estira el panel 96 px (${Rs0.alto} → ${Rs1.d.alto})`);
+  ok(Rs1.lienzo < Rs0.lienzo, `y el gráfico cede el sitio exacto (lienzo ${Rs0.lienzo} → ${Rs1.lienzo})`);
+  ok(Rs1.d.asa.val === String(Rs1.d.alto), `el separador dice su alto (aria-valuenow ${Rs1.d.asa.val})`);
+  ok(Rs1.d.altoGuardado === Rs1.d.alto, 'el alto se guarda AL SOLTAR, no en cada fotograma del arrastre');
+
+  // Tope: se tira con todo (900 px) y el panel no puede comerse el gráfico.
+  // El ASA se ha movido con el panel (el panel crece hacia arriba), así que su
+  // posición se vuelve a medir AQUÍ: reutilizar la de antes dejaba el ratón sobre
+  // el gráfico y el arrastre no hacía nada (ese era el ✗, no un tope roto).
+  const cajaTope = await page.evaluate(() => {
+    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
+  await page.mouse.move(cajaTope.x, cajaTope.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 6; i++) { await page.mouse.move(cajaTope.x, cajaTope.y - i * 150); await espera(25); }
+  await page.mouse.up();
+  await espera(400);
+  const Rs2 = await page.evaluate(() => ({
+    d: PC.debug(),
+    area: Math.round(document.getElementById('chartArea').getBoundingClientRect().height),
+    lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
+  }));
+  const tope = Math.min(Rs2.d.altoMax, Math.max(Rs2.d.altoMin + 40, Math.round(Rs2.area * 0.45)));
+  ok(Rs2.d.alto === tope, `el asa se topa con lo que cabe: alto ${Rs2.d.alto} (tope ${tope} = 45 % del área de ${Rs2.area})`);
+  ok(Rs2.lienzo >= 150, `y el gráfico conserva sus 150 px de contrato (${Rs2.lienzo} px)`);
+
+  // Teclado: el asa es focusable y las flechas ajustan (Mayús = paso grande).
+  await page.evaluate(() => document.getElementById('pnlPaneResize').focus());
+  // Se baja 5 pasos primero: si no, el paso grande de Mayús choca contra el tope
+  // y el número deja de decir nada de la tecla (eso era el ✗, no un keyboard roto).
+  for (let i = 0; i < 5; i++) { await page.keyboard.press('ArrowDown'); await espera(90); }
+  await espera(200);
+  const Rs3 = await page.evaluate(() => PC.debug());
+  ok(Rs3.alto === Rs2.d.alto - 60, `las flechas ajustan de 12 en 12 (${Rs2.d.alto} → ${Rs3.alto}, cinco pulsaciones)`);
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.up('Shift');
+  await espera(300);
+  const Rs4 = await page.evaluate(() => PC.debug());
+  ok(Rs4.alto === Rs3.alto + 40, `con Mayús el paso es de 40 (${Rs3.alto} → ${Rs4.alto})`);
+
+  // Persistencia de verdad: OTRA pestaña, mismo origen, arranque nuevo.
+  const pAlta = await browser.newPage();
+  await pAlta.setViewport({ width: 1440, height: 900 });
+  await pAlta.goto(FILE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await pAlta.waitForFunction('window.App && App.candles.length > 0', { timeout: 40000 });
+  await pAlta.waitForFunction('window.PC && typeof PC.refresh === "function"', { timeout: 15000 });
+  await espera(700);
+  const Rs5 = await pAlta.evaluate(() => ({ alto: PC.alto(), g: ST.get('pnlPaneAlto', null) }));
+  ok(Rs5.alto === Rs4.alto && Rs5.g === Rs4.alto,
+     `otro arranque arranca con el alto guardado (${Rs5.alto} px, preferencia ${Rs5.g})`);
+  await pAlta.close();
+
+  // Doble clic: se devuelve el alto al CSS y se borra la preferencia (que el móvil
+  // y el resto de bloques midan siempre el estado por defecto).
+  await page.evaluate(() => {
+    document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  await espera(350);
+  const Rs6 = await page.evaluate(() => ({
+    d: PC.debug(),
+    inline: document.getElementById('panePnl').style.height,
+    g: ST.get('pnlPaneAlto', null),
+  }));
+  ok(Rs6.inline === '' && Rs6.g === null, 'doble clic: fuera el alto a mano y fuera la preferencia');
+  ok(Rs6.d.alto === Rs0.alto, `el panel vuelve a su alto de CSS (${Rs0.alto} px)`);
+  const Rs7 = await page.evaluate(() => {
+    const d = PC.debug(), c = d.geometria.chart, b = d.geometria.banda, e = d.geometria.etiqueta;
+    const dentro = (x) => x && x.x >= c.x - 1 && x.x + x.w <= c.x + c.w + 1 && x.y >= c.y - 1 && x.y + x.h <= c.y + c.h + 1;
+    return { banda: dentro(b), etiqueta: dentro(e), d };
+  });
+  ok(Rs7.banda && Rs7.etiqueta, 'tras todo el meneo, banda y etiqueta siguen dentro del lienzo');
+
+  /* ═══════════════════ H) MINI-PnL EN LA TARJETA DE LA POSICIÓN ═══════════════════ */
+  console.log('\n▸ H) El mini-PnL de la tarjeta pinta el mismo recorrido');
+  // Se mide píxel a píxel el canvas: verde/rojo son los colores del tema, así que
+  // contar pigmento es comprobar el color SIN fiarse de ninguna clase.
+  const miniMedido = () => page.evaluate(() => {
+    const d = PC.debug(), c = document.getElementById('posPnlSpark'), x = c.getContext('2d');
+    const dat = x.getImageData(0, 0, c.width, c.height).data;
+    let verde = 0, rojo = 0, tinta = 0;
+    for (let i = 0; i < dat.length; i += 4) {
+      if (dat[i + 3] > 0) tinta++;
+      if (dat[i + 3] > 60 && dat[i + 1] > 140 && dat[i] < 120) verde++;
+      if (dat[i + 3] > 60 && dat[i] > 180 && dat[i + 1] < 130) rojo++;
+    }
+    // «máx +$4,17 · mín −$20,76»: el menos del DOM es tipográfico (U+2212), así que
+    // se normaliza ANTES de parsear (si no, el mínimo sale positivo y la comparación
+    // miente).
+    const txt = ((d.mini || {}).nota || '').replace(/\u2212/g, '-');
+    const nums = (txt.match(/-?\$[\d.]+,\d{2}/g) || [])
+      .map((t) => parseFloat(t.replace(/[$.]/g, '').replace(',', '.')));
+    return { d, tinta, verde, rojo, nums, nota: d.mini.nota, vacio: d.mini.vacio,
+             actual: TE.state.position ? TE.unrealized(App.currentPrice()) : NaN,
+             cw: d.mini.cw, bw: d.mini.w };
+  });
+  const Sp0 = await miniMedido();
+  ok(Sp0.d.mini && Sp0.cw > 60 && Sp0.d.mini.h >= 20,
+     `el mini existe en la tarjeta (${Sp0.cw}×${Sp0.d.mini.h} px CSS, lienzo ${Sp0.bw} px)`);
+  await page.evaluate(() => { document.getElementById('sizeInput').value = '30'; document.getElementById('btnLong').click(); });
+  await espera(400);
+  await paso(18);
+  await espera(450);
+  const Sp1 = await miniMedido();
+  ok(Sp1.vacio === false && Sp1.tinta > 200, `con posición el mini se pinta (${Sp1.tinta} px con tinta, nota «${Sp1.nota}»)`);
+  ok(Sp1.nums.length === 2 && cerca(Sp1.nums[0], Sp1.d.max, 0.02) && cerca(Sp1.nums[1], Sp1.d.min, 0.02),
+     `su «máx/mín» ES el de la traza (${Sp1.nums.join(' / ')} vs ${Sp1.d.max.toFixed(2)} / ${Sp1.d.min.toFixed(2)})`);
+  // El color del mini tiene que seguir el signo del último punto —no un deseo del
+  // test: con la serie de práctica el paseo de 18 velas puede acabar en verde o en
+  // rojo, y en los dos casos el mini debe decirlo.
+  ok(Sp1.d.ultimo > 0 ? Sp1.verde > Sp1.rojo : Sp1.rojo > Sp1.verde,
+     `el trazo va en el color del signo (último ${Sp1.d.ultimo.toFixed(2)} → ${Sp1.verde} px verdes / ${Sp1.rojo} rojos)`);
+  ok(cerca(Sp1.actual, Sp1.d.ultimo, 0.02), `el punto final del mini es el PnL del motor (${Sp1.actual.toFixed(2)})`);
+  // En contra: se pone rojo. Se fuerza la entrada para que el corto nazca perdiendo.
+  await page.evaluate(() => { document.getElementById('btnFlatten').click(); });
+  await espera(300);
+  await page.evaluate(() => { document.getElementById('sizeInput').value = '20'; document.getElementById('btnShort').click(); });
+  await espera(300);
+  // En un CORTO, para nacer perdiendo hay que bajarle la entrada (el PnL del corto es
+  // entrada − precio; al subirla se ganaría). Se fuerza un 4 %: más de lo que se
+  // mueve BTC en 10 velas de 1h, así que el caso «en contra» está garantizado y el
+  // test lo comprueba ANTES de mirar el color (si el escenario no diera, diría ✗).
+  await page.evaluate(() => { const p = TE.state.position; if (p) p.entryPrice *= 0.96; });
+  await paso(10);
+  await espera(450);
+  const Sp2 = await miniMedido();
+  ok(Sp2.d.ultimo < 0, `el corto forzado va en contra de verdad (${Sp2.d.ultimo.toFixed(2)})`);
+  ok(Sp2.rojo > Sp2.verde, `y el mini se pinta de rojo (${Sp2.verde} verdes vs ${Sp2.rojo} rojos)`);
+  // Sin traza: vacío Y dicho (no se queda con el dibujo anterior pegado).
+  await page.evaluate(() => { document.getElementById('btnFlatten').click(); PC.forgetSeries(); });
+  await espera(350);
+  const Sp3 = await miniMedido();
+  ok(Sp3.vacio === true && Sp3.tinta === 0, `sin traza el mini se queda vacío y lo dice («${Sp3.nota}»)`);
+  // Decisión de diseño probada: el interruptor 📈 apaga el marcaje SOBRE EL GRÁFICO;
+  // el mini vive en la tarjeta de la posición, así que sigue contando mientras haya
+  // posición abierta.
+  await page.evaluate(() => { document.getElementById('sizeInput').value = '25'; document.getElementById('btnLong').click(); });
+  await espera(450);
+  await paso(6);
+  await espera(350);
+  const Sp4a = await miniMedido();
+  await page.evaluate(() => PC.setEnabled(false, true));
+  await espera(350);
+  const Sp4 = await miniMedido();
+  ok(Sp4.d.panel === false && Sp4.d.bandaOculta === true, 'apagado el marcaje, el panel del gráfico desaparece y la banda se oculta');
+  ok(Sp4a.tinta > 200 && Sp4.tinta > 200,
+     `mientras tanto el mini de la tarjeta sigue ahí y sin cambiar (${Sp4a.tinta} → ${Sp4.tinta} px de tinta)`);
+  await page.evaluate(() => PC.setEnabled(true, true));
+  await espera(350);
+
+  // Captura del incremento: el panel estirado y el mini de la tarjeta, recortada a
+  // la zona donde viven las dos piezas (así se ven los detalles sin buscarlos).
+  await page.evaluate(() => PC.setAlto(184, false));
+  await espera(500);
+  const cajaCaptura = await page.evaluate(() => {
+    const p = document.getElementById('panePnl').getBoundingClientRect();
+    const c = document.getElementById('positionCard').getBoundingClientRect();
+    // Se sube 34 px sobre el panel para que la captura incluya su ENCABEZADO
+    // («PNL · N velas desde la entrada» y el valor), que es parte de lo que se muestra.
+    const x = Math.max(0, Math.min(p.left, c.left) - 8), y = Math.max(0, Math.min(p.top, c.top) - 34);
+    const r = Math.max(p.right, c.right) + 8, bo = Math.max(p.bottom, c.bottom) + 8;
+    return { x: Math.round(x), y: Math.round(y), width: Math.round(r - x), height: Math.round(bo - y) };
+  });
+  await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-41-alto-panel-y-mini.png'), clip: cajaCaptura });
+  ok(cajaCaptura.width > 400 && cajaCaptura.height > 120,
+     `captura del incremento escrita (docs/captura-41-alto-panel-y-mini.png, ${cajaCaptura.width}×${cajaCaptura.height} px)`);
+  await page.evaluate(() => {
+    document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  await espera(250);
+
   /* ═════════════ E) INTERRUPTOR Y PREFERENCIA GUARDADA ═════════════ */
   console.log('\n▸ E) Interruptor 📈 PnL y preferencia guardada');
   const E1 = await page.evaluate(async () => {
@@ -407,6 +620,21 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(F.inner[0] === F.inner[1] && F.inner[2] <= F.inner[0] + 2, `el layout del móvil es de verdad de 390 (${F.inner.join(' / ')})`);
   ok(F.ox === 0, `sin scroll horizontal en el móvil (${F.ox} px)`);
   ok(F.panelAlto <= 100 && F.panelAlto >= 60, `el panel de PnL en móvil mide ${F.panelAlto} px (no se come el terminal)`);
+  // En móvil el asa tiene que seguir siendo agarrable y el mini tiene que dibujarse
+  // a la resolución real del dispositivo (deviceScaleFactor 2 en esta corrida).
+  const Mo = await page.evaluate(() => {
+    const m = document.getElementById('posPnlSpark'), a = document.getElementById('pnlPaneResize');
+    const r = m.getBoundingClientRect(), ra = a.getBoundingClientRect(), cs = getComputedStyle(a);
+    return { cw: Math.round(r.width), dpr: Math.min(3, window.devicePixelRatio || 1),
+             bw: m.width, bh: m.height, asaW: Math.round(ra.width), asaH: Math.round(ra.height),
+             tacto: cs.touchAction, enTarjeta: !!m.closest('#positionCard'),
+             enFila: !!m.closest('.kv'), nota: (document.getElementById('posPnlSparkNote') || {}).textContent || '' };
+  });
+  ok(Mo.bw >= Mo.cw * Mo.dpr - 4 && Mo.bh >= 20 * Mo.dpr - 4,
+     `el mini se dibuja a ${Mo.dpr}x en el móvil (lienzo ${Mo.bw}×${Mo.bh} para ${Mo.cw} px CSS)`);
+  ok(Mo.asaH >= 11 && Mo.asaW > 60 && Mo.tacto === 'none',
+     `el asa sigue siendo agarrable a dedo (${Mo.asaW}×${Mo.asaH} px, touch-action ${Mo.tacto})`);
+  ok(Mo.enTarjeta && Mo.enFila, `el mini vive en la fila de la tarjeta de la posición (nota «${Mo.nota}»)`);
   ok(F.d.velas >= 2 && F.d.marcas >= 1, `y sigue pintando ${F.d.velas} velas de curva con ${F.d.marcas} marcador(es)`);
 
   const G = await page.evaluate(async () => {

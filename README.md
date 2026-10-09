@@ -104,11 +104,26 @@ mirar el indicador nunca revela el futuro.
   incluidas, o sea el mismo que se cobra la cuenta). Al cerrar, el resumen **se
   queda** en pantalla y la curva se queda congelada en sus velas: se puede seguir
   moviendo el replay sin que crezca.
+- **El panel de PnL se estira**: arrastra su asa (⬍, pegada al borde superior del
+  panel) y el panel crece comiéndole sitio al gráfico; con **Mayús + ↑/↓** el paso es
+  de 40 px y con **doble clic** vuelve al suyo. El alto elegido se recuerda
+  (`ST 'pnlPaneAlto'`), se **recorta solo** a lo que cabe (entre 56 px y el 45 % del
+  área, para que el gráfico conserve sus 150 px de contrato incluso a 390 px de
+  ancho) y el asa no se come la ✕ del panel ni convierte el gesto en scroll
+  (`touch-action: none`).
+- **Mini-PnL en la tarjeta de la posición**: junto al «PnL no realizado» hay un
+  pantallazo de 26 px con el mismo recorrido del panel (relleno desde el nivel 0,
+  línea en el color del signo, punto en el valor de ahora y nota con el máximo y el
+  mínimo). Se pinta a mano en un `<canvas>` a la resolución real del dispositivo, así
+  que no hay que levantar la vista del formulario para saber si la cosa mejora.
 - El marcaje se apaga y enciende con **📈 PnL** en la barra del gráfico y la
   preferencia se recuerda (`ST 'pnlGrafico'`). La capa es `pointer-events: none`
   y queda por debajo de la leyenda (`z-index` 5 < 6): no se come ni el dibujo a
   mano ni el gesto, y en ≤640 px la etiqueta se encoge (176×48) y se coloca
-  **por debajo** de la leyenda OHLC cuando el precio está arriba del todo.
+  **por debajo** de la leyenda OHLC cuando el precio está arriba del todo. El **mini de
+  la tarjeta no depende de ese interruptor**: es información de la posición, no del
+  gráfico, así que sigue contando mientras la posición esté abierta (así lo exige
+  `tests/pnl-chart.test.js`, bloque H).
 
 ### 6. Estadísticas y resultados
 Balance · equity · PnL total y abierto · margen usado y exposición · nº de trades ·
@@ -332,6 +347,11 @@ marcaje a 390 px de ancho):
 
 ![PnL en el móvil](docs/captura-40-pnl-movil.png)
 
+**Panel estirable y mini-PnL en la tarjeta** — el panel de PnL arrastrado a 184 px y,
+en la tarjeta de la posición, el pantallazo del recorrido con su «máx/mín»:
+
+![Alto del panel y mini-PnL](docs/captura-41-alto-panel-y-mini.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -433,7 +453,7 @@ node tests/promediar.test.js    #  84 comprobaciones de promediado, cierre parci
                                 #   (el bloque del escalonado se monta sobre un tramo DELANTE del cual no salte
                                 #   el TP, el SL ni la liquidación: si el escenario no da, el test lo dice con un ✗)
 node tests/trailing.test.js     # 101 comprobaciones del trailing stop (68 de motor con velas sintéticas + 33 de interfaz)
-node tests/pnl-chart.test.js      #  82 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 6 bloques:
+node tests/pnl-chart.test.js      # 112 comprobaciones del MARCAJE DE PnL sobre el archivo único, SIN RED, en 8 bloques:
                                 #   posición viva (geometría medida contra CM.timeToX/priceToY, número igual al del
                                 #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
                                 #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
@@ -453,11 +473,11 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**992 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1024 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
 **1255 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(992 locales + 263 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+(1024 locales + 263 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
 con el despliegue en `ca79ec6` — y el `md5` del archivo publicado (`40c0d76f…`) coincide byte
 a byte con el del build local: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
 57 del trailing + 95 de la piel Bitunix + 43 del marcaje de PnL)
@@ -539,7 +559,7 @@ bar-replay-app/
 ├── snapshot/velas-reales.json ← velas reales incrustadas (tools/snapshot.js)
 ├── css/
 │   ├── main.css              # Variables del tema, layout, botones, tablas
-│   ├── chart.css             # Área de gráfico, toolbar de dibujo, paneles, replay
+│   ├── chart.css             # Área de gráfico, toolbar de dibujo, paneles (con el asa .pane-resize), replay
 │   ├── panels.css            # Barra lateral y panel inferior
 │   └── modals.css            # Modales (indicadores, ajustes, sesiones, export…)
 ├── js/
@@ -552,7 +572,8 @@ bar-replay-app/
 │   ├── barReplay.js          # Motor del replay (play/pausa/velocidad/seek)
 │   ├── chart.js              # Gráfico principal, paneles y equity (Lightweight Charts)
 │   ├── pnlChart.js           # Marca la posición en el gráfico y su PnL vela a vela (banda,
-│                             #   etiqueta, panel con curva y marcas en las velas)
+│                             #   etiqueta, panel con curva de alto ajustable y marcas en las velas;
+│                             #   además pinta el mini-PnL de la tarjeta de la posición)
 │   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
 │   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
 │   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
@@ -574,7 +595,7 @@ bar-replay-app/
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
-    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (82)
+    ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (112)
     ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (43)
     └── single.test.js        # Archivo único en navegador real sin red
 ```
@@ -720,6 +741,16 @@ bar-replay-app/
   heredado del flex/grid: **un `1fr` sin `minmax(0,…)` no es un «ocupa lo que
   sobre», es un «ocupa lo que sobre, pero nunca menos que tu contenido más ancho»**.
   `tests/pnl-chart.test.js` (bloque F) y `tests/responsive.test.js` lo vigilan.
+- **Un `style.height` puesto «por si acaso» rompe una escalera de alturas** (mismo
+  episodio, esta vez del panel de PnL): al arrancar se medía el alto del panel y se
+  devolvía como estilo en línea, y con eso **ganaba por cascada** a los escalones de
+  `css/bitunix.css` (`.indPane` a 56/48 px en ventana baja) → el gráfico perdía 60 px
+  y `tests/browser.capture.js` cantó 229 px contra su contrato de ≥240 a 1280×700.
+  Ahora el estilo en línea solo aparece cuando la persona eligió un alto (o había uno
+  guardado); sin eso manda la escalera. Y, medido, la fila del mini de la tarjeta **no
+  costaba ni un píxel** de gráfico (el cuerpo de la tarjeta tiene su propio scroll), así
+  que se quitó el `@media (max-height)` que la ocultaba: una regla justificada con una
+  cifra falsa es peor que no tenerla.
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).

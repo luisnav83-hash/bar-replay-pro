@@ -1021,6 +1021,14 @@ kbd {
 #pnlBadgePct, #pnlBadgeDelta { color: var(--tx-3); font-size: 10px; }
 #pnlBadgeReal { color: var(--tx-4); font-size: 10px; }
 #pnlPaneVal { font-family: var(--mono); }
+
+/* ---- Mini-PnL de la tarjeta de la posición ---- */
+#posPnlMini .mini-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#posPnlSpark { display: block; width: 100%; max-width: 180px; height: 26px;
+  background: rgba(255, 255, 255, .02); border: 1px solid var(--line-soft); }
+#posPnlSpark.vacio { opacity: .34; }
+#posPnlSparkNote { font-family: var(--mono); font-style: normal; font-size: 10px;
+  color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
 
 @media (max-width: 640px) {
@@ -1030,4 +1038,10 @@ kbd {
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
   #panePnl.indPane, #panePnl { height: 92px; }
+  /* En el dedo el asa se ensancha (de 7 a 12 px) y cede la mitad derecha del
+     encabezado para que siga siendo fácil de agarrar sin comerte la ✕. */
+  .pane-resize { height: 12px; right: 44px; }
+  .pane-resize::after { top: 5px; width: 42px; height: 3px; }
+  #posPnlSpark { max-width: 128px; height: 22px; }
+  #posPnlSparkNote { font-size: 9px; max-width: 118px; }
 }

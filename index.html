@@ -304,6 +304,11 @@
            posición, en dólares, con su máximo y su mínimo marcados. -->
       <div class="indPane hidden" id="panePnl" data-pane="pnl">
         <div class="pane-head"><span class="pane-title">PnL <b id="pnlPaneNote">sin posición</b></span><span class="pane-val" id="pnlPaneVal">—</span><button class="pane-close" id="pnlPaneClose" title="Ocultar el panel de PnL">✕</button></div>
+        <!-- Asa para estirar el panel (⬍). Con las flechas arriba/abajo sobre ella
+             se ajusta también de teclado; doble clic la devuelve al alto por defecto. -->
+        <div class="pane-resize" id="pnlPaneResize" role="separator" aria-orientation="horizontal"
+             tabindex="0" title="Arrastra para cambiar el alto del panel de PnL (doble clic: alto normal)"
+             aria-label="Alto del panel de PnL"></div>
         <div class="pane-chart" id="chartPnl"></div>
       </div>
       <div class="indPane hidden" id="paneRsi" data-pane="rsi">
@@ -564,6 +569,10 @@
           </div>
           <div class="card-body">
             <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <!-- Mini-PnL: el mismo recorrido que enseña el panel del gráfico, en 26 px,
+                 para no tener que levantar la vista. Lo dibuja PC.paintMini(). -->
+            <div class="kv kv-mini" id="posPnlMini"><span>PnL vela a vela</span>
+              <b class="mini-wrap"><canvas id="posPnlSpark" width="180" height="26"></canvas><i id="posPnlSparkNote">sin recorrido todavía</i></b></div>
             <div class="kv"><span>Entrada</span><b id="posEntry">—</b></div>
             <div class="kv"><span>Tamaño</span><b id="posSize">—</b></div>
             <div class="kv"><span>Notional</span><b id="posNotional">—</b></div>
