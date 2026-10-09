@@ -458,7 +458,7 @@ node tests/pnl-chart.test.js      # 112 comprobaciones del MARCAJE DE PnL sobre 
                                 #   motor, curva que crece y pasa por encima y por debajo del agua), cierre con resumen,
                                 #   SHORT + promediado + parcial, interruptor y preferencia (otra pestaña del mismo
                                 #   navegador, para que el arranque sea de verdad nuevo) y móvil a 390 px
-node tests/pages-pnl.js          #   43 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
+node tests/pages-pnl.js          #   50 comprobaciones del marcaje EN LA APP PUBLICADA, manejando solo la interfaz
                                 #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
                                 #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
 node tests/bitunix.test.js      # 132 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
@@ -476,11 +476,11 @@ Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue
 **1024 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1255 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1024 locales + 263 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
-con el despliegue en `ca79ec6` — y el `md5` del archivo publicado (`40c0d76f…`) coincide byte
+**1294 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1024 locales + 270 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `00f5c10` — y el `md5` del archivo publicado (`7a8d4793…`) coincide byte
 a byte con el del build local: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
-57 del trailing + 95 de la piel Bitunix + 43 del marcaje de PnL)
+57 del trailing + 95 de la piel Bitunix + 50 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
