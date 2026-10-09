@@ -103,14 +103,19 @@ if (!puppeteer) {
   const b1 = await st();
   ok(b1.partes === 3 && b1.add === 2, `añadido desde la tarjeta (${b1.avg})`);
   const exceso = await p.evaluate(() => {
+    /* Y si la posición ya no está, se dice: un `TypeError` en medio de la suite tapaba el
+       motivo real (el paseo se había ido de índice) y las cuatro comprobaciones siguientes
+       fallaban en cadena con «—». */
+    if (!TE.state.position) return { sinPosicion: true };
     const q = TE.state.position.qty, pt = TE.state.position.parts.length;
     document.getElementById('avgSize').value = '95';
     App.averagePosition(95, {});
     return { q, q2: TE.state.position.qty, pt, pt2: TE.state.position.parts.length,
              toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent.trim()).join(' | ') };
   });
-  ok(exceso.q === exceso.q2 && /Margen libre insuficiente/.test(exceso.toasts),
-     'pedir más de lo que cabe: NO añade y explica el motivo');
+  ok(exceso.sinPosicion !== true && exceso.q === exceso.q2 && /Margen libre insuficiente/.test(exceso.toasts),
+     exceso.sinPosicion ? 'la posición ya no existe al llegar aquí: el paseo se fue de índice (la suite lo dice, no revienta)'
+                        : 'pedir más de lo que cabe: NO añade y explica el motivo');
 
   /* ── 3) SL/TP conservados, break-even y parciales ── */
   console.log('\n▸ 3) Niveles conservados, break-even y cierres parciales');
@@ -165,6 +170,14 @@ if (!puppeteer) {
      depender del reloj de la máquina (así entró el falso rojo en una batería
      cargada: el nivel se añadía DESPUÉS de la única vela que lo tocaba). */
   if (await p.evaluate(() => !!(BR.state && BR.state.playing))) { await p.click('#btnPlay'); await esp(400); }
+  /* Un paso del paseo = UNA llamada al motor, con la pausa IMPUESTA en el mismo
+     `evaluate`. Motivo, medido en una corrida de la batería entera (varios Chromium a la
+     vez): «⚡ Práctica rápida» reanuda el autoplay cuando este bloque ya ha empezado, y
+     entonces las flechas del teclado y el reloj de `BR` avanzaban a la vez —7 teclas y el
+     índice 10 velas más allá, la posición cerrada por su propio SL y la suite reventando
+     leyendo `.qty` de `null`—. Aquí lo que se comprueba es el MOTOR ante un nivel, no el
+     atajo de teclado (ese lo cubren `bitunix.test.js`, `single.test.js` y `iframe.test.js`). */
+  const paso = () => p.evaluate(() => { BR.pause(); App.stepForward(); });
   ok((await p.evaluate(() => !!(BR.state && BR.state.playing))) === false,
      'replay en pausa antes de medir el escalón (si va solo, esta comprobación sería una carrera)');
 
@@ -188,7 +201,7 @@ if (!puppeteer) {
   for (let intento = 0; intento < 300 && !plan; intento++) {
     const cand = await calc();
     if (cand.vale) plan = cand;
-    else { await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight'); andadas += 2; await esp(70); }
+    else { await paso(); await paso(); andadas += 2; await esp(70); }
   }
   ok(plan !== null, plan ? `el paseo busca un tramo donde el nivel es alcanzable (${andadas} velas andadas)`
                          : 'NO hay ningún tramo con nivel alcanzable en 600 velas: el test lo dice, no pasa de largo');
@@ -219,7 +232,7 @@ if (!puppeteer) {
        `con el nivel puesto la vela que lo toca sigue por delante (a ${plan2.hasta - plan2.desde} velas)`);
     let ejec = false, tras = null, k = 0;
     while (k < 420 && !ejec) {
-      await p.keyboard.press('ArrowRight'); k++;
+      await paso(); k++;
       const s = await st();
       if (s.niveles === 0) { ejec = true; tras = s; }
       if (s.idx >= plan2.hasta + 3) break;   // rebasado el cruce con holgura: no hay nada que esperar
