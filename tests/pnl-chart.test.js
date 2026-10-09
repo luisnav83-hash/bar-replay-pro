@@ -53,6 +53,26 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     errs.push('consola: ' + m.text().slice(0, 160));
   });
 
+  /**
+   * Foto limpia de un elemento, para docs/. Dos cosas que sin ellas salen mal:
+   *  · los avisos flotantes duran ~2,2 s y tapan filas → se espera a que se vayan;
+   *  · `clip` de page.screenshot se mide sobre el DOCUMENTO, así que hay que sumar el
+   *    scroll (o ponerlo a cero) — si no, en móvil salía la barra superior en vez del
+   *    panel estirado, aunque el boundingClientRect fuese correcto.
+   */
+  const fotoDe = async (id, archivo) => {
+    await page.waitForFunction(() => document.getElementById('toasts').children.length === 0, { timeout: 9000 }).catch(() => {});
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await espera(220);
+    const caja = await page.evaluate((id) => {
+      const b = document.getElementById(id).getBoundingClientRect();
+      return { x: Math.round(b.left + window.scrollX), y: Math.round(b.top + window.scrollY),
+               width: Math.round(b.width), height: Math.round(b.height) };
+    }, id);
+    await page.screenshot({ path: path.join(__dirname, '..', 'docs', archivo), clip: caja });
+    return caja;
+  };
+
   await page.setRequestInterception(true);
   page.on('request', (r) => {
     const u = r.url();
@@ -537,6 +557,160 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   await espera(250);
 
+  /* ═══════════ I) MINI-CURVA DEL RECORRIDO EN EL HISTORIAL DE TRADES ═══════════ */
+  console.log('\n▸ I) El historial guarda y pinta el recorrido de cada trade');
+  // Se abre posición, se pasea y se cierra: el recorrido tiene que viajar DENTRO del
+  // trade cerrado (nada de recalcular al pintar la tabla).
+  await page.evaluate(() => {
+    if (TE.state.position) document.getElementById('btnFlatten').click();
+    document.getElementById('sizeInput').value = '30';
+    document.getElementById('btnLong').click();
+  });
+  await espera(450);
+  await paso(20);
+  await espera(400);
+  const Iviva = await page.evaluate(() => {
+    const tr = document.querySelector('#tradesBody tr.open');
+    if (!tr) return null;
+    const c = tr.querySelector('canvas.tr-spark[data-live]');
+    const tinta = (x) => { const g = x.getContext('2d'), d = g.getImageData(0, 0, x.width, x.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const t1 = c ? tinta(c) : 0;
+    return { celdas: tr.children.length, th: document.querySelectorAll('#tradesTable thead th').length,
+             hayCanvas: !!c, t1, trazo: PC.trace.length };
+  });
+  ok(Iviva && Iviva.celdas === Iviva.th && Iviva.th === 13,
+     `la fila ABIERTA tiene tantas celdas como cabecera (${Iviva && Iviva.celdas}/${Iviva && Iviva.th}): la columna nueva no desalinea la tabla`);
+  ok(Iviva && Iviva.hayCanvas && Iviva.t1 > 40,
+     `y su mini-en-vivo está pintado (${Iviva && Iviva.t1} px de tinta con ${Iviva && Iviva.trazo} velas de traza)`);
+  await paso(8);
+  await espera(400);
+  const Iviva2 = await page.evaluate(() => {
+    const c = document.querySelector('#tradesBody tr.open canvas.tr-spark[data-live]');
+    const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data;
+    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return { n, trazo: PC.trace.length };
+  });
+  ok(Iviva2.trazo > Iviva.trazo && Iviva2.n !== Iviva.t1,
+     `y sigue al replay: ${Iviva.trazo} → ${Iviva2.trazo} velas, tinta ${Iviva.t1} → ${Iviva2.n} px`);
+
+  await page.evaluate(() => document.getElementById('btnFlatten').click());
+  await espera(700);
+  const I0 = await page.evaluate(() => {
+    const cerrados = TE.state.trades.filter((t) => t.status === 'closed');
+    const t = cerrados[cerrados.length - 1];
+    const tr = document.querySelector('#tradesBody tr:not(.open)');
+    const c = tr ? tr.querySelector('canvas.tr-spark') : null;
+    const g = c && c.getContext('2d');
+    let verde = 0, rojo = 0, tinta = 0;
+    if (g) {
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 0) tinta++;
+        if (d[i + 3] > 60 && d[i + 1] > 140 && d[i] < 120) verde++;
+        if (d[i + 3] > 60 && d[i] > 180 && d[i + 1] < 130) rojo++;
+      }
+    }
+    const path = (t && t.pnlPath) || [];
+    const txt = (tr ? tr.textContent : '').replace(/\s+/g, ' ').trim();
+    return {
+      hayFila: !!tr, celdas: tr ? tr.children.length : 0, hayCanvas: !!c, tinta, verde, rojo,
+      pts: path.length, first: path[0], last: path[path.length - 1],
+      pmax: Math.max(...path), pmin: Math.min(...path),
+      selladoMax: t ? t.pnlMax : NaN, selladoMin: t ? t.pnlMin : NaN,
+      title: tr ? (tr.querySelector('.tr-spark-c') || {}).title || '' : '',
+      motivoCol11: tr ? tr.children[10].textContent.trim() : '',
+      txtAntes: txt,
+      trazo: PC.trace.length, ultimo: PC.trace.length ? PC.trace[PC.trace.length - 1].pnl : NaN,
+      bruto: (() => { const v = PC.trace.map((p) => p.pnl); return { max: Math.max(...v), min: Math.min(...v) }; })(),
+      d: PC.debug(),
+    };
+  });
+  ok(I0.hayFila && I0.hayCanvas, 'el trade cerrado de la tabla trae su canvas de recorrido');
+  ok(I0.pts >= 2 && I0.pts <= 64, `el recorrido va sellado recortado a 64 puntos como mucho (${I0.pts})`);
+  ok(cerca(I0.pmax, I0.selladoMax, 0.011) && cerca(I0.pmin, I0.selladoMin, 0.011)
+     && cerca(I0.pmax, I0.bruto.max, 0.011) && cerca(I0.pmin, I0.bruto.min, 0.011),
+     `el recorte CONSERVA los picos: máx ${I0.pmax.toFixed(2)} / mín ${I0.pmin.toFixed(2)} del trade`);
+  ok(cerca(I0.first, 0, 0.011) || Math.abs(I0.first) < Math.abs(I0.ultimo) + 0.02,
+     `y empieza en la entrada (${I0.first.toFixed(2)})`);
+  ok(/máx .+ · mín /.test(I0.title), `el title de la celda cuenta el recorrido («${I0.title}»)`);
+  ok(I0.tinta > 40, `la mini-curva está pintada de verdad (${I0.tinta} px con tinta)`);
+  ok(I0.ultimo > 0 ? I0.verde > I0.rojo : I0.rojo > I0.verde,
+     `en el color del resultado (${I0.ultimo.toFixed(2)} → ${I0.verde} verdes / ${I0.rojo} rojos)`);
+  ok(/manual|parcial|SL|TP|cerrar/i.test(I0.motivoCol11),
+     `el «Motivo» sigue en su columna 11 («${I0.motivoCol11}»): la columna nueva se añadió AL FINAL`);
+
+  // El recorrido sobrevive a olvidar la traza (cambio de serie/temporalidad): vive en
+  // el trade, no en el gráfico.
+  await page.evaluate(() => { PC.forgetSeries(); UI.renderTrades(); });
+  await espera(400);
+  const I1 = await page.evaluate(() => {
+    const c = document.querySelector('#tradesBody tr:not(.open) canvas.tr-spark');
+    if (!c) return { tinta: 0 };
+    const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data;
+    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return { tinta: n, trazo: PC.trace.length };
+  });
+  ok(I1.trazo === 0 && I1.tinta > 40,
+     `tras olvidar la traza del gráfico (${I1.trazo} velas) el historial sigue enseñando su curva (${I1.tinta} px)`);
+
+  // Un trade SIN recorrido (cerrado antes de esta versión) no se inventa: celda vacía,
+  // con su explicación, y el texto de la fila no cambia.
+  const I2 = await page.evaluate(() => {
+    const cerrados = TE.state.trades.filter((t) => t.status === 'closed');
+    const t = cerrados[cerrados.length - 1];
+    const antes = document.querySelector('#tradesBody tr:not(.open)').textContent.replace(/\s+/g, ' ').trim();
+    delete t.pnlPath; UI.renderTrades();
+    const tr = document.querySelector('#tradesBody tr:not(.open)');
+    const celda = tr.querySelector('.tr-spark-c');
+    const despues = tr.textContent.replace(/\s+/g, ' ').trim();
+    const out = { canvas: !!tr.querySelector('canvas'), titulo: celda.title, igual: antes === despues,
+                  cols: tr.children.length };
+    t.pnlPath = [0, 1, 2]; UI.renderTrades();   // se devuelve, no se deja roto
+    return out;
+  });
+  ok(I2.canvas === false && I2.igual && I2.cols === 13,
+     `sin recorrido guardado la celda queda vacía y el texto de la fila es el mismo (${I2.cols} celdas)`);
+  ok(/sin recorrido guardado/.test(I2.titulo), `y la celda lo dice («${I2.titulo}»)`);
+
+  // Recorte: unidad medida en la página (el pico solitario tiene que sobrevivir).
+  const I3 = await page.evaluate(() => {
+    const v = new Array(500).fill(0);
+    v[137] = 900; v[138] = -700;
+    const r = PC.reduce(v, 64);
+    return { n: r.length, max: Math.max(...r), min: Math.min(...r), primero: r[0], ultimo: r[r.length - 1] };
+  });
+  ok(I3.n <= 64 && I3.max === 900 && I3.min === -700 && I3.primero === 0 && I3.ultimo === 0,
+     `PC.reduce respeta el tope (${I3.n} puntos) y NUNCA se come un pico: ${I3.max}/${I3.min}`);
+
+  // Captura del incremento: la tabla del historial con su columna nueva, con la fila
+  // ABIERTA (mini-en-vivo) y un trade CERRADO (recorrido sellado) viéndose a la vez.
+  await page.evaluate(() => {
+    if (!TE.state.position) { document.getElementById('sizeInput').value = '18'; document.getElementById('btnLong').click(); }
+    const b = document.querySelector('.tab[data-tab="trades"]');
+    if (b) b.click();
+  });
+  await espera(400);
+  await paso(6);
+  await espera(450);
+  const caja42 = await page.evaluate(() => {
+    const cuerpo = document.getElementById('tradesTable').closest('.tab-body') || document.getElementById('tradesTable').parentElement;
+    // La columna nueva es la última: si la tabla cabe con scroll horizontal, hay que
+    // llevarla a la vista antes de recortar, si no la captura saldría sin ella.
+    cuerpo.scrollLeft = cuerpo.scrollWidth;
+    const t = document.getElementById('tradesTable').getBoundingClientRect();
+    const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; };
+    return { x: Math.round(Math.max(0, t.left - 8)), y: Math.round(Math.max(0, t.top - 30)),
+             width: Math.round(Math.min(document.documentElement.clientWidth - 8, t.right + 8) - Math.max(0, t.left - 8)),
+             height: Math.round(Math.min(280, t.height + 40)),
+             visible: (() => { const c = document.querySelector('#tradesBody canvas.tr-spark'); const bb = c ? c.getBoundingClientRect() : null;
+                               return bb ? bb.right <= document.documentElement.clientWidth + 1 : false; })() };
+  });
+  await page.mouse.move(4, 4);   // fuera de la tabla: si no, el tooltip del hover sale en la foto
+  await espera(250);
+  const caja42b = await fotoDe('tradesTable', 'captura-42-recorrido-en-el-historial.png');
+  ok(caja42.visible && caja42b.width > 500 && caja42b.height > 90,
+     `captura del incremento escrita (docs/captura-42-recorrido-en-el-historial.png, ${caja42b.width}×${caja42b.height} px, columna a la vista: ${caja42.visible})`);
+
   /* ═════════════ E) INTERRUPTOR Y PREFERENCIA GUARDADA ═════════════ */
   console.log('\n▸ E) Interruptor 📈 PnL y preferencia guardada');
   const E1 = await page.evaluate(async () => {
@@ -635,6 +809,64 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(Mo.asaH >= 11 && Mo.asaW > 60 && Mo.tacto === 'none',
      `el asa sigue siendo agarrable a dedo (${Mo.asaW}×${Mo.asaH} px, touch-action ${Mo.tacto})`);
   ok(Mo.enTarjeta && Mo.enFila, `el mini vive en la fila de la tarjeta de la posición (nota «${Mo.nota}»)`);
+  // El asa tiene que responder al DEDO (mismos handlers de puntero) y, sobre todo, no
+  // puede convertir el arrastre en scroll de la página.
+  const toque1 = await page.evaluate(() => {
+    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
+    const pie = document.getElementById('panePnl').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+             alto: PC.alto(), sy: window.scrollY, ox: window.scrollX, pie: Math.round(pie.bottom),
+             fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1])) };
+  });
+  const cdpT = await page.target().createCDPSession();
+  await cdpT.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: toque1.x, y: toque1.y }] });
+  for (let i = 1; i <= 4; i++) {
+    await cdpT.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: toque1.x, y: toque1.y - i * 10 }] });
+    await espera(60);
+  }
+  await cdpT.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await espera(500);
+  const toque2 = await page.evaluate(() => ({
+    alto: PC.alto(), sy: window.scrollY, ox: window.scrollX, g: ST.get('pnlPaneAlto', null),
+    lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
+    fila: Math.round(parseFloat(getComputedStyle(document.getElementById('chartArea')).gridTemplateRows.split(' ')[1])),
+    fuera: (() => { const a = document.getElementById('chartArea').getBoundingClientRect(), p = document.getElementById('paneArea').getBoundingClientRect();
+      return Math.max(0, Math.round(p.bottom - a.bottom), Math.round(a.top - p.top)); })(),
+    pie: Math.round(document.getElementById('panePnl').getBoundingClientRect().bottom),
+    dentro: (() => { const a = document.getElementById('chartArea').getBoundingClientRect(), p = document.getElementById('panePnl').getBoundingClientRect();
+      return p.top >= a.top - 1 && p.bottom <= a.bottom + 1; })(),
+    area: Math.round(document.getElementById('chartArea').getBoundingClientRect().height),
+  }));
+  ok(toque2.alto > toque1.alto, `el arrastre con el dedo estira el panel (${toque1.alto} → ${toque2.alto} px)`);
+  ok(toque2.alto === Math.min(toque1.alto + 40, Math.max(96, Math.round(toque2.area * 0.45))),
+     `y para en el tope del móvil (45 % del área de ${toque2.area} px)`);
+  ok(toque2.sy === toque1.sy && toque2.ox === toque1.ox,
+     `el gesto no acaba en scroll de la página (scroll ${toque1.ox},${toque1.sy} → ${toque2.ox},${toque2.sy})`);
+  ok(toque2.lienzo >= 150, `el lienzo conserva sus 150 px de contrato tras estirar en el dedo (${toque2.lienzo})`);
+  // Y la verdad medida del móvil, escrita para que no se pueda vender como otra cosa:
+  // aquí el alto NO lo da el flujo de la página (body lleva overflow:hidden y el
+  // documento mide 844 = viewport), lo da el reparto del #chartArea (256 px en el
+  // teléfono probado: barra de dibujo + fila del gráfico + escalera + barra de
+  // replay). Estirar el panel le quita fila AL GRÁFICO, y por eso el techo es el 45 %
+  // del área: con él la fila baja (de ${toque1.fila} a ${toque2.fila} px, medido) pero
+  // no se apaga, y la escalera no se sale del área (nada recortado por el andamio).
+  ok(toque2.fila > 0 && toque2.fila <= toque1.fila,
+     `la fila del gráfico cede lo que gana el panel (${toque1.fila} → ${toque2.fila} px) y no se apaga`);
+  ok(toque2.fuera === 0, `la escalera sigue entera dentro de #chartArea (se sale ${toque2.fuera} px)`);
+  ok(toque2.g === toque2.alto, 'el alto elegido a dedo se guarda igual que con ratón');
+  const caja43 = await fotoDe('chartArea', 'captura-43-asa-en-el-dedo.png');
+  // Geometría MEDIDA en móvil (de ahí estos dos asserts, que no son de adorno): el
+  // #chartArea de 390×844 mide 256 px y la escalera se apoya en su pie, así que al
+  // estirar el panel CRECE HACIA ARRIBA (el pie no se mueve) en vez de empujar nada,
+  // y sigue ENTERO dentro del área: no se recorta ni se sale del terminal.
+  ok(toque2.pie === toque1.pie,
+     `el arrastre a dedo estira hacia arriba: el pie del panel no se mueve (${toque1.pie} → ${toque2.pie})`);
+  ok(toque2.dentro, `y el panel estirado a ${toque2.alto} px sigue entero dentro de #chartArea (${toque2.area} px)`);
+  ok(caja43.width >= 340 && caja43.height >= toque2.alto + 100,
+     `captura del arrastre a dedo escrita (docs/captura-43-asa-en-el-dedo.png, ${caja43.width}×${caja43.height} px con el panel a ${toque2.alto})`);
+  // Se deja el panel en su alto de CSS para no alterar lo que sigue midiendo el móvil.
+  await page.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+  await espera(300);
   ok(F.d.velas >= 2 && F.d.marcas >= 1, `y sigue pintando ${F.d.velas} velas de curva con ${F.d.marcas} marcador(es)`);
 
   const G = await page.evaluate(async () => {

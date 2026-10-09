@@ -645,6 +645,10 @@
           <th class="num">P. entrada</th><th class="num">P. salida</th>
           <th class="num">Tamaño</th><th class="num">PnL</th><th class="num">%</th>
           <th class="num">R</th><th>Motivo</th><th>Velas</th>
+          <!-- Última columna A PROPÓSITO: las once primeras tienen su posición fijada
+               por pruebas (p. ej. el «Motivo» se lee con td:nth-child(11)); meter una
+               antes habría movido todo y el rojo habría parecido del historial. -->
+          <th title="Máximo y mínimo del PnL no realizado durante la operación">Recorrido</th>
         </tr>
       </thead>
       <tbody id="tradesBody"></tbody>

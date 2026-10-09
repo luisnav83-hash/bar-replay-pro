@@ -157,6 +157,43 @@ const numEn = (s) => {
   const D2 = await E();
   ok(D2.d.velas === velasCierre, `siguiendo el replay la curva del trade cerrado NO crece (${D2.d.velas})`);
 
+  // ── El recorrido del trade cerrado, en la tabla del historial (lo publicado). ──
+  // Se comprueba AQUÍ, sobre la URL que ve un visitante, porque el fallo temido no es
+  // de lógica sino de armazón: una columna nueva mal colocada desalinea toda la tabla
+  // (13 celdas contra 12 cabeceras) y el «Motivo» se sale de la columna 11 que
+  // fijan otras suites. Eso solo se ve midiendo la fila publicada.
+  const D3 = await p.evaluate(() => {
+    const th = [...document.querySelectorAll('#tradesTable thead th')].map((x) => x.textContent.trim());
+    const tr = document.querySelector('#tradesBody tr:not(.open)');
+    // El title se compara REGENERADO con el formateador de la app, no parseándolo:
+    // «94,41» y «94.41» son el mismo número según el locale, y un parser propio se
+    // equivoca justo ahí (le pasó a esta suite con el signo − tipográfico U+2212).
+    if (!tr) return { th, sinFila: true };
+    const celda = tr.querySelector('.tr-spark-c');
+    const cv = tr.querySelector('canvas.tr-spark');
+    let tinta = 0;
+    if (cv) { const g = cv.getContext('2d'); const d = g.getImageData(0, 0, cv.width, cv.height).data;
+              for (let i = 3; i < d.length; i += 4) if (d[i] > 0) tinta++; }
+    const cerrados = TE.state.trades.filter((t) => t.status === 'closed');
+    const t = cerrados[cerrados.length - 1] || {};
+    const esperado = 'máx ' + U.fmtMoney(t.pnlMax, true) + ' · mín ' + U.fmtMoney(t.pnlMin, true);
+    return { th, celdas: tr.children.length, ultima: th[th.length - 1], motivo: tr.children[10].textContent.trim(),
+             hayCanvas: !!cv, tinta, pts: cv ? String(cv.dataset.v || '').split(',').filter(Boolean).length : 0,
+             title: (celda && celda.title) || '', esperado,
+             selladoPts: (t.pnlPath || []).length,
+             texto: tr.textContent.replace(/\s+/g, ' ').trim() };
+  });
+  ok(!D3.sinFila && D3.ultima === 'Recorrido' && D3.th.length === 13,
+     `la cabecera publicada cierra con «${D3.ultima}» (${D3.th.length} columnas)`);
+  ok(D3.celdas === D3.th.length,
+     `la fila cerrada tiene tantas celdas como cabeceras (${D3.celdas}/${D3.th.length}): nada desalineado`);
+  ok(/cierre|manual|parcial|SL|TP/i.test(D3.motivo), `el «Motivo» sigue en la columna 11 («${D3.motivo}»)`);
+  ok(D3.hayCanvas && D3.tinta > 40, `la mini-curva del recorrido está pintada en lo publicado (${D3.tinta} px de tinta, ${D3.pts} puntos)`);
+  ok(D3.pts >= 2 && D3.pts <= 64 && D3.selladoPts === D3.pts,
+     `y viaja sellada en el trade (${D3.pts} puntos, el tope de 64 respetado)`);
+  ok(D3.title === D3.esperado,
+     `el title de la celda dice el máximo y el mínimo REALES del trade («${D3.title}»)`);
+
   /* ─────────────── E) Interruptor y preferencia guardada ─────────────── */
   console.log('\n▸ E) 📈 PnL apaga y enciende el marcaje, y se recuerda');
   await p.click('#btnPnl'); await esp(400);
@@ -254,6 +291,74 @@ const numEn = (s) => {
     const deVuelta = await p.evaluate(() => ({ alto: PC.alto(), g: ST.get('pnlPaneAlto', 'sin-clave') }));
     ok(deVuelta.alto < tras.alto && deVuelta.g === null, `doble clic: el panel vuelve al suyo (${deVuelta.alto} px) y la preferencia se borra`);
   }
+  /* ─────────── G) Móvil: el recorrido EN VIVO y el asa con el dedo ─────────── */
+  console.log('\n▸ G) En 390 px: mini-en-vivo en la fila abierta y arrastre a dedo');
+  // Se abre posición con los botones de verdad, para que la fila ABIERTA del historial
+  // tenga su mini-curva viva (la pinta PC en cada vela del replay).
+  await p.evaluate(() => { if (!TE.state.position) document.getElementById('btnLong').click(); });
+  await esp(700);
+  await p.click('#btnStepFwd'); await esp(300); await p.click('#btnStepFwd'); await esp(400);
+  // La pestaña de historial hay que ABRIRLA (con un clic de verdad): mientras está
+  // cerrada su contenedor mide 0 y toda medición de la fila saldría «recortada».
+  await p.evaluate(() => { const t = document.querySelector('.tab[data-tab="trades"]'); if (t) t.click(); });
+  await esp(400);
+  const G = await p.evaluate(() => {
+    const tr = document.querySelector('#tradesBody tr.open');
+    const cv = tr && tr.querySelector('canvas.tr-spark[data-live]');
+    let tinta = 0;
+    if (cv) { const g = cv.getContext('2d'); const d = g.getImageData(0, 0, cv.width, cv.height).data;
+              for (let i = 3; i < d.length; i += 4) if (d[i] > 0) tinta++; }
+    const th = document.querySelectorAll('#tradesTable thead th').length;
+    // En 390 px caben ~9 de las 13 columnas: la nueva es la última, así que hay que
+    // DESLIZAR la tabla para verla. Se hace con el scroll del propio contenedor (es lo
+    // que hace el dedo) y se comprueba que la celda llega a estar entera a la vista.
+    const cuerpo = document.getElementById('tradesBody').closest('.tab-body') || document.getElementById('tradesBody').parentElement;
+    const antes = { w: Math.round(cuerpo.scrollWidth), x: Math.round(cuerpo.scrollLeft) };
+    cuerpo.scrollLeft = cuerpo.scrollWidth;
+    const b = cv ? cv.getBoundingClientRect() : null;
+    return { celdas: tr ? tr.children.length : 0, th, hayCanvas: !!cv, tinta, trazo: PC.trace.length,
+             desliza: cuerpo.scrollLeft > 0, antes,
+             visible: !!b && b.width > 20 && b.height > 8 && b.left >= 0 && b.right <= innerWidth + 1 };
+  });
+  ok(G.celdas === G.th && G.th === 13, `la fila ABIERTA publicada también cierra con su celda (${G.celdas}/${G.th})`);
+  ok(G.hayCanvas && G.tinta > 30, `y su mini-en-vivo se pinta en el móvil (${G.tinta} px de tinta con ${G.trazo} velas)`);
+  ok(G.visible && (G.desliza || G.antes.x > 0),
+     `y la celda llega a la vista deslizando la tabla (${G.antes.w} px de tabla en ${G.antes.x} → ${G.desliza ? 'deslizada' : 'sin deslizar'}, ${G.visible ? 'entera a la vista' : 'recortada'})`);
+  if (!LOCAL) await p.screenshot({ path: '/tmp/paginas-pnl-movil.png' });
+  // Arrastre CON EL DEDO por CDP (setViewport con hasTouch recarga la página y con
+  // intercepción de peticiones se cuelga: lo aprendido en las suites locales).
+  const g1 = await p.evaluate(() => {
+    const r = document.getElementById('pnlPaneResize').getBoundingClientRect();
+    const pie = document.getElementById('panePnl').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+             alto: PC.alto(), sy: window.scrollY, pie: Math.round(pie.bottom) };
+  });
+  const cdp = await p.target().createCDPSession();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: g1.x, y: g1.y }] });
+  for (let i = 1; i <= 4; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: g1.x, y: g1.y - i * 14 }] }); await esp(60); }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await esp(500);
+  const g2 = await p.evaluate(() => {
+    const pie = document.getElementById('panePnl').getBoundingClientRect();
+    const a = document.getElementById('chartArea').getBoundingClientRect();
+    return { alto: PC.alto(), sy: window.scrollY, g: ST.get('pnlPaneAlto', null), pie: Math.round(pie.bottom),
+             fuera: Math.max(0, Math.round(pie.bottom - a.bottom)),
+             lienzo: Math.round(document.getElementById('mainChart').getBoundingClientRect().height),
+             area: Math.round(a.height) };
+  });
+  const topeG = Math.min(420, Math.max(96, Math.round(g2.area * 0.45)));
+  ok(g2.alto > g1.alto && g2.alto === Math.min(g1.alto + 56, topeG),
+     `arrastrar con el dedo estira el panel publicado y se para en el 45 % del área (${g1.alto} → ${g2.alto}, tope ${topeG})`);
+  ok(g2.sy === g1.sy, `el gesto táctil no se convierte en scroll de la página (${g1.sy} → ${g2.sy})`);
+  ok(g2.pie === g1.pie && g2.fuera === 0,
+     `el panel crece hacia arriba y no se sale del área (pie ${g1.pie} → ${g2.pie}, fuera ${g2.fuera} px)`);
+  ok(g2.g === g2.alto && g2.lienzo >= 150,
+     `se guarda la preferencia (${g2.g}) y el lienzo mantiene sus 150 px (${g2.lienzo})`);
+  await p.evaluate(() => document.getElementById('pnlPaneResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+  await esp(350);
+  await p.evaluate(() => { if (TE.state.position) document.getElementById('btnFlatten').click(); });
+  await esp(400);
+
   ok(errs.length === 0, `ningún error de JavaScript en el marcaje${errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''}`);
   ok(rotos.every((u) => !/pnl|chart/i.test(u)), 'ninguna petición de recursos del gráfico caída' + (rotos.length ? ` (${rotos.length} fallidas, ajenas al marcaje)` : ''));
 
