@@ -399,6 +399,8 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
       const g = (id) => document.getElementById(id);
       return {
         chart: Math.round(R('chartWrap').height),
+        fila: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1])),
+        solape: Math.max(0, Math.round(R('chartWrap').bottom - R('paneArea').top)),
         recorte: Math.round(Math.max(0, ca.bottom - ws.bottom)) + Math.round(Math.max(0, ws.bottom - R('bottomPanel').top)),
         ox: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
         orden: [...g('sidebar').children].map((e) => getComputedStyle(e).order + ':' + e.id).sort().join(' '),
@@ -408,8 +410,20 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
         visible: !!g('btnLong') && g('btnLong').getBoundingClientRect().width > 40,
       };
     });
-    const minimo = h >= 720 ? 200 : 150;
-    ok(G.chart >= minimo, `${etiqueta}: el gráfico conserva ${G.chart} px (mínimo ${minimo})`);
+    /* ≥200 px de gráfico es contrato en pantallas con sitio. En el teléfono (≤640 px)
+       el contrato honesto es otro y más difícil: que lo que mide la caja sea lo que hay
+       (caja == fila) y que nada se pinte sobre la escalera (solape 0), con ≥140 px.
+       Pedir aquí más píxeles solo se paga quitándoselos al formulario de órdenes o a
+       las tarjetas del registro — y entonces botones como el del trailing se salen de
+       la pantalla (tests/pages-trailing.js lo detecta y deja de poder pulsar). */
+    if (w <= 640) {
+      ok(G.chart >= 140 && G.chart === G.fila && G.solape === 0,
+         `${etiqueta}: ${G.chart} px de gráfico HONESTOS (caja == fila ${G.fila}, ${G.solape} px de solape; antes de compactar: 43 de fila con caja de 200 y 157 px encima de la escalera)`);
+    } else {
+      const minimo = h >= 720 ? 200 : 150;
+      ok(G.chart >= minimo, `${etiqueta}: el gráfico conserva ${G.chart} px (mínimo ${minimo})`);
+      ok(G.solape === 0, `${etiqueta}: y el lienzo no desborda su fila sobre la escalera (${G.solape} px, fila ${G.fila})`);
+    }
     ok(G.recorte === 0, `${etiqueta}: nada se desborda por debajo del panel (${G.recorte})`);
     ok(G.ox === 0, `${etiqueta}: sin scroll horizontal (${G.ox} px)`);
     ok(G.stats > 0, `${etiqueta}: la fila de estadísticas sigue visible (${G.stats} px)`);

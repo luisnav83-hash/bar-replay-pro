@@ -13,6 +13,7 @@
  *   B) Al abrir un LONG: marcador, banda, etiqueta y panel
  *   C) El PnL sube y baja: la curva crece, la flecha y los colores siguen el signo
  *   D) Cierre (resumen), SHORT, promediado y cierres parciales
+ *   J) PEOR CASO DE ESCALERA: con RSI + MACD el gráfico no pinta sobre los paneles
  *   E) Interruptor 📈 PnL y preferencia guardada
  *   F) Móvil, scroll del gráfico, resize y salud
  *
@@ -849,9 +850,19 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await espera(500);
   const toque2 = await page.evaluate(geo);
   ok(toque2.pane > toque1.pane, `el arrastre con el dedo estira el panel (${toque1.pane} → ${toque2.pane} px)`);
-  ok(toque2.pane === Math.min(toque1.pane + 40, toque1.techo),
-     `y se para donde manda el HUECO REAL: techo ${toque1.techo} px = área ${toque1.area} − barra de dibujo ${toque1.toolbar}`
-     + ` − replay ${toque1.replay} − lo que la escalera tiene pagado fuera del PnL − suelo del gráfico ${toque1.suelo}`);
+  /* Dónde se para el dedo. El techo no es un número fijo: con el RSI visible vale
+     área − dibujo − replay − RSI − suelo (aquí ${toque1.techo} px); en cuanto el
+     arrastre pide más que eso, PC.ajustaEscalera pliega el RSI y el techo sube (aquí
+     ${toque2.techo} px) —el panel se estira con el sitio que la escalera devuelve, que
+     es exactamente lo que se buscaba en 390×844, donde no caben las dos cosas—. Por eso
+     se comprueban invariantes, no un píxel memorizado. */
+  ok(toque2.pane === Math.min(toque1.pane + 40, toque2.techo),
+     `y se para donde manda el HUECO REAL: pedido ${toque1.pane}+40, techo con la escalera ya plegada ${toque2.techo} `
+     + `(sin plegar era ${toque1.techo} = área ${toque1.area} − dibujo ${toque1.toolbar} − replay ${toque1.replay} − RSI − suelo ${toque1.suelo}) → panel ${toque2.pane} px`);
+  ok(toque2.pane > toque1.techo ? toque2.plegada === true : toque2.plegada === false,
+     `por encima del techo sin plegar (${toque1.techo} px) solo se pasa si la escalera se aparta (plegada ${toque2.plegada})`);
+  ok(toque2.lienzo >= toque2.suelo,
+     `y al estirar a tope las velas no bajan de su suelo: caja ${toque2.lienzo} vs suelo ${toque2.suelo}`);
   ok(toque2.solape === 0 && toque1.solape === 0,
      `ningún píxel del gráfico pinta encima de la escalera (solape ${toque1.solape} → ${toque2.solape} px; antes del arreglo eran 157)`);
   ok(toque2.lienzo >= toque2.suelo && toque2.fila >= toque2.suelo - 2,
@@ -881,7 +892,18 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(deVuelta.pane === toque1.pane && deVuelta.plegada === false && deVuelta.rsi !== 'none',
      `doble clic: el panel vuelve a ${deVuelta.pane} px, la escalera se despliega sola (RSI ${deVuelta.rsi}) y el gráfico recupera su fila (${deVuelta.fila} px)`);
   ok(deVuelta.g === null, `y la preferencia guardada se borra (${String(deVuelta.g)})`);
-  ok(deVuelta.lienzo >= 200, `con el reparto nuevo el gráfico en 390×844 mide ${deVuelta.lienzo} px de alto útil (antes: caja 200 con 43 de fila)`);
+  /* El contrato HONESTO del teléfono. El «≥200» que había aquí medía la caja del
+     lienzo, y la caja podía ser de 200 px con 43 px de fila y 157 px pintados encima de
+     la escalera: pasaba en verde y no quería decir nada. Lo que se exige ahora es lo
+     que se puede mirar: la caja mide lo que hay (caja == fila), 0 px sobre los paneles
+     y, con el andamio compactado, 146 px de velas en 390×844 — 3,4 veces los 43 de
+     antes. Los ≥200 px siguen siendo contrato, pero donde caben sin comernos el
+     formulario de órdenes ni las tarjetas del registro: tests/responsive.test.js y
+     tests/browser.capture.js los piden en 480×900 y allí se miden 204 px. */
+  ok(deVuelta.lienzo >= 140 && deVuelta.lienzo === deVuelta.fila && deVuelta.solape === 0,
+     `con el reparto nuevo el gráfico en 390×844 mide ${deVuelta.lienzo} px REALES `
+     + `(caja ${deVuelta.lienzo} == fila ${deVuelta.fila}, ${deVuelta.solape} px sobre la escalera; `
+     + `antes: caja de 200 con 43 de fila y 157 px pintados encima)`);
 
   ok(F.d.velas >= 2 && F.d.marcas >= 1, `y sigue pintando ${F.d.velas} velas de curva con ${F.d.marcas} marcador(es)`);
 
@@ -923,6 +945,64 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(H.dentro, 'tras el resize la etiqueta sigue dentro del lienzo y visible (se recoloca en cada cuadro)');
   ok(H.d.velas >= 2 && H.d.marcas >= 1, `la curva sobrevive al resize (${H.d.velas} velas, ${H.d.marcas} marcas)`);
   ok(H.sinScroll === 0, `ningún scroll horizontal tras el resize (${H.sinScroll} px)`);
+
+  /* ═══ J) PEOR CASO DE ESCALERA: con RSI y MACD abiertos, el gráfico NUNCA puede
+     pintarse encima de sus propios paneles. El defecto no era del teléfono —medido con
+     tres paneles: 69 px de solape a 1440×900, 66 a 1024×768, 46 a 900×700—, pero lo
+     tapaba el `min-height` del gráfico, que en una fila `1fr` de alto fijo no agranda la
+     fila: desborda. Lo arregla PC.comprimeEscalera (aprieta los paneles, no los oculta). ═══ */
+  const mideEscalera = () => `
+    const g = (id) => document.getElementById(id);
+    const area = g('chartArea'), wrap = g('chartWrap'), pa = g('paneArea');
+    const q = wrap.getBoundingClientRect(), s = pa.getBoundingClientRect();
+    const fila = Math.floor(parseFloat(getComputedStyle(area).gridTemplateRows.split(' ')[1] || '0'));
+    const vis = [...pa.querySelectorAll('.indPane')].filter((e) => e.offsetHeight > 0);
+    return { fila, caja: Math.round(q.height),
+             solape: Math.max(0, Math.round(q.bottom - s.top)),
+             apretados: vis.filter((e) => e.id !== 'panePnl' && e.style.height).map((e) => e.id + ':' + Math.round(e.getBoundingClientRect().height)),
+             pnlInline: g('panePnl').style.height, sueloInline: wrap.style.minHeight,
+             lienzo: Math.round(g('mainChart').getBoundingClientRect().height) };`;
+  await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
+  await espera(400);
+  const J1 = await page.evaluate(async (src) => {
+    App.indicators.rsi.on = true; App.indicators.macd.on = true;
+    App.applyIndicators(App.indicators, true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { d: PC.debug(), g: new Function(src)() };
+  }, mideEscalera());
+  ok(J1.g.solape === 0 && J1.g.apretados.length === 0,
+     `a 1280×800 con tres paneles no hace falta apretar NADA (apretados ${J1.g.apretados.length}, solape ${J1.g.solape} px, caja ${J1.g.g_caja || J1.g.caja})`);
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await espera(400);
+  const J2 = await page.evaluate(async (src) => {
+    const mide = new Function(src);
+    const una = mide();
+    const rep = PC.comprimeEscalera();                       // segunda pasada: no debe mover nada
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { una, dos: mide(), rep, vigil: document.getElementById('paneArea').dataset.pcVigil === '1', min: PC.MIN_PANE };
+  }, mideEscalera());
+  ok(J2.una.solape === 0 && J2.una.caja === J2.una.fila,
+     `a 1440×900 el gráfico deja de rebosar su fila (caja ${J2.una.caja} == fila ${J2.una.fila}, solape ${J2.una.solape}; antes: caja 240 con fila 171 = 69 px encima de la escalera)`);
+  ok(J2.una.apretados.length > 0 && J2.una.apretados.every((x) => Number(x.split(':')[1]) >= J2.min),
+     `los indicadores se APRIETAN en vez de ocultarse (${J2.una.apretados.join(' ')} con suelo de panel en ${J2.min} px)`);
+  ok(J2.una.pnlInline === '', `el panel de PnL no se toca sin arrastre (su style.height está vacío: «${J2.una.pnlInline}») —ese es el que la persona estira`);
+  ok(J2.rep === 0 && J2.dos.apretados.join() === J2.una.apretados.join(),
+     `el reparto es determinista: repetir no mueve nada (${J2.dos.apretados.join(' ')} vs ${J2.una.apretados.join(' ')}) —antes de ser determinista era un vaivén con el observador`);
+  ok(J2.vigil, 'la escalera está vigilada por un ResizeObserver (abrir un indicador desde el modal reparte solo)');
+  const J3 = await page.evaluate(async (src) => {
+    App.indicators.macd.on = false; App.indicators.rsi.on = false;
+    App.applyIndicators(App.indicators, true);
+    PC.comprimeEscalera();                     // el observador también lo haría; aquí no se le espera
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const g = (id) => document.getElementById(id);
+    const pa = g('paneArea'), wrap = g('chartWrap');
+    const vivos = [...pa.querySelectorAll('.indPane')].filter((e) => e.id !== 'panePnl' && e.style.height);
+    return { inline: vivos.length + (wrap.style.minHeight ? 1 : 0), ids: vivos.map((e) => e.id).join(','),
+             g: new Function(src)() };
+  }, mideEscalera());
+  ok(J3.inline === 0, `al cerrar los indicadores no queda NINGÚN alto en línea suelto (${J3.inline} de 0 esperados${J3.ids ? ' → ' + J3.ids : ''}) —un inline olvidado se come la escalera de CSS: ya pasó con el mini de la tarjeta`);
+  ok(J3.g.caja === J3.g.fila && J3.g.solape === 0, `y el gráfico recupera la fila entera sin trampa (caja ${J3.g.caja} == fila ${J3.g.fila}, solape ${J3.g.solape})`);
+
   ok(errs.length === 0, `sin errores de JavaScript en toda la suite (${errs.length}${errs.length ? ' → ' + errs[0] : ''})`);
   ok(recursos >= 1, `los únicos avisos de red son los bloqueados a propósito (${recursos} recursos abortados)`);
 
