@@ -439,6 +439,40 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
        esencial alcanzable sin deslizar, lo plegado alcanzable al abrir— porque la
        segunda sin la primera es simplemente esconder cosas. */
     if (w <= 640) {
+      /* La barra superior compactada, SOBRE LO PUBLICADO: la promesa no es «que quepa»,
+         es que quepa sin perder dato ni botón. Se mide el andamio, el recorte con
+         ellipsis de cada chip de 24 h y si lo que queda fuera del deslizador horizontal
+         se alcanza deslizando. */
+      const TB = await p.evaluate(async () => {
+        const g = (id) => document.getElementById(id);
+        const tb = g('topbar'), q = tb.getBoundingClientRect();
+        const pisa = (e) => { const r = e.getBoundingClientRect();
+          const c = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+          return (c === e || e.contains(c) || (c && c.contains(e))) ? 'si' : 'no'; };
+        const corte = [...g('bfStats').children].filter((c) =>
+          [...c.querySelectorAll('.bf-k, .bf-v, .bf-sub')].some((k) => k.scrollWidth > k.clientWidth + 1)).map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 18));
+        const grupo = tb.querySelector('.topbar-group');
+        const tf = g('tfQuick').querySelector('.tf-btn.active');
+        const antes = pisa(tf);
+        tf.scrollIntoView({ inline: 'center', block: 'nearest' });
+        await new Promise((r) => setTimeout(r, 260));
+        const despues = pisa(tf);
+        return { alto: Math.round(q.height), filas: getComputedStyle(tb).gridTemplateRows,
+          stats: Math.round(g('bfStats').getBoundingClientRect().height),
+          iconos: [...tb.querySelectorAll('.topbar-right button')].map((e) => Math.round(e.getBoundingClientRect().height)),
+          scrollea: grupo.scrollWidth > grupo.clientWidth + 2, corte, antes, despues,
+          chart: Math.round(g('chartWrap').getBoundingClientRect().height),
+          fila: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
+          solape: Math.max(0, Math.round(g('chartWrap').getBoundingClientRect().bottom - g('paneArea').getBoundingClientRect().top)) };
+      });
+      ok(TB.alto <= 96 && TB.stats <= 26 && TB.iconos.every((h) => h >= 20),
+         `${etiqueta}: la barra superior del teléfono mide ${TB.alto} px (filas ${TB.filas}, estadísticas ${TB.stats}, iconos ${TB.iconos.join('/')})`);
+      ok(TB.corte.length === 0, `${etiqueta}: ningún número de las 24 h queda cortado con ellipsis${TB.corte.length ? ' (' + TB.corte.join(' | ') + ')' : ''}`);
+      ok(TB.scrollea && TB.antes === 'no' && TB.despues === 'si',
+         `${etiqueta}: la fila del par desliza y la temporalidad activa se alcanza deslizando (${TB.antes} → ${TB.despues})`);
+      ok(TB.chart >= 120 && TB.chart === TB.fila && TB.solape === 0,
+         `${etiqueta}: y el gráfico se queda con ${TB.chart} px de verdad (fila ${TB.fila}, solape ${TB.solape})`);
+
       const AV = await p.evaluate(async () => {
         const g = (id) => document.getElementById(id);
         const pisa = (e) => {

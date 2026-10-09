@@ -81,8 +81,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
        caja del gráfico mide lo que hay (caja == fila), 0 px pintados sobre la escalera y
        al menos el suelo duro de 120 px. La promesa numérica de «≥200 px de alto útil»
        vive donde se mide con la escalera por defecto (un solo panel de indicadores):
-       tests/browser.capture.js, en 480×900 —204 px medidos, y 146 px honestos en el
-       teléfono de 390×844, que es lo que cabe sin tocar nada alcanzable—. */
+       tests/browser.capture.js, en 480×900, y en el bloque de la barra superior de abajo
+       (390×844 con el andamio compactado: 190 px medidos de gráfico). */
     const etiqueta = `${w}×${h}`;
     ok(m.chart >= 120 && m.chart === m.fila, `${etiqueta}: el gráfico conserva ${m.chart}px en el PEOR caso de escalera (fila ${m.fila}px, suelo 120px)`);
     ok(m.solape === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay`);
@@ -91,6 +91,77 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     ok(m.recorteInterno === 0, `${etiqueta}: nada se recorta entre el gráfico y el panel inferior`);
     ok(m.playVisible, `${etiqueta}: el botón PLAY es visible sin desplazar`);
   }
+
+  /* ═══════════ LA BARRA SUPERIOR DEL TELÉFONO: 135 → 90 px, y al gráfico ═══════════
+     Con el formulario de órdenes ya compactado, lo único que separaba al gráfico de
+     200 px en el teléfono era el andamio de arriba: 38 (marca + iconos) + 51 (par,
+     temporalidad, fechas, DEMO) + 36 (estadísticas 24 h) + 10 de padding = 135 px.
+     Se aprieta sin ocultar nada, así que lo que hay que comprobar es doble: que la barra
+     mide lo prometido y que NINGÚN dato se perdió por el camino (ni un «máx 72,966 ·
+     mín 68,39…» con el número cortado a ellipsis, ni un botón que se quede fuera del
+     deslizador sin forma de llegar a él). */
+  console.log('\n▸ La barra superior del teléfono (andamio que come altura)');
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await wait(500);
+  /* La escalera vuelve a su estado POR DEFECTO antes de mirar el gráfico: lo que se
+     juzga aquí es el andamio, y con RSI + MACD abiertos (el peor caso del bucle de
+     arriba) el alto del lienzo lo fija el mínimo de los paneles, no la barra —ahí la
+     ganancia se la comen los paneles y la medida no diría nada—. */
+  await page.evaluate(() => {
+    App.indicators.macd.on = false; App.indicators.rsi.on = false;
+    App.applyIndicators(App.indicators, true);
+  });
+  await wait(450);
+  const TB = await page.evaluate(async () => {
+    const g = (id) => document.getElementById(id);
+    const pisa = (e) => { const q = e.getBoundingClientRect();
+      const c = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+      return (c === e || e.contains(c) || (c && c.contains(e))) ? 'si' : 'no'; };
+    const tb = g('topbar'), q = tb.getBoundingClientRect();
+    const fila = (i) => Math.round(parseFloat(getComputedStyle(tb).gridTemplateRows.split(' ')[i] || '0'));
+    const grupo = tb.querySelector('.topbar-group');
+    const tfActivo = g('tfQuick').querySelector('.tf-btn.active');
+    const sinCorte = [...g('bfStats').children].every((c) =>
+      [...c.querySelectorAll('.bf-k, .bf-v, .bf-sub, .bf-bar')].every((k) => k.scrollWidth <= k.clientWidth + 1));
+    const textoFuera = [...g('bfStats').children].filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.id || c.className);
+    const rect = (e) => ({ t: Math.round(e.getBoundingClientRect().top), b: Math.round(e.getBoundingClientRect().bottom) });
+    return {
+      alto: Math.round(q.height), filas: [fila(0), fila(1), fila(2)], stats: Math.round(g('bfStats').getBoundingClientRect().height),
+      marca: Math.round(tb.querySelector('.brand').getBoundingClientRect().height),
+      iconos: [...tb.querySelectorAll('.topbar-right button')].map((e) => Math.round(e.getBoundingClientRect().height)),
+      scrolleaStats: g('bfStats').scrollWidth > g('bfStats').clientWidth + 2,
+      scrolleaGrupo: grupo.scrollWidth > grupo.clientWidth + 2,
+      anchoGrupo: [grupo.scrollWidth, grupo.clientWidth],
+      sinCorte, textoFuera,
+      // Fila 1 y 2 no se pisan, y las estadísticas empiezan por debajo del grupo del par.
+      pisaStats: rect(g('bfStats')).t >= rect(g('tfQuick')).b - 2,
+      pisaMarca: pisa(tb.querySelector('.brand-name')) === 'si' || pisa(g('btnIndicators')) === 'si',
+      par: pisa(g('btnSymbols')),
+      demoAntes: pisa(g('btnDemo')),
+      tfAntes: pisa(tfActivo),
+      tfTrasSwipe: (tfActivo.scrollIntoView({ inline: 'center', block: 'nearest' }), await new Promise((r) => setTimeout(() => r(pisa(tfActivo)), 240))),
+      demoTrasSwipe: (g('btnDemo').scrollIntoView({ inline: 'center', block: 'nearest' }), await new Promise((r) => setTimeout(() => r(pisa(g('btnDemo'))), 240))),
+      chart: Math.round(g('chartWrap').getBoundingClientRect().height),
+      filaChart: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1] || '0')),
+      solape: Math.max(0, Math.round(g('chartWrap').getBoundingClientRect().bottom - g('paneArea').getBoundingClientRect().top)),
+      ovx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      docH: document.documentElement.scrollHeight, vh: window.innerHeight,
+    };
+  });
+  ok(TB.alto <= 96 && TB.stats <= 26 && TB.marca <= 30,
+     `la barra del teléfono pasa de 135 a ${TB.alto} px (filas ${TB.filas.join('/')} · marca ${TB.marca} · estadísticas ${TB.stats})`);
+  ok(TB.chart >= 180 && TB.chart === TB.filaChart && TB.solape === 0,
+     `y esos píxeles son del gráfico: ${TB.chart} px de fila ${TB.filaChart} con la escalera por defecto (antes 189, y 43 al empezar el trabajo del móvil), solape ${TB.solape}`);
+  ok(TB.iconos.every((h) => h >= 20) && TB.par === 'si',
+     `la marca y los iconos siguen siendo diana (${TB.iconos.join('/')} px) y el botón del par se puede pulsar (${TB.par})`);
+  ok(TB.sinCorte && TB.textoFuera.length === 0,
+     `ningún dato de las 24 h se corta con ellipsis${TB.textoFuera.length ? ' (' + TB.textoFuera.join(', ') + ')' : ''} —los chips piden su ancho y la fila desliza (${TB.scrolleaStats ? 'sí' : 'no'})—`);
+  ok(TB.scrolleaGrupo && TB.anchoGrupo[0] > TB.anchoGrupo[1],
+     `la fila del par no esconde nada: desliza en horizontal (${TB.anchoGrupo[0]} px de contenido en ${TB.anchoGrupo[1]})`);
+  ok(TB.tfTrasSwipe === 'si' && TB.demoTrasSwipe === 'si',
+     `y tras deslizarla se alcanza la temporalidad activa y el botón DEMO (tf ${TB.tfAntes}→${TB.tfTrasSwipe}, demo ${TB.demoAntes}→${TB.demoTrasSwipe})`);
+  ok(TB.pisaStats && TB.ovx === 0 && TB.docH === TB.vh,
+     `las tres filas no se pisan (estadísticas bajo el grupo del par), el documento no desliza (${TB.docH} = ${TB.vh}) y no hay scroll horizontal (${TB.ovx}px)`);
 
   /* ═══════════ «AVANZADO» del formulario en el teléfono (390×844) ═══════════
      Mide el plegado de verdad: lo esencial cabe y se puede pulsar SIN scroll, y lo

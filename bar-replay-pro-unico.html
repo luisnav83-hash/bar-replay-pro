@@ -1585,6 +1585,29 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 #tradesBody tr:hover canvas.tr-spark { border-color: var(--line); }
 #panePnl .pane-title b { color: var(--tx-3); font-weight: 600; }
 @media (max-width: 640px) {
+  :root { --stats-h: 24px; }
+  #topbar { padding: 2px 8px 3px; }
+  #topbar .brand { padding: 1px 0; gap: 6px; }
+  #topbar .brand-logo { width: 22px; height: 22px; }
+  #topbar .brand-name { font-size: 12px; line-height: 1.05; }
+  #topbar .topbar-right { padding: 1px 0; gap: 4px; }
+  #topbar .topbar-right .btn-icon { height: 24px; padding: 0 5px; }
+  #topbar .topbar-group:not(.topbar-right) { padding: 2px 0; gap: 8px; }
+  #topbar .topbar-group .field { flex-direction: row; align-items: center; gap: 5px; min-height: 26px;
+                                margin-bottom: 0; }
+  #topbar .topbar-group input[type="date"], #topbar .topbar-group input[type="datetime-local"] { height: 26px; padding: 0 6px; font-size: 11px; }
+  #topbar .topbar-group .field-label { font-size: 9px; white-space: nowrap; }
+  #topbar .topbar-group .btn { height: 26px; padding: 0 8px; font-size: 11px; }
+  #topbar #btnSymbols { height: 26px; padding: 0 7px; font-size: 11px; }
+  #topbar #tfQuick { gap: 2px; }
+  #topbar #tfQuick .tf-btn { height: 24px; padding: 0 6px; font-size: 10.5px; }
+  #topbar .bf-stat { flex-direction: row; align-items: center; gap: 4px; padding: 2px 8px;
+                     max-width: none; }
+  #topbar .bf-stat .bf-k { font-size: 8px; }
+  #topbar .bf-stat .bf-v { font-size: 12px; line-height: 1.1; }
+  #topbar .bf-stat .bf-sub { font-size: 8px; }
+  #topbar .bf-stat .bf-bar { width: 46px; flex: 0 0 auto; }
+  #topbar .bf-stat.bf-src { flex: 0 0 auto; max-width: none; }
   #pnlBadge { gap: 4px 5px; padding: 3px 6px; font-size: 10px; max-width: 210px; flex-wrap: wrap; }
   #pnlBadgeVal { font-size: 11px; }
   #pnlBadgeQty, #pnlBadgePct, #pnlBadgeDelta, #pnlBadgeReal { font-size: 9px; }
