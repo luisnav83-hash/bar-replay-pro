@@ -573,11 +573,12 @@ Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue
 **1088 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
 Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1360 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1086 locales + las 6 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas en cada
-despliegue — y el `md5` del archivo publicado coincide byte a byte con el del build local:
-12 del buscador + 10 de dibujos + 46 de promediado/TP + 57 del trailing + **104 de la piel
-Bitunix** (añade el bloque móvil de «Avanzado») + 65 del marcaje de PnL)
+**1382 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
+(1088 locales + 294 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-09
+con el despliegue en `cae0a0d` — y el `md5` del archivo publicado (`8e02bafe…`, 943 004 B)
+coincide byte a byte con el del build local: 12 del buscador + 10 de dibujos +
+46 de promediado/TP + 57 del trailing + **104 de la piel Bitunix** (6 comprobaciones nuevas:
+el bloque «Avanzado» del teléfono, medido pulsando SL/TP de verdad) + 65 del marcaje de PnL)
 
 > `test:all` ya no encadena suites con `&&`: usa `tools/run-all.js`, que lanza **todas**
 > siempre, lee el recuento que imprime cada una y solo al final decide. Con `&&` la primera
