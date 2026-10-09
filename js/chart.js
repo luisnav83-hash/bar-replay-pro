@@ -262,7 +262,7 @@
    * Se mide el contenedor (`.pane-chart`), no el canvas: el contenedor lo fija la rejilla
    * y los `style.height` de PC.comprimeEscalera, así que la decisión NO realimenta su
    * propia entrada (medir el canvas habría creado el vaivén que los `floor` de
-   * comprimeEscalera tardaron en/domar). `CM._ejeEn` deja constancia para los tests.
+   * comprimeEscalera tardaron tanto en domar). `CM._ejeEn` deja constancia para los tests.
    */
   CM.MIN_HUECO_CON_EJE = 48;
   CM._reparteEje = function () {
