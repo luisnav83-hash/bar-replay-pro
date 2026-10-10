@@ -108,6 +108,30 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         sliderCoherente: (() => { const r = document.getElementById('progressRange');
           return r && window.BR ? Math.abs(+r.value - Math.round(BR.progressTotal() * 1000)) : -1; })(),
         playVisible: play.width > 0 && play.top >= 0 && play.bottom <= window.innerHeight + 2,
+        /* ─── LA TIRA / EL LIBRO ─── el mismo contrato geométrico que audita
+           tests/pages-bitunix.js, pero SOBRE EL ARCHIVO ÚNICO Y SIN RED: en el modo DEMO el
+           libro se pinta de los datos derivados de las velas, y fue justo ahí donde la banda
+           bid/ask desaparecía (los topes a mano de cada tier no cuadraban con su propio
+           contenido). Aquí no hay dedo, así que solo se mide la caja. */
+        tira: (() => {
+          const sb = document.getElementById('sidebar'), bk = document.getElementById('bookCard');
+          if (!sb || !bk) return null;
+          const cs = (e) => getComputedStyle(e), body = bk.querySelector('.card-body');
+          const bb = body.getBoundingClientRect();
+          const dentro = (e) => { if (!e || cs(e).display === 'none') return 'oculta';
+            const q = e.getBoundingClientRect(); return q.top >= bb.top - 0.5 && q.bottom <= bb.bottom + 0.5; };
+          const fillas = (c) => { let n = 0; for (const f of c.children) { const q = f.getBoundingClientRect();
+            const iv = Math.min(bb.bottom, q.bottom) - Math.max(bb.top, q.top); if (q.height > 0 && iv >= q.height * 0.95) n++; } return n; };
+          const visibles = [...body.children].filter((e) => cs(e).display !== 'none');
+          return { esTira: cs(sb).flexDirection === 'row',
+                   caja: Math.round(bb.height), contenido: body.scrollHeight,
+                   fuera: Math.max(0, body.scrollHeight - body.clientHeight),
+                   precio: dentro(bk.querySelector('.bf-book-last')), banda: dentro(bk.querySelector('.bf-book-frac')),
+                   asks: fillas(document.getElementById('bookAsks')), bids: fillas(document.getElementById('bookBids')),
+                   suma: Math.round(visibles.reduce((a, e) => a + e.getBoundingClientRect().height, 0)),
+                   altoFila: (() => { const r = document.getElementById('bookAsks').firstElementChild;
+                     return r ? Math.round(r.getBoundingClientRect().height) : 0; })() };
+        })(),
       };
     });
     /* QUÉ SE PROMETE AQUÍ, y por qué no es «200 px siempre». Este bloque abre RSI + MACD
@@ -132,6 +156,21 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     ok(m.ovx === 0, `${etiqueta}: sin desbordamiento horizontal (${m.ovx}px)`);
     ok(m.recorteInterno === 0, `${etiqueta}: nada se recorta entre el gráfico y el panel inferior`);
     ok(m.playVisible, `${etiqueta}: el botón PLAY es visible sin desplazar`);
+    /* El libro, en el modo DEMO del archivo único: nada recortado dentro de su cuerpo y el
+       precio y la banda a la vista. El segundo assert es la cuenta del reparto `--cuerpo`
+       (marco fijo + las dos columnas de niveles NO pueden exceder la caja): es la forma de
+       escribir «el tope y el contenido cuadran» sin depender de que el marco mida lo mismo en
+       todos los tiers —la primera versión exigía igualdad ±3 px y saltó en 1000×780, donde el
+       precio central mide 28 y no los 34 de 900×700, por el relleno que cada tier le pone—:
+       una cota, no una suma, y sigue disparándose con el defecto de siempre. */
+    ok(m.tira && m.tira.fuera === 0 && m.tira.precio === true && m.tira.banda === true,
+       `${etiqueta}: el libro del DEMO se pinta ENTERO (${m.tira ? m.tira.caja : '?'} de caja, ${m.tira ? m.tira.contenido : '?'} de contenido, 0 fuera) con el precio central y la banda bid/ask dentro`);
+    if (m.tira && m.tira.esTira) {
+      ok(m.tira.suma <= m.tira.caja + 1 && m.tira.altoFila >= 17,
+         `${etiqueta}: la cuenta del reparto cabe (marco fijo + dos columnas = ${m.tira.suma} px en ${m.tira.caja} de caja) y las filas no se aplastan (${m.tira.altoFila} px, suelo 17)`);
+    }
+    ok(m.tira && m.tira.asks >= 1 && m.tira.bids >= 1,
+       `${etiqueta}: y quedan ${m.tira ? m.tira.asks : 0} filas de ventas y ${m.tira ? m.tira.bids : 0} de compras ENTERAS por lado (filas de ${m.tira ? m.tira.altoFila : 0} px)`);
     /* La escala del `<input>` de posición: el código escribe `fracción*1000` y divide por
        1000, así que con `max="100"` (como estaba) el navegador clampaba el valor —la perilla
        vivía pegada a la derecha desde la primera vela y el arrastre no pasaba del 10 % del
@@ -714,6 +753,22 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const pa = document.getElementById('paneArea'); pa.scrollTop = 0;
   });
   await wait(520);
+
+  /* Captura de la TIRA DEL TELÉFONO parada en el libro: la tarjeta del libro es la segunda de
+     una tira horizontal que desliza (el formulario va delante, como en el exchange), así que
+     para retratarla hay que deslizar la tira hasta su offsetLeft —dejarla en reposo sería
+     fotografiar el formulario y llamar «el libro» a otra cosa—. Se ve: las cuatro filas por
+     lado, el precio central entre ellas, la banda long/short debajo (las tres cosas que el
+     recorte se comía) y 24 px de la tarjeta de paneles asomando por la derecha, que es la
+     señal de que la tira sigue. */
+  await page.evaluate(() => {
+    const sb = document.getElementById('sidebar'), bk = document.getElementById('bookCard');
+    sb.scrollLeft = bk.offsetLeft;
+  });
+  await wait(400);
+  await page.screenshot({ path: path.join(__dirname, '..', 'docs', 'captura-49-tira-libro-movil.png') });
+  await page.evaluate(() => { document.getElementById('sidebar').scrollLeft = 0; });
+  await wait(200);
 
   /* Captura de la barra de replay en el teléfono: se ve el deslizador con la perilla en su
      sitio (el bloque de arriba deja el replay en el 20 %), el contador y el estado, y la

@@ -589,6 +589,13 @@ color y el grosor cortándose en el borde derecho —ese corte es la señal de q
 
 ![Barra de dibujo en el móvil](docs/captura-48-barra-dibujo-movil.png)
 
+**La tira de abajo, parada en el libro** (390×844) — en el teléfono las tres tarjetas
+(formulario, libro, paneles) son una tira horizontal: engancha en cada tarjeta y la vecina
+asoma 24 px para que se sepa que hay algo a la derecha. Dentro del libro se ven las cuatro
+filas por lado, el precio central y la banda long/short, y la pasada de dedo que empieza
+encima del formulario desliza la tira en vez de morarse dentro del campo.
+![Tira del móvil, en el libro](docs/captura-49-tira-libro-movil.png)
+
 **Resultados** — historial completo con motivo de cierre, R múltiplo y duración:
 
 ![Estadísticas](docs/captura-05-estadisticas.png)
@@ -1208,6 +1215,46 @@ bar-replay-app/
   `trailing.test.js` y `pages-promediar.js`). Y `UI._openTradeRow` tenía que ganar su
   celda también: 12 celdas contra 13 cabeceras es una tabla desalineada que NINGÚN test
   de «existe la columna» detecta — el detector es contar `tr.children` contra `th`.
+- **La tira del teléfono: que el dedo la recorra y que el libro se pinte entero
+  (2026-10-10).** Cinco cosas, y ninguna era «el layout del libro». (1) El cuerpo del
+  formulario llevaba `overscroll-behavior: contain` —en CSS eso es **los dos ejes**—, así que
+  el gesto horizontal moría dentro de la tarjeta: una pasada de 240 px encima del formulario
+  dejaba `#sidebar.scrollLeft` en **0** y el libro, a 380 px a la derecha, no existía para el
+  pulgar (empezando el mismo gesto en la cabecera de la tarjeta, llegaba a 441). Separar los
+  ejes (`overscroll-behavior-y: contain` + `overscroll-behavior-x: auto`) lo arregla: medido
+  371 px sobre lo local. **No es `overflow-x:hidden`**: probado, sigue en 0 —contener el rebote
+  vertical no tiene por qué cortar el paneo horizontal del padre, pero lo cortaba—.
+  (2) El libro se recortaba su propia banda bid/ask **en todas las franjas bajas**: cada tier
+  ponía topes a mano (110, 130, 176, 82 px de cuerpo) que no cuadraban con lo que pedía el
+  contenido (152, 170, 216, 98), y lo que sobraba se lo comía siempre el último hijo. En el
+  teléfono, además, las compras tapaban el precio central. (3) Los botones de panel (👁 y 🚫 de
+  cada indicador) estaban en 12×14 px: en una tira que se toca, nada por debajo de 20 (ahora
+  22×20). (4) `scroll-snap-type: x proximity` con cada tarjeta a `calc(100% - 24px)` para que
+  la vecina asome —sin esa señal, el libro es invisible—. (5) La fila del libro es **diana**,
+  no texto: pincharla prepara un límite a ese precio (`js/orderBook.js`), así que en ≤640 su
+  `min-height` sube a 20 px y en las franjas anchas se queda en 17 (allí no hay dedo, y 3 px
+  por fila son una fila más de libro con la misma altura de franja).
+  La lección de método vale más que el arreglo: **un `flex:1 1 auto` y un
+  `grid-template-rows: minmax(0,1fr)` NO reparten contra un `max-height`** —lo intenté dos
+  veces, medí 451 y 240 de contenido contra 224 y 217 de caja— porque ambos calculan el espacio
+  libre contra una altura *definida*, que aquí no existe; y **dar esa altura definida a la
+  franja tampoco vale**: la tira deja de encogerse, el gráfico pierde 59 px y se cae por debajo
+  de su suelo de 120 en el peor caso de escalera (101 px a 1000×780 y 116 a 900×700, y
+  `test:layout` lo cantó en las dos pasadas). Lo que cierra la cuenta es derivar el reparto del
+  tope que el tier ya usa para *cualquier* cuerpo de tarjeta (`--cuerpo`: 124/110/130/82/216 px)
+  menos el marco fijo del libro (`--marco`, medido: 60 en la franja ancha, 53 en el teléfono),
+  partido entre ventas y compras: **quien reparte no puede ser quien manda en la franja**, y
+  mientras el libro pedía 169 en una tira de 164 el gráfico perdía su sitio. Resultado medido:
+  4 filas por lado de 20 px en el teléfono (1098 px de contenido en 390 de caja), 2 en
+  900×700, 7 en escritorio, 0 px de recorte y banda y precio dentro de la caja en las ocho
+  tallas, con la suite de adaptables de 145 a 168 comprobaciones y la de Pages bitunix de 131
+  a 139. Y tres lecciones de *sonda*, porque el culpable a veces era mi medición: comparar cajas
+  con `Math.round` en los dos lados del filtro daba «0 filas visibles» cuando eran cuatro;
+  preguntar a `elementFromPoint` por la fila del libro en reposo decía «no se puede pinchar»
+  cuando lo que pasa es que la tira arranca en el formulario y el libro está a 380 px (hay que
+  deslizar primero y luego mirar); y exigir «en reposo el formulario entra entero» justo después
+  del bloque que abre «Avanzado» acusaba 64 px que el propio test había metido.
+
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).

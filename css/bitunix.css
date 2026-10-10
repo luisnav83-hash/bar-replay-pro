@@ -851,7 +851,20 @@ kbd {
     border-top: 1px solid var(--line);
     overflow-x: auto;
     overflow-y: hidden;
-    max-height: 190px;
+    /* El tope de la franja vive en UNA variable, `--tira`, porque el libro la necesita para su
+       reparto y cada tier ya ponía aquí su número (190, 176, 170, 122, 250): sin la variable,
+       cada tier tendría dos cifras que mantener en fila.
+       Y el mecanismo sigue siendo `max-height`, NO `height`. Lo probé con `height` y la franja
+       dejó de ajustarse a su contenido: donde no necesitaba todo el hueco, el gráfico perdió
+       59 px y `test:layout` lo cazó al instante («1000×780: el gráfico conserva 101px en el
+       PEOR caso de escalera», suelo 120 px). Los contratos de la escalera existen precisamente
+       para que nadie —ni yo, arreglando un libro— le robe alto al gráfico. */
+    --tira: 190px;
+    max-height: var(--tira);
+    /* Marco fijo del libro MEDIDO en esta franja: precio central 34 + banda long/short 26
+       (la cabecera de columnas ya está oculta por debajo de 1000 px, así que no cuenta).
+       De ahí sale el reparto de las dos columnas de niveles; en el teléfono se aprieta a 53. */
+    --marco: 60px;
     min-height: 0;
   }
   #sidebar > .card {
@@ -863,7 +876,7 @@ kbd {
     border-right: 1px solid var(--line);
     border-bottom: 0;
   }
-  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; --cuerpo: 124px; }
   /* Los hijos de un cuerpo con tope de altura NO se deben encoger: son filas de
      altura propia (segmented, % rápidos, campos) y con `flex-shrink` por defecto
      se aplastaban a 2 px en móvil y en franja —el botón existía pero no se veía—. */
@@ -883,7 +896,68 @@ kbd {
     border-top: 1px solid var(--line-soft);
   }
   #bookCard { min-width: 268px; max-width: 300px; }
-  #bookCard .card-body { max-height: 118px; }
+  /* ─── EL LIBRO DE LA TIRA: REPARTO POR RESTA, NO TOPES A MANO ───
+     El libro y la tarjeta de paneles viven en una fila horizontal (el bloque de arriba de
+     este tier), y cada franja baja les ponía un `max-height` en el cuerpo (110, 130, 176, 82
+     según el tier) con topes también a mano dentro (51, 68, 80 y 24 px por columna de filas).
+     Cuadrar esas cifras era imposible, y cuando no cuadraban el recorte se comía SIEMPRE lo
+     último: la banda bid/ask que el propio HTML del bloque promete. Medido antes de esto: 152,
+     170 y 98 px de contenido contra 110, 130 y 82 de caja —la banda NO se pintaba en NINGUNA
+     franja baja, y en el teléfono las compras se comían el precio central—.
+
+     Tres mecanismos se han probado para arreglarlo; los dos primeros fallan y están medidos,
+     así que quedan escritos para que nadie los repita:
+       · `display:flex; flex-direction:column` + `flex:1 1 auto`/`min-height:0` en los hijos,
+         fiándose del alto `auto` de la tarjeta estirada → NO repartió nada (asks 200 + bids 200
+         + precio 24 + banda 27 = 451 de contenido contra 224 de caja, banda fuera);
+       · `display:grid` con `grid-template-rows: auto minmax(0,1fr) auto …` → tampoco: el `1fr`
+         se calcula contra un alto DEFINIDO, y con `max-height` el alto usado sigue siendo
+         max-content (medido: 240 de contenido contra 217 de caja, banda fuera otra vez);
+       · dar `height` definido a la franja o al cuerpo → reparte perfecto, pero la tarjeta pasa
+         a medir el tope ENTERO también donde antes se encogía, y el gráfico se queda en 101 px
+         en el peor caso de escalera contra su suelo de 120 (lo cantó `test:layout` en 900×700
+         y en 1000×780). El alto del gráfico no se toca: es un contrato, no una preferencia.
+     Lo que sí funciona es la aritmética explícita derivada de UN número: `--tira` (el tope de la
+     franja, que cada tier ya ponía) menos la cabecera de la tarjeta y su hilo superior
+     (34 px medidos: 33 de cabecera + 1 de borde) menos el
+     marco fijo del libro (`--marco`: cabecera de columnas 24 + precio central 24 + banda
+     long/short 29 = 77 px), partido entre las dos columnas de niveles. Nada se recorta a ojo
+     y lo último que se ve —la banda— deja de ser la víctima del redondeo. */
+  #sidebar > #bookCard > .card-body {
+    overflow: hidden;
+    /* `padding:0` y `gap:0` son PARTE de la cuenta, no cosmética: el `.card-body` del tema trae
+       10 px de padding y 5 px de hueco entre los cinco hijos —20 px de aire—, y eso era justo
+       el residual que seguía recortando la última fila del libro. */
+    padding: 0; gap: 0;
+    /* SIN tope propio y estirando la tarjeta: el cuerpo no decide cuántas filas caben (eso lo
+       decide `--cuerpo` abajo) pero su CAJA sí llena la franja, para que el libro no deje un
+       agujero de 90 px por debajo cuando la franja la marca el formulario. */
+    max-height: none;
+    flex: 1 1 auto; min-height: 0;
+  }
+  #sidebar > #bookCard > .card-body > .bf-asks,
+  #sidebar > #bookCard > .card-body > .bf-bids {
+    /* DE `--cuerpo`, no de `--tira`. `--cuerpo` es el tope que el tier ya le da a CUALQUIER
+       cuerpo de tarjeta de la franja (124, 110, 130, 82 y 216 según el caso): compartir ese
+       número es lo que garantiza que el libro no puede dejar de ser el que manda en la franja.
+       Derivarlo de `--tira` —que fue el intento anterior— inflaba la tira 5-6 px en 900×700 y
+       1000×780 porque allí el formulario cabía en menos: la tira, que es de alto `auto`, pasó a
+       medir lo que pedía el libro y el gráfico perdió su suelo de 120 px en el peor caso de
+       escalera (101 y 116 px, otra vez `test:layout`). La regla de oro de este incremento: en
+       una franja de alto automático, quien reparte se calla y usa el mínimo común.
+       El `max(…)` es para las franjas más apretadas (con 82 px salen 11 por lado, menos que una
+       fila): mejor UNA fila entera que una fila y media cortada. */
+    max-height: max(17px, calc((var(--cuerpo, 124px) - var(--marco, 60px)) / 2));
+    overflow: hidden;
+  }
+  /* El marco fijo no participate del reparto: se le quitan los topes que los tiers ponían a
+     mano para que ocupe lo suyo y ni un píxel más. */
+  #sidebar > #bookCard > .card-body > .bf-book-cols,
+  #sidebar > #bookCard > .card-body > .bf-book-last,
+  #sidebar > #bookCard > .card-body > .bf-book-frac { max-height: none; }
+  /* En el ancho de la tira (641-1000 px) no hay dedo: las filas se quedan en sus 17 px de
+     siempre, que meten una fila más por lado con la misma franja. El suelo táctil de 20 px
+     vive en el bloque del teléfono, que es donde se toca. */
   /* En estrecho lo importante es poder operar: el panel de órdenes pasa el
      primero y el libro detrás (en el exchange, en móvil, ocurre igual). Se
      sube la especificidad (id + hijo directo) para ganar a #sidebar > .card. */
@@ -1004,24 +1078,36 @@ kbd {
      que el `min-height:150px` del gráfico no rebase su fila es apretar la escalera: 48
      px por panel. Medido a 900×700: fila 108,7 → 149,7 y solape 41 px → 0. */
   .indPane { height: 48px; }
-  #sidebar { max-height: 176px; }
-  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; }
-  #bookCard .card-body { max-height: 110px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 51px; overflow: hidden; }
+
+  #sidebar { --tira: 176px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; --cuerpo: 110px; }
+  /* El libro ya no lleva topes aquí: se reparte los 142 px que quedan tras su cabecera y
+     decide solo cuántas filas entran (medido: 3 por lado de 20 px, precio y banda vistos). */
 }
 @media (max-width:1000px) and (max-height:700px) {
   /* Aquí el que se aprieta de verdad es el panel inferior: la franja del
      terminal necesita sitio para mostrar precio central + 2 filas por lado. */
   #bottomPanel { height: 86px; }
-  #sidebar { max-height: 170px; }
-  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; }
-  #bookCard .card-body { max-height: 130px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 44px; overflow: hidden; }
+
+  #sidebar { --tira: 170px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; --cuerpo: 130px; }
 }
 @media (max-width:1000px) and (max-height:640px) {
-  #sidebar { max-height: 122px; }
-  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 24px; }
+  #sidebar { --tira: 122px; max-height: var(--tira); }
+
+  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; --cuerpo: 82px; }
+  /* En la franja de 122 no da para precio + banda + una fila: se queda el precio, que es lo que
+     se mira, y la banda long/short se oculta DEL TODO —a propósito, no por recorte— con un
+     selector de dos IDs: con `#bookCard .bf-book-frac { display:none }` el tema la volvía a
+     mostrar más abajo y el `display:none` se quedaba en nada (medido: la banda seguía ahí).
+     Sin banda, `--marco` baja a 34 y la cuenta vuelve a cerrar: 34 + 2×24 = 82 = el tope. */
+  #sidebar > #bookCard > .card-body > .bf-book-frac { display: none; }
+  #sidebar { --marco: 34px; }
+  /* 122 de franja − 33 de cabecera = 89 para el cuerpo del libro: precio (24) y banda (29)
+     se los queda `flex:0 0 auto`, y a las dos columnas les quedan 17 px por lado —una fila
+     y media—. Es EL caso en el que el comentario de arriba prometía «2 filas por lado» y
+     los topes a mano daban 24 px (una fila pelada); ahora lo que hay es lo que hay, y la
+     banda se pinta, que era el defecto. */
   .indPane { height: 48px; }
 }
 
@@ -1126,7 +1212,17 @@ kbd {
      «el centro del botón está despejado para recibir el dedo (nada)», con el centro en
      y 845 de una pantalla de 844). Un gráfico 60 px más alto no vale un control que no
      se puede pulsar: el sitio de las velas se saca del registro y de la escalera. */
-  #sidebar { max-height: 250px; }
+  /* En el teléfono el formulario (221 px) es más alto que lo que pide el libro, así que la tira
+     la sigue marcando él y el libro puede usar el hueco entero: 250 − 34 = 216. */
+  #sidebar { --tira: 250px; --marco: 53px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { --cuerpo: 216px; }
+  /* Y la banda long/short VOLVE: el tier `(max-width:1000px) and (max-height:640px)` la mata
+     para las ventanas anchas y bajitas (900×560), pero un teléfono de 640 px de alto también
+     lo cumple y aquí la franja tiene 250 px de sobra, así que ocultarla era un daño colateral
+     —medido: `bf-book-frac display:none` en 360×640 con 91 px de hueco—. Mismo selector (dos
+     IDs) porque con menos especificidad no se gana al tema ni a este propio tier. */
+  #sidebar > #bookCard > .card-body > .bf-book-frac { display: flex; }
+
   /* El registro del móvil: 130 px = 33 de pestañas + 97 de lista. No se puede apretar
      más: al bajarlo a 100 las tarjetas de posición (donde viven el trailing y las filas
      de TP/SL) se salían del recorte y el botón quedaba FUERA de la pantalla —lo cantó
@@ -1176,8 +1272,20 @@ kbd {
      ahora el contenido real con todo plegado son ~207 px (medido), o sea: nada que
      deslizar en el estado por defecto. `overscroll-behavior:contain` para que seguir
      deslizando sobre la tarjeta no arrastre también la página (en el dedo es muy
-     fácil). */
-  #sidebar > #orderCard > .card-body { max-height: none; overflow-y: auto; overscroll-behavior: contain;
+     fácil) — PERO SOLO EN Y: escrito como `overscroll-behavior: contain` a secas contenía
+     también el eje X, y contener un eje corta la cadena de scroll. Como el cuerpo del
+     formulario es caja de scroll en X por la regla del CSS que convierte el `visible` en
+     `auto` cuando su hermano es `auto` (medido: overflow-x computado `auto`, con 0 px de
+     desborde), el gesto horizontal moría ahí dentro: con el dedo encima del formulario,
+     una pasada de 300 px dejaba `#sidebar.scrollLeft` en 0 —y el libro, que está a 380 px
+     a la derecha, simplemente no existía—, mientras que empezando el mismo gesto en la
+     cabecera de la tarjeta llegaba a 441. Puesto el `contain` solo en Y, la pasada sobre el
+     formulario desliza (medido: 434). */
+  /* El tope de 221 px SE QUEDA, aunque «darle aire» pareciera mejora: sin él el cuerpo de la
+     tarjeta medía 196 y el formulario 215 —19 px fuera, recorte EN REPOSO y el aviso de
+     desborde del pie encendido—, que es justo lo que `test:layout` promete que no pasa. */
+  #sidebar > #orderCard > .card-body { max-height: 221px; overflow-y: auto;
+                                      overscroll-behavior-y: contain; overscroll-behavior-x: auto;
                                       padding: 4px 8px 3px; gap: 2px; scrollbar-width: thin; }
   /* 224 px de contenido contra 221 de caja con TODO plegado: se apretaron 2 px de
      `padding-bottom` para que el estado por defecto NO deslice (la señal del pie solo
@@ -1270,8 +1378,48 @@ kbd {
   #orderCard { position: relative; }
   #orderCard.desborda::after { content: ""; position: absolute; left: 1px; right: 1px; bottom: 0; height: 14px;
                                pointer-events: none; background: linear-gradient(180deg, rgba(20,20,24,0), var(--bg-2, #141418)); }
-  #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
+  /* ─── LA TIRA DE LA COLUMNA: Órdenes · Libro · Paneles ───
+     `#sidebar` en estrecho es una fila con `overflow-x:auto`: 1060 px de contenido contra
+     390 de caja (670 por deslizar) con el libro en x 380..680 y la tarjeta de paneles aún
+     más lejos. Con el gesto ya arreglado arriba faltaba lo otro: cada tarjeta medía lo que
+     pedía (la de órdenes 380, el libro 300) y en cada parada no asomaba NADA de la
+     siguiente, así que la tira se veía como un cajón cerrado. Ahora cada tarjeta mide «la
+     pantalla menos 24 px» y el `scroll-snap` aterriza en su canto: en cada parada asoman
+     24 px de la vecina —el color rojo/verde de las filas del libro asomando por la derecha
+     es la única señal honesta de que ahí detrás hay libro— y el formulario no se recorta
+     porque todas sus filas son `minmax(0,1fr)` / `flex:1 1 auto` (lo vigilan
+     tests/pages-trailing.js y tests/pages-bitunix.js, que pulsan el centro de cada botón). */
+  #sidebar { scroll-snap-type: x proximity; }
+  #sidebar > .card { min-width: calc(100% - 24px); max-width: calc(100% - 24px);
+                     scroll-snap-align: start; }
+  /* El libro, dentro de la franja de 250 px: 33 de cabecera + lo que quepa de cuerpo. El
+     cuerpo estaba topado a 176 con 218 de contenido, o sea que la BANDA BID/ASK —la que
+     promete el propio HTML del bloque— caía 35 px fuera del `overflow:hidden` y las filas
+     de compras se comían el precio central. Repartido entero: 4 filas por lado, precio y
+     banda. Y las filas pasan a 20 px de alto: pinchar una fila del libro prepara una orden
+     límite a ese precio (js/orderBook.js), así que 17 px no era una fila de-info, era una
+     diana corta; con 20 px entran 4+4 dentro del tope, que es lo que enseña Bitunix en el
+     teléfono. */
+  #bookCard .bf-row { min-height: 20px; }
+  /* El reparto, EN VEZ DE NÚMEROS. El cuerpo del libro estaba topado a 176 px con topes
+     escritos a mano dentro (68 por lado) y un precio central y una banda bid/ask que tenían
+     que cuadrar exactos: no cuadraban (216 de caja contra ~226 de contenido medido) y el
+     recorte se comía SIEMPRE lo último, o sea la banda bid/ask entera y un trozo de las
+     compras —la prometida «banda al pie» del propio HTML no se pintaba nunca en el
+     teléfono—. Ahora el cuerpo es una columna flex donde el precio y la banda son
+     `flex:0 0 auto` (no se tocan jamás) y las dos columnas de filas `flex:1 1 0`, de modo
+     que SE REPARTEN lo que sobra y cada una recorta sus filas lejanas: con 20 px de fila
+     entran 4 por lado y, si mañana la franja es más baja, entran 3 —sin que nadie tenga que
+     recalcular el tope de nadie—. Que las filas no se aplasten es lo de siempre: los hijos
+     de un columna con tope llevan `flex:0 0 auto` (`.bf-asks > .bf-row`, más arriba). */
+  /* El libro del teléfono ya no declara NADA: la estructura vive en el tier de la tira
+     (ver css/bitunix.css §3), y aquí solo se aprieta lo que sobra —sin números de tope,
+     que era justo lo que no cuadraba—. */
+  #bookCard .bf-book-last { margin: 1px 0; padding: 2px 10px; }
+  #bookCard .bf-book-frac { padding: 3px 10px 4px; }
+  /* Los «👁 ocultar / 🚫 quitar» de la tarjeta de paneles medían 12×14 px y son el único
+     sitio del teléfono donde se apaga un panel sin abrir los ajustes. */
+  #panelsCard .card-body button { min-width: 22px; min-height: 20px; padding: 0 5px; }
 }
 
 /* ========================== PnL EN EL GRÁFICO (js/pnlChart.js) ==========================

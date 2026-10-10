@@ -674,6 +674,137 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
       ok(AV.vuelta.oculto && AV.vuelta.aria === 'false' && AV.vuelta.st === false && AV.vuelta.recorte === AV.antes.recorte && AV.vuelta.hitos.every((x) => x === 'si') && AV.vuelta.trasDeslizar.every((x) => x.endsWith(':si')),
          `${etiqueta}: cerrar devuelve el estado anterior de verdad (aria ${AV.vuelta.aria}, ST ${AV.vuelta.st}, recorte ${AV.vuelta.recorte} = ${AV.antes.recorte}, ${AV.vuelta.hitos.join(' ')})`);
       ok(AV.vuelta.caja === G.chart, `${etiqueta}: y el gráfico recupera píxel a píxel lo que tenía antes de abrir (${AV.vuelta.caja} == ${G.chart})`);
+
+      /* ─── LA TIRA DEL TELÉFONO: EL LIBRO SE VE, EL DEDO LO ALCANZA ───
+         Cinco cosas que se estaban comiendo entre sí, medidas como las midió la sonda de este
+         incremento (y no con `Math.round` en los dos lados del comparador, que daba «0 filas
+         visibles» cuando eran cuatro —el filtro de filas tiene que ir en flotante—):
+           1. Dentro del cuerpo del libro no se recorta NADA, y el precio central y la banda
+              long/short están dentro de la caja que recorta. Era la víctima histórica: cada
+              tier ponía topes a mano (110/130/176/82) que no cuadraban con su contenido
+              (152/170/216/98) y siempre sobraba de la última fila.
+           2. El reparto cabe: marco fijo + las dos columnas de niveles <= la caja. Cota, no
+              suma exacta: el precio central mide 34 px en unas tallas y 28 en otras (su
+              relleno cambia por tier) y exigir igualdad saltaba sin defecto alguno.
+           3. La tira es tira: desliza, engancha en cada tarjeta y la vecina asoma, para que
+              se sepa que hay algo a la derecha sin tener que descubrirlo.
+           4. La pasada de dedo EMPEZANDO ENCIMA DEL FORMULARIO mueve la tira. El defecto no
+              era de layout: `overscroll-behavior-y: contain` del cuerpo del formulario se
+              aplicaba a los dos ejes y el gesto moría ahí (0 px de `scrollLeft`), así que el
+              libro —a 380 px a la derecha— no existía para el pulgar.
+           5. Un botón de panel y una fila del libro son dianas (>=20 px) : el libro se pincha
+              para preparar una orden límite a ese precio (js/orderBook.js), y los iconos de
+              panel estaban en 12×14 px. */
+      const TR = await p.evaluate(async () => {
+        const g = (id) => document.getElementById(id);
+        const cs = (e) => getComputedStyle(e);
+        const sb = g('sidebar'), bk = g('bookCard'), oc = g('orderCard'), pc = g('panelsCard');
+        sb.scrollLeft = 0;
+        sb.scrollIntoView({ block: 'nearest' });
+        await new Promise((r) => setTimeout(r, 160));
+        /* EL LIBRO, A LA VISTA ANTES DE MIRARLO: en estrecho el orden de la tira es
+           formulario → libro → paneles (como en el exchange), así que en reposo se muestra el
+           formulario y el libro está a 380 px, fuera del viewport. Preguntar a
+           `elementFromPoint` por una fila que no se ve devolvía «no» y el test acusaba a la app
+           de un defecto que era suyo: hay que DESLIZAR la tira hasta la tarjeta del libro para
+           comprobar que su fila se puede pinchar. Lo mismo para la señal de la vecina: se mide
+           DESDE LA PARADA del libro, no desde el reposo (y el orden visual no es el del DOM,
+           que es bookCard-ordenCard-panelsCard: hay que buscar la tarjeta, no coger [0]). */
+        sb.scrollLeft = bk.offsetLeft;
+        await new Promise((r) => setTimeout(r, 220));
+        const body = bk.querySelector('.card-body'), bb = body.getBoundingClientRect();
+        const dentro = (e) => { if (!e || cs(e).display === 'none') return 'oculta';
+          const q = e.getBoundingClientRect(); return q.top >= bb.top - 0.5 && q.bottom <= bb.bottom + 0.5; };
+        const fillas = (c) => { let n = 0, alt = 0;
+          for (const f of c.children) { const q = f.getBoundingClientRect();
+            const iv = Math.min(bb.bottom, q.bottom) - Math.max(bb.top, q.top);
+            if (q.height > 0 && iv >= q.height * 0.95) { n++; alt = Math.round(q.height); } }
+          return { n, alt }; };
+        const cuadro = sb.getBoundingClientRect();
+        const tarjetas = [...sb.querySelectorAll(':scope > .card')].filter((e) => e.offsetHeight > 0)
+          .map((e) => { const r = e.getBoundingClientRect();
+            return { id: e.id, w: Math.round(r.width), snap: cs(e).scrollSnapAlign,
+                     left: Math.round(r.left - cuadro.left),
+                     asoma: Math.round(Math.max(0, cuadro.right - r.right)) }; });
+        const bot = [...pc.querySelectorAll('.card-body button')].filter((e) => e.offsetHeight > 0)
+          .map((e) => { const r = e.getBoundingClientRect(); return Math.round(Math.min(r.width, r.height)); });
+        const fila0 = g('bookAsks').firstElementChild;
+        const pisa = (e) => { const r = e.getBoundingClientRect();
+          const c = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+          return (c === e || e.contains(c) || (c && c.contains(e))) ? 'si' : 'no'; };
+        const fb = oc.querySelector('.card-body');
+        const c2 = sb.getBoundingClientRect();
+        const delLibro = (tarjetas.find((t) => t.id === 'bookCard') || tarjetas[0] || { left: 0, w: 0 });
+        return { asomaParada: Math.round(c2.right - (c2.left + delLibro.left + delLibro.w)),
+          anchoMax: Math.max(...tarjetas.map((t) => t.w)), cajaTira: Math.round(c2.width),
+          esTira: cs(sb).flexDirection === 'row', snapTira: cs(sb).scrollSnapType,
+          caja: Math.round(bb.height), contenido: body.scrollHeight,
+          fuera: Math.max(0, body.scrollHeight - body.clientHeight),
+          precio: dentro(bk.querySelector('.bf-book-last')), banda: dentro(bk.querySelector('.bf-book-frac')),
+          asks: fillas(g('bookAsks')), bids: fillas(g('bookBids')),
+          suma: Math.round([...body.children].filter((e) => cs(e).display !== 'none')
+            .reduce((a, e) => a + e.getBoundingClientRect().height, 0)),
+          desliza: sb.scrollWidth > sb.clientWidth, rec: sb.scrollWidth + '/' + sb.clientWidth,
+          asomaMin: tarjetas.length > 1 ? Math.min(...tarjetas.slice(0, -1).map((t) => t.asoma)) : 0,
+          anchoMin: tarjetas.length ? Math.min(...tarjetas.map((t) => t.w)) : 0,
+          snapHijos: tarjetas.every((t) => t.snap.startsWith('start')),
+          botonMin: bot.length ? Math.min(...bot) : 0,
+          pisaFila: fila0 ? pisa(fila0) : 'sin filas', filaAlto: fila0 ? Math.round(fila0.getBoundingClientRect().height) : 0,
+          formFuera: Math.max(0, fb.scrollHeight - fb.clientHeight),
+          rectForm: (() => { const r = fb.getBoundingClientRect();
+            return { x: Math.round(r.left + 40), y: Math.round(r.top + 60),
+                     visto: r.top < window.innerHeight - 8 && r.bottom > 8 }; })() };
+      });
+      ok(TR.fuera === 0 && TR.precio === true && TR.banda === true,
+         `${etiqueta}: el libro se pinta ENTERO en la caja que lo recorta (${TR.caja} de caja, ${TR.contenido} de contenido, ${TR.fuera} fuera) y se ven el precio central (${TR.precio}) y la banda long/short (${TR.banda})`);
+      ok(TR.suma <= TR.caja + 1,
+         `${etiqueta}: el reparto cabe (marco fijo + dos columnas de niveles = ${TR.suma} px dentro de ${TR.caja} de caja) —si un tier vuelve a llevarse por delante la última fila, esto es lo primero que salta—`);
+      ok(TR.asks.n >= 1 && TR.bids.n >= 1 && TR.asks.alt >= 17 && TR.bids.alt >= 17,
+         `${etiqueta}: ${TR.asks.n} filas de ventas y ${TR.bids.n} de compras ENTERAS por lado, de ${TR.asks.alt} px (ninguna aplastada por el flex de la franja: suelo 17)`);
+      /* (Un intento de exigir aquí «en reposo el formulario entra entero» acusó 64 px fuera:
+         venía del bloque de «Avanzado», que deja la app en modo Límite —su fila de precio y sus
+         siete atajos suman ~54 px—, así que el contrato de reposo NO se incumplió: se estaba
+         juzgando otro estado. Ese contrato ya está probado arriba, sobre el estado limpio, y
+         repetirlo aquí sería exigir una cosa distinta con el mismo nombre.) */
+      ok(TR.pisaFila === 'si' && TR.filaAlto >= (w <= 640 ? 20 : 17),
+         `${etiqueta}: la primera fila de ventas se puede pinchar (${TR.pisaFila}) y mide ${TR.filaAlto} px —es el atajo que escribe un límite a ese precio, así que es diana, no texto—`);
+      if (TR.esTira && TR.desliza) {
+        /* El enganche y la vecina asomando viven donde la tira los declara (el bloque del
+           teléfono). En la franja ancha de 900-1000 px las tarjetas mantienen su ancho de
+           siempre, se recorre con la rueda y no hay snap: exigírselo ahí sería inventarse el
+           contrato, así que se comprueba condicional y se dice en el mensaje. */
+        if (TR.snapTira.includes('x')) {
+          ok(TR.asomaParada >= 20 && TR.anchoMax <= TR.cajaTira - 20,
+             `${etiqueta}: la tira desliza (${TR.rec} px), cada tarjeta mide ${TR.anchoMax} px en ${TR.cajaTira} de caja y PARADA EN EL LIBRO la vecina asoma ${TR.asomaParada} px —sin esa señal, el libro es invisible: está a 380 px a la derecha`);
+          ok(TR.snapHijos,
+             `${etiqueta}: y engancha en cada tarjeta (snap «${TR.snapTira}» en la tira, ${TR.snapHijos ? 'las tres alineadas a start' : 'alguna sin alinear'})`);
+        }
+        if (TR.rectForm.visto) {
+          /* El gesto se hace sobre el FORMULARIO (es el punto donde el dedo moría), así que
+             primero hay que volver a la parada 0: arriba dejamos la tira en el libro y las
+             coordenadas del formulario se habrían quedado fuera de la pantalla —reutilizar
+             coordenadas de antes del scroll es un error clásico de estas suites—. */
+          await p.evaluate(() => { document.getElementById('sidebar').scrollLeft = 0; });
+          await esp(220);
+          const FP = await p.evaluate(() => { const r = document.querySelector('#orderCard .card-body').getBoundingClientRect();
+            return { x: Math.round(r.left + 40), y: Math.round(r.top + 60),
+                     visto: r.top < window.innerHeight - 8 && r.bottom > 8 }; });
+          const cdp = await p.target().createCDPSession();
+          await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+          const x0 = FP.x, y0 = FP.y;
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+          for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 - i * 30, y: y0 }] }); await esp(16); }
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          await esp(420);
+          const tras = await p.evaluate(() => Math.round(document.getElementById('sidebar').scrollLeft));
+          ok(tras > 40, `${etiqueta}: una pasada de 240 px EMPEZANDO ENCIMA DEL FORMULARIO desliza la tira ${tras} px (0 era el defecto: el gesto moría en el cuerpo del formulario y el libro no existía)`);
+          await p.evaluate(() => { document.getElementById('sidebar').scrollLeft = 0; });
+          await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+          await esp(160);
+        } else skip(`${etiqueta}: la tira no está en el viewport sin desplazar la página, se omite la pasada de dedo`);
+      }
+      if (w <= 640) ok(TR.botonMin >= 20,
+        `${etiqueta}: los botones de los paneles (ojo y basura de cada indicador) miden ${TR.botonMin} px de lado como mínimo (estaban en 12×14: la tira se toca, no se apunta)`);
     }
 
     /* ─── La barra de dibujo, en lo publicado ───

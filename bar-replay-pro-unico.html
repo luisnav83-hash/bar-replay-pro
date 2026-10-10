@@ -1387,7 +1387,9 @@ kbd {
     border-top: 1px solid var(--line);
     overflow-x: auto;
     overflow-y: hidden;
-    max-height: 190px;
+    --tira: 190px;
+    max-height: var(--tira);
+    --marco: 60px;
     min-height: 0;
   }
   #sidebar > .card {
@@ -1399,7 +1401,7 @@ kbd {
     border-right: 1px solid var(--line);
     border-bottom: 0;
   }
-  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; }
+  #sidebar > .card > .card-body { max-height: 124px; overflow-y: auto; --cuerpo: 124px; }
   #sidebar > .card > .card-body > * { flex: 0 0 auto; }
   #orderCard > .card-body { max-height: 172px; }
   #orderCard .order-actions {
@@ -1412,7 +1414,20 @@ kbd {
     border-top: 1px solid var(--line-soft);
   }
   #bookCard { min-width: 268px; max-width: 300px; }
-  #bookCard .card-body { max-height: 118px; }
+  #sidebar > #bookCard > .card-body {
+    overflow: hidden;
+    padding: 0; gap: 0;
+    max-height: none;
+    flex: 1 1 auto; min-height: 0;
+  }
+  #sidebar > #bookCard > .card-body > .bf-asks,
+  #sidebar > #bookCard > .card-body > .bf-bids {
+    max-height: max(17px, calc((var(--cuerpo, 124px) - var(--marco, 60px)) / 2));
+    overflow: hidden;
+  }
+  #sidebar > #bookCard > .card-body > .bf-book-cols,
+  #sidebar > #bookCard > .card-body > .bf-book-last,
+  #sidebar > #bookCard > .card-body > .bf-book-frac { max-height: none; }
   #sidebar > .card { order: 3; }
   #sidebar > #orderCard { order: 1; }
   #sidebar > #bookCard { order: 2; }
@@ -1484,22 +1499,19 @@ kbd {
 }
 @media (max-width:1000px) and (max-height:820px) {
   .indPane { height: 48px; }
-  #sidebar { max-height: 176px; }
-  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; }
-  #bookCard .card-body { max-height: 110px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 51px; overflow: hidden; }
+  #sidebar { --tira: 176px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { max-height: 110px; overflow-y: auto; --cuerpo: 110px; }
 }
 @media (max-width:1000px) and (max-height:700px) {
   #bottomPanel { height: 86px; }
-  #sidebar { max-height: 170px; }
-  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; }
-  #bookCard .card-body { max-height: 130px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 44px; overflow: hidden; }
+  #sidebar { --tira: 170px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; --cuerpo: 130px; }
 }
 @media (max-width:1000px) and (max-height:640px) {
-  #sidebar { max-height: 122px; }
-  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 24px; }
+  #sidebar { --tira: 122px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; --cuerpo: 82px; }
+  #sidebar > #bookCard > .card-body > .bf-book-frac { display: none; }
+  #sidebar { --marco: 34px; }
   .indPane { height: 48px; }
 }
 @media (max-width:640px) {
@@ -1523,7 +1535,9 @@ kbd {
   #topbar .field { flex-direction: row; align-items: center; gap: 6px; }
   #topbar .field-label { font-size: 9px; }
   #topbar .sb-quote { display: none; }
-  #sidebar { max-height: 250px; }
+  #sidebar { --tira: 250px; --marco: 53px; max-height: var(--tira); }
+  #sidebar > .card > .card-body { --cuerpo: 216px; }
+  #sidebar > #bookCard > .card-body > .bf-book-frac { display: flex; }
   #bottomPanel { height: 130px; }
   #chartWrap { min-height: 120px; }
   #paneArea.pnl-solo .indPane:not(#panePnl) { display: none; }
@@ -1534,7 +1548,8 @@ kbd {
     #chartArea { min-height: 350px; }
   }
   #sidebar > .card > .card-body { max-height: 88px; overflow-y: auto; }
-  #sidebar > #orderCard > .card-body { max-height: none; overflow-y: auto; overscroll-behavior: contain;
+  #sidebar > #orderCard > .card-body { max-height: 221px; overflow-y: auto;
+                                      overscroll-behavior-y: contain; overscroll-behavior-x: auto;
                                       padding: 4px 8px 3px; gap: 2px; scrollbar-width: thin; }
   #orderCard .ord-segs { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
   #orderCard .ord-segs > .seg { flex: 1 1 auto; min-width: 0; }
@@ -1564,8 +1579,13 @@ kbd {
   #orderCard { position: relative; }
   #orderCard.desborda::after { content: ""; position: absolute; left: 1px; right: 1px; bottom: 0; height: 14px;
                                pointer-events: none; background: linear-gradient(180deg, rgba(20,20,24,0), var(--bg-2, #141418)); }
-  #sidebar > #bookCard > .card-body { max-height: 176px; overflow-y: hidden; }
-  #bookCard .bf-asks, #bookCard .bf-bids { max-height: 68px; }
+  #sidebar { scroll-snap-type: x proximity; }
+  #sidebar > .card { min-width: calc(100% - 24px); max-width: calc(100% - 24px);
+                     scroll-snap-align: start; }
+  #bookCard .bf-row { min-height: 20px; }
+  #bookCard .bf-book-last { margin: 1px 0; padding: 2px 10px; }
+  #bookCard .bf-book-frac { padding: 3px 10px 4px; }
+  #panelsCard .card-body button { min-width: 22px; min-height: 20px; padding: 0 5px; }
 }
 #pnlLayer { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
 #pnlBand { position: absolute; border-top: 1px solid; border-bottom: 1px solid; }
