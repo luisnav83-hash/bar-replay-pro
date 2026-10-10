@@ -31,25 +31,23 @@
   --accent:#2979ff;
   --accent-2:#00e5ff;
   --warn:#ffab00;
-  --r-sm:4px; --r:6px; --r-lg:10px;
+  --r-sm:2px; --r:4px; --r-lg:4px;   
   --topbar-h:56px;
   --toolbar-h:38px;
   --replay-h:64px;
   --shadow:0 8px 28px rgba(0,0,0,.45);
-  --mono:ui-monospace,"SF Mono","JetBrains Mono","Fira Code",Menlo,Consolas,"Liberation Mono",monospace;
-  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:"noto sans","Noto Sans",Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --sans:"noto sans","Noto Sans",Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{
   margin:0;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(41,121,255,.10), transparent 60%),
-    radial-gradient(900px 500px at 0% 100%, rgba(0,200,83,.06), transparent 60%),
-    var(--bg-1);
+  background:var(--bg-0);
   color:var(--tx-1);
   font-family:var(--sans);
-  font-size:13px;
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
   display:flex;
   flex-direction:column;
   height:100vh;
@@ -122,12 +120,12 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid #0b1
 .btn-ghost{background:transparent;}
 .btn-full,.btn.full{width:100%;}
 .btn-icon{width:32px;padding:0;}
-.btn-long{background:linear-gradient(180deg,#00c853,#009940);border-color:#12e469;color:#03150a;font-weight:800;letter-spacing:.4px;box-shadow:0 2px 12px rgba(0,200,83,.28);}
-.btn-long:hover{background:linear-gradient(180deg,#12e469,#00b34a);}
-.btn-short{background:linear-gradient(180deg,#ff1744,#c60c31);border-color:#ff3f66;color:#1b0206;font-weight:800;letter-spacing:.4px;box-shadow:0 2px 12px rgba(255,23,68,.25);}
-.btn-short:hover{background:linear-gradient(180deg,#ff3f66,#d80f38);}
+.btn-long{background:#24c18d;border-color:transparent;color:#fff;font-weight:500;letter-spacing:0;box-shadow:none;border-radius:var(--r-pill,9999px);}
+.btn-long:hover{background:#2fd9a0;}
+.btn-short{background:#f14b3f;border-color:transparent;color:#fff;font-weight:500;letter-spacing:0;box-shadow:none;border-radius:var(--r-pill,9999px);}
+.btn-short:hover{background:#ff6d67;}
 .mini-btn{background:transparent;border:1px solid var(--line);border-radius:var(--r-sm);color:var(--tx-3);
-  font-size:10px;padding:3px 7px;text-transform:uppercase;letter-spacing:.5px;}
+  font-size:12px;padding:3px 8px;}
 .mini-btn:hover{color:var(--tx-1);border-color:var(--accent);}
 .chip{
   background:var(--bg-3);border:1px solid var(--line);border-radius:20px;color:var(--tx-2);
@@ -142,10 +140,10 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid #0b1
 .switch input{accent-color:var(--accent);}
 .card{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r);margin-bottom:10px;overflow:hidden;}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:7px 10px;background:linear-gradient(180deg,#1e1f38,#191a30);border-bottom:1px solid var(--line-soft);}
-.card-title{font-weight:700;font-size:11.5px;letter-spacing:.4px;color:var(--tx-2);}
+  padding:8px 10px;background:transparent;border-bottom:1px solid var(--line);}
+.card-title{font-weight:600;font-size:14px;letter-spacing:0;color:var(--tx-1);}
 .card-body{padding:9px 10px;display:flex;flex-direction:column;gap:6px;}
-.tag{background:var(--bg-4);border-radius:20px;padding:2px 8px;font-size:9.5px;font-weight:800;letter-spacing:.4px;color:var(--tx-2);font-family:var(--mono);}
+.tag{background:var(--bg-4);border-radius:20px;padding:2px 8px;font-size:12px;font-weight:500;color:var(--tx-2);}
 .tag-muted{background:transparent;border:1px dashed var(--line);color:var(--tx-3);}
 .tag.long{background:rgba(0,200,83,.16);color:#5df59a;}
 .tag.short{background:rgba(255,23,68,.16);color:#ff7a95;}
@@ -702,38 +700,46 @@ kbd{
 }
 /* ==== css/bitunix.css ==== */
 :root {
-  --bg-0: #08080a;
-  --bg-1: #0d0d10;
-  --bg-2: #141418;
-  --bg-3: #1c1c22;
-  --bg-4: #26262e;
-  --line: #242429;
-  --line-soft: #1b1b20;
-  --tx-1: #f2f3f5;
-  --tx-2: #c2c4ca;
-  --tx-3: #8b8e96;
-  --tx-4: #5f626b;
-  --up: #25ca93;
-  --up-dim: #10402f;
-  --down: #f65b55;
-  --down-dim: #4a1b19;
-  --accent: #b8f040;
-  --accent-ink: #101206;
-  --accent-2: #25ca93;
+  --bg-0: #000000;
+  --bg-1: #121212;
+  --bg-2: #0f0f0f;
+  --bg-3: #222324;
+  --bg-4: #2c2c2e;
+  --line: #292a2b;
+  --line-soft: #1f2020;
+  --tx-1: #ffffff;
+  --tx-2: #c9cbce;
+  --tx-3: #919499;
+  --tx-4: #66686b;
+  --up: #24c18d;
+  --up-dim: #0f3d2e;
+  --down: #f14b3f;
+  --down-dim: #4a1a17;
+  --accent: #b9f641;
+  --accent-ink: #131f00;
+  --accent-2: #24c18d;
   --warn: #f0b90b;
+  --activo: #24c18d;
+  --seg-fondo: #272829;
+  --fs-cuerpo: 14px;
+  --fs-rotulo: 12px;
+  --fs-precio: 20px;
   --r-sm: 2px;
   --r: 4px;
-  --r-lg: 6px;
+  --r-lg: 4px;
+  --r-pill: 9999px;
   --topbar-h: 90px;
   --stats-h: 42px;
   --toolbar-h: 34px;
-  --right-w: 336px;
+  --right-w: 272px;
+  --book-w: 300px;   
   --row-h: 17px;
 }
 body {
   background: var(--bg-0);
-  font-size: 12px;
-  letter-spacing: .1px;
+  font-size: var(--fs-cuerpo);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 .kv b, .bf-v, .bf-sub, .bf-row, td, th, .pane-val, .stat b,
 #sizeInput, #limitInput, #slInput, #tpInput, #avgSize, #trailPct, #trailAct,
@@ -764,8 +770,8 @@ body {
 }
 #topbar .topbar-group { flex: 1 1 auto; min-width: 0; padding: 6px 12px; gap: 8px; }
 #topbar .topbar-right { flex: 0 0 auto; margin-left: auto; padding: 6px 10px 6px 0; }
-.brand-name { font-size: 13px; letter-spacing: .6px; }
-.brand-sub { color: var(--tx-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; }
+.brand-name { font-size: var(--fs-cuerpo); }
+.brand-sub { color: var(--tx-4); font-size: var(--fs-rotulo); }
 .bf-stats {
   flex: 1 0 100%;
   display: flex;
@@ -792,7 +798,7 @@ body {
   line-height: 1.15;
   white-space: nowrap;
 }
-.bf-stat .bf-k { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.bf-stat .bf-k { font-size: var(--fs-rotulo); color: var(--tx-3); }   
 .bf-stat .bf-v { font-size: 13.5px; font-weight: 600; color: var(--tx-1); }
 .bf-stat .bf-sub { font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bf-stat.bf-last { min-width: 138px; }
@@ -827,9 +833,7 @@ body {
   border-right: 0;
   justify-content: center;
   color: var(--tx-4);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: .7px;
+  font-size: var(--fs-rotulo);
   cursor: help;
 }
 .bf-stat.bf-src::before { content: 'ⓘ '; color: var(--warn); }
@@ -858,8 +862,8 @@ body {
   margin: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  border-radius: var(--r);
+  background: var(--bg-2);
   box-shadow: none;
 }
 .card-head {
@@ -872,11 +876,9 @@ body {
   background: var(--bg-1);
 }
 .card-title {
-  font-size: 11.5px;
+  font-size: var(--fs-cuerpo);
   font-weight: 600;
-  letter-spacing: .3px;
-  color: var(--tx-2);
-  text-transform: uppercase;
+  color: var(--tx-1);
 }
 .card-body { padding: 9px 10px 11px; }
 .tag, .tag-muted {
@@ -892,10 +894,9 @@ body {
 .bf-book-cols {
   display: grid;
   grid-template-columns: 1.1fr 1fr .9fr;
-  padding: 4px 10px 3px;
-  font-size: 9.5px;
-  color: var(--tx-4);
-  letter-spacing: .3px;
+  padding: 5px 10px 4px;
+  font-size: var(--fs-rotulo);
+  color: var(--tx-3);
 }
 .bf-book-cols span:last-child { text-align: right; }
 .bf-asks, .bf-bids { display: flex; flex-direction: column; max-height: 118px; overflow: hidden; }
@@ -1000,18 +1001,17 @@ body {
   border-radius: 0;
   background: transparent;
   color: var(--tx-3);
-  font-size: 11px;
+  font-size: var(--fs-cuerpo);
   font-weight: 500;
-  letter-spacing: .2px;
 }
 .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
 .seg-btn:hover { color: var(--tx-1); background: var(--bg-4); }
-.seg-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.seg-btn.active { background: var(--activo); color: #fff; font-weight: 500; }
 .field { margin-bottom: 7px; }
-.field-label { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.field-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 input[type="number"], input[type="text"], input[type="datetime-local"], select {
-  height: 30px;
-  font-size: 12px;
+  height: 34px;
+  font-size: var(--fs-cuerpo);
   background: var(--bg-3);
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -1077,10 +1077,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .btn-primary:hover { background: #33333d; }
 #btnQuick { color: var(--accent); border-color: rgba(184, 240, 64, .35); }
 .order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
-.order-actions .btn { height: 38px; font-size: 13px; font-weight: 700; border: 0; border-radius: var(--r); }
-.btn-long { background: var(--up); color: #04241a; }
+.order-actions .btn { height: 40px; font-size: var(--fs-cuerpo); font-weight: 500; border: 0; border-radius: var(--r-pill); }
+.btn-long { background: var(--up); color: #fff; }
 .btn-long:hover { background: #2fd9a0; }
-.btn-short { background: var(--down); color: #2b0a09; }
+.btn-short { background: var(--down); color: #fff; }
 .btn-short:hover { background: #ff6d67; }
 .btn-long:disabled, .btn-short:disabled { opacity: .45; cursor: not-allowed; }
 .bf-fee-row > .visually-hidden { display: none; }
@@ -1124,11 +1124,11 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .tab {
   position: relative;
   height: 100%;
-  padding: 0 13px;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: var(--tx-3);
-  font-size: 11px;
+  font-size: var(--fs-cuerpo);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1139,7 +1139,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
   position: absolute;
   left: 10px; right: 10px; bottom: 0;
   height: 2px;
-  background: var(--accent);
+  background: var(--activo);
 }
 .tab .count, .tab span[id] { color: var(--tx-4); font-variant-numeric: tabular-nums; }
 .tabs-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
@@ -1165,7 +1165,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 }
 .pos-mgmt { gap: 5px; }
 .pm-row { gap: 5px; }
-.pm-label { font-size: 10.5px; color: var(--tx-3); letter-spacing: .2px; }
+.pm-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 .pm-row input { height: 26px; }
 .mini-btn {
   height: 24px;
@@ -1268,7 +1268,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .speed-btn.active { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
 .rb-info { font-size: 10.5px; color: var(--tx-3); }
 .rb-clock-val { font-size: 11.5px; color: var(--tx-1); }
-.rb-status { font-size: 9px; padding: 1px 6px; border-radius: var(--r-sm); letter-spacing: .6px; }
+.rb-status { font-size: var(--fs-rotulo); padding: 2px 7px; border-radius: var(--r-sm); }
 .rb-status.playing { background: rgba(37, 202, 147, .16); color: var(--up); }
 .rb-status.paused { background: var(--bg-4); color: var(--tx-3); }
 #progressRange { accent-color: var(--accent); }
@@ -1276,12 +1276,10 @@ table { font-size: 11px; }
 thead th {
   position: sticky;
   top: 0;
-  padding: 5px 8px;
-  font-size: 9.5px;
+  padding: 6px 9px;
+  font-size: var(--fs-rotulo);
   font-weight: 500;
-  color: var(--tx-4);
-  text-transform: uppercase;
-  letter-spacing: .5px;
+  color: var(--tx-3);
   background: var(--bg-2);
   border-bottom: 1px solid var(--line);
 }
@@ -1303,7 +1301,7 @@ tbody tr:hover td { background: var(--bg-2); }
   border: 1px solid var(--line-soft);
   border-radius: 0;
 }
-.stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--tx-4); }
+.stat-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 .stat b { font-size: 13px; }
 .kv { padding: 3px 0; font-size: 11.5px; border-bottom: 1px dashed var(--line-soft); }
 .kv span { color: var(--tx-3); }
@@ -1332,7 +1330,7 @@ tbody tr:hover td { background: var(--bg-2); }
   box-shadow: 0 18px 60px rgba(0, 0, 0, .66);
 }
 .modal-head { border-bottom: 1px solid var(--line); }
-.modal-head h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--tx-2); }
+.modal-head h3 { font-size: 16px; color: var(--tx-1); font-weight: 600; }
 .modal-body { font-size: 12px; }
 .toast {
   border: 1px solid var(--line);
@@ -1359,13 +1357,12 @@ kbd {
 .tf-quick { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); padding: 0; height: 28px; }
 .tf-btn { height: 26px; min-width: 32px; font-size: 11px; border-radius: var(--r-sm); }
 .tf-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
-#btnBookLive { letter-spacing: .3px; }
+#btnBookLive { font-size: var(--fs-rotulo); }
 #btnBookLive.on { color: var(--up); border-color: rgba(37, 202, 147, .45); }
 #btnBookLive.off { color: var(--tx-4); }
 #btnOrderAvanzado { display: none; align-items: center; gap: 4px; height: 18px; padding: 0 6px;
                     border: 1px solid var(--line); border-radius: 2px; background: var(--bg-3, #17171c);
-                    color: var(--txt-2, #8b8e96); font: 600 9px/1 var(--font-ui, ui-sans-serif);
-                    letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+                    color: var(--tx-3); font: 500 var(--fs-rotulo)/1 var(--sans); cursor: pointer; }
 #btnOrderAvanzado .ar { font-size: 9px; line-height: 1; }
 #btnOrderAvanzado:hover { color: var(--txt-1, #e6e7ea); border-color: var(--line-2, #2a2a32); }
 @media (max-width: 1000px) {
@@ -1692,6 +1689,58 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   .pane-resize::after { top: 5px; width: 42px; height: 3px; }
   #posPnlSpark { max-width: 128px; height: 22px; }
   #posPnlSparkNote { font-size: 9px; max-width: 118px; }
+}
+#orderCard .seg { min-width: 0; }
+#orderCard .seg .seg-btn { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#orderCard .ic { display: none; }
+@media (min-width: 641px) {
+  #orderCard .field input, #orderCard .field select { height: 34px; font-size: 13px; }
+  #orderCard #limitInput, #orderCard #sizeInput { height: 42px; font-size: var(--fs-cuerpo); }
+  #orderCard .field { margin-bottom: 5px; }
+  #orderCard > .card-head { height: 26px; }
+  #orderCard .seg .seg-btn { height: 26px; font-size: 12px; padding: 0 6px; }
+  #orderCard .bf-margin-row { min-height: 30px; background: var(--bg-3); border-radius: var(--r);
+                              padding: 2px 6px; align-items: center; }
+  #orderCard .bf-lev { min-width: 0; flex-wrap: wrap; row-gap: 0; }
+  #orderCard .bf-lev .lev-lados { flex-basis: 100%; text-align: right; }
+  #orderCard .bf-margin-row .seg { background: transparent; height: 100%; }
+  #orderCard .bf-margin-row .seg-btn { border-radius: var(--r); }
+  #orderCard .bf-slide-quick { min-height: 18px; border: 0; background: transparent; }
+  #orderCard .bf-slide-quick button { height: 16px; min-width: 30px; border: 0; background: transparent;
+                                      font-size: 11px; color: var(--tx-3); border-radius: var(--r-sm); }
+  #orderCard .bf-slide-quick button + button { border-left: 0; }
+  #orderCard .bf-slide-quick button.active { color: var(--tx-1); background: var(--seg-fondo); }
+  #orderCard .grid-2, #orderCard .grid-2-min { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  #orderCard .grid-2 > .field + .field, #orderCard .grid-2-min > .field + .field { margin-top: 5px; }
+  #orderCard .seg .seg-btn { font-size: 11.5px; padding: 0 3px; }
+  #orderCard #segOrderType { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  #orderCard .bf-margin-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 4px; }
+  #orderCard .bf-lev { padding: 0 5px; }
+  #orderCard .bf-lev input[type=range] { width: 62px; }
+}
+#bookCol { display: none; }
+@media (min-width: 1360px) {
+  #workspace { grid-template-columns: minmax(0, 1fr) var(--book-w, 300px) var(--right-w); }
+  #bookCol {
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    border-left: 1px solid var(--line); background: var(--bg-2);
+  }
+  #bookCol > .card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+                     margin: 0; border: 0; border-radius: 0; background: transparent; }
+  #bookCol .card-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  #bookCol .bf-asks, #bookCol .bf-bids { max-height: none; flex: 1 1 0; min-height: 0; overflow: hidden; }
+  #bookCol .bf-book .card-body { max-height: none; --cuerpo: auto; }
+  #bookCol .bf-book-last { flex: 0 0 auto; }
+  #bookCol .bf-book-frac { flex: 0 0 auto; }
+  #sidebar { border-left: 1px solid var(--line); }
+}
+@media (max-height: 820px) {
+  #topbar { min-height: 0; padding: 3px 10px 4px; }
+  #topbar .brand { min-height: 0; padding: 4px 8px; }
+  #topbar .topbar-group { padding: 3px 8px; }
+  #topbar input[type=date], #topbar input[type=text], #topbar select, #topbar .btn { height: 28px; font-size: 12px; }
+  :root { --topbar-h: 74px; --stats-h: 32px; --toolbar-h: 28px; }
+  #chartWrap { min-height: 208px; }
 }
 </style>
 </head>
@@ -2056,31 +2105,46 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   </section>
 
   <!-- ---------- BARRA LATERAL ---------- -->
-  <aside id="sidebar">
-    <!-- =============================================================
-         LIBRO DE ÓRDENES (esquilo Bitunix)
-         Ventas en rojo de mayor a menor, precio último en el centro con su
-         flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
-         salen del espejo público de Binance cuando hay red y, si no, se
-         derivan de las velas del replay (js/orderBook.js lo etiqueta).
-         ============================================================= -->
-    <div class="card bf-book" id="bookCard">
-      <div class="card-head">
-        <span class="card-title">Libro de órdenes</span>
-        <span class="tag tag-muted" id="bookSrc">—</span>
-        <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
-      </div>
-      <div class="card-body">
-        <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
-        <div class="bf-asks" id="bookAsks"></div>
-        <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
-        <div class="bf-bids" id="bookBids"></div>
-        <div class="bf-book-frac">
-          <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
-          <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
-        </div>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       COLUMNA DEL LIBRO · colocada como en el sitio real
+
+       Medido en su DOM (docs/brecha-visual-bitunix.md §2): el libro es una columna propia
+       de ~300 px a la IZQUIERDA del panel de órdenes (libro en x≈1004, órdenes en x=1311),
+       las dos bajo la franja del símbolo y encima del panel de posiciones. Aquí el libro
+       vivía APILADO dentro de #sidebar, así que la tarjeta de órdenes empezaba en y≈470 y
+       sus botones de entrada caían en y=1098 con la ventana en 900 px: se veía el
+       formulario y no se podía operar (lo comprueba tools/barrido-graficos.js con
+       «Botones de entrada a la vista sin desplazar»). Y de paso, con columna propia el
+       libro deja de ir recortado a 102 px de alto con 170 px de filas pintadas.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <aside id="bookCol">
+
+  <!-- =============================================================
+       LIBRO DE ÓRDENES (esquilo Bitunix)
+       Ventas en rojo de mayor a menor, precio último en el centro con su
+       flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
+       salen del espejo público de Binance cuando hay red y, si no, se
+       derivan de las velas del replay (js/orderBook.js lo etiqueta).
+       ============================================================= -->
+  <div class="card bf-book" id="bookCard">
+    <div class="card-head">
+      <span class="card-title">Libro de órdenes</span>
+      <span class="tag tag-muted" id="bookSrc">—</span>
+      <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
+    </div>
+    <div class="card-body">
+      <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+      <div class="bf-asks" id="bookAsks"></div>
+      <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
+      <div class="bf-bids" id="bookBids"></div>
+      <div class="bf-book-frac">
+        <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
+        <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
       </div>
     </div>
+  </aside>
+
+  <aside id="sidebar">
 
 
     <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
@@ -2103,8 +2167,8 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
              (js/tradingEngine.js: `marginMode`). -->
         <div class="bf-margin-row">
           <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
-            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzado</button>
-            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislado</button>
+            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzada</button>
+            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislada</button>
           </div>
           <div class="bf-lev" title="Apalancamiento actual">
             <b id="bfLevVal">1x</b>
@@ -2120,10 +2184,10 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
              su fila propia porque solo aparece en modo «Límite». -->
         <div class="ord-segs">
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
-            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)"><i class="ic">⚡</i>Mercado</button>
-            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)"><i class="ic">⏳</i>Límite</button>
-            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda."><i class="ic">🎯</i>Trigger</button>
-            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen."><i class="ic">🌀</i>Trailing</button>
+            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">Mercado</button>
+            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">Límite</button>
+            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
+            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
@@ -2273,10 +2337,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
              Vive DENTRO de «Avanzado» por dos razones: en Bitunix es un ajuste de la cuenta (está en
              el menú del panel, no entre el precio y el tamaño) y el contrato del teléfono exige que
              el formulario en reposo se vea entero sin deslizar —29 px de fila aquí ya lo rompían;
-             medido en tests/responsive.test.js—, y «Avanzado» es justamente el sitio que se pliega. --> Fiel a la API: `change_position_mode` admite
-             ONE_WAY|HEDGE y se RECHAZA con 200014 si hay posiciones u órdenes abiertas (por eso el
-             conmutador está aquí, a la vista, y no enterrado en Ajustes), y en hedge cada orden
-             declara su papel con `tradeSide` OPEN|CLOSE. -->
+             medido en tests/responsive.test.js—, y «Avanzado» es justamente el sitio que se pliega. -->
         <div class="ord-segs" id="posModeRow">
           <div class="seg seg-order" id="segPosMode" role="group" aria-label="Modo de posición">
             <button class="seg-btn active" data-pmode="ONE_WAY" title="Una sola posición: una orden al otro lado la reduce">ONE-WAY</button>
@@ -2355,8 +2416,8 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
         </div>
 
         <div class="order-actions">
-          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Long</button>
-          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Short</button>
+          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Largo</button>
+          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Corto</button>
         </div>
         <div class="bf-cost" id="bfCost">
           <span class="c">Coste <b id="bfCostVal">—</b></span>
@@ -6941,14 +7002,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   const CM = {};
 
   const COLORS = {
-    // Paleta MEDIDA sobre la captura del terminal de futuros (css/bitunix.css):
-    // fondo casi negro, velas verde #25ca93 / rojo #f65b55 y la línea de
-    // entrada en blanco, como marca el exchange.
-    bg: '#0a0a0b', grid: '#1a1a1f', gridSoft: '#141418', border: '#242429',
-    text: '#8b8e96', crosshair: '#4a4d55',
-    up: '#25ca93', down: '#f65b55',
-    entry: '#f2f3f5', sl: '#f65b55', tp: '#25ca93', liq: '#f0b90b',
-    limit: '#b8f040',   // órdenes límite pendientes (lima de la marca, punteada)
+    // Paleta MEDIDA EN EL DOM del sitio real (tools/captura-bitunix.js →
+    // docs/brecha-visual-bitunix.md §1), no sobre un PNG: la tarjeta del gráfico
+    // es #121212, la rejilla #1f2020, el texto de los ejes #919499 y el verde y
+    // el rojo de sus botones son #24c18d / #f14b3f. Antes estaban los valores del
+    // tema anterior (casi negro azulado + #25ca93/#f65b55), que es justo lo que
+    // hacía que el lienzo «no pareciera Bitunix».
+    bg: '#121212', grid: '#1f2020', gridSoft: '#191a1a', border: '#292a2b',
+    text: '#919499', crosshair: '#4a4d55',
+    up: '#24c18d', down: '#f14b3f',
+    entry: '#ffffff', sl: '#f14b3f', tp: '#24c18d', liq: '#f0b90b',
+    limit: '#b9f641',   // órdenes límite pendientes (lima de la marca, punteada)
   };
 
   /**
@@ -7067,7 +7131,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     /* ---------------------- Curva de capital ---------------------- */
     CM.equityChart = LightweightCharts.createChart(document.getElementById('equityChart'), {
       autoSize: true,
-      layout: { background: { type: 'solid', color: COLORS.bg }, textColor: COLORS.text, fontSize: 9, fontFamily: 'ui-monospace, monospace' },
+      /* Sus ejes van en la misma sans del sitio (no en mono) y a 12 px; antes 9 px mono,
+     que era la firma visual de «herramienta de backtesting» en vez de exchange. */
+      layout: { background: { type: 'solid', color: COLORS.bg }, textColor: COLORS.text, fontSize: 12,
+        fontFamily: '"noto sans", "Noto Sans", Inter, system-ui, sans-serif' },
       grid: { vertLines: { color: COLORS.gridSoft }, horzLines: { color: COLORS.grid } },
       rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.15, bottom: 0.1 } },
       timeScale: { visible: false },
@@ -10381,7 +10448,32 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ================================= INICIO ================================= */
 
+  /* El LIBRO cambia de contenedor con el ancho, como en el sitio. Medido en su DOM a 1600 px:
+     el libro es una columna propia de ~300 px (x≈1004) y el panel de órdenes va a su derecha
+     (x=1311, 272 px); por debajo de ese ancho el nuestro no puede permitirse los 300 px —le
+     roba el alto al gráfico y la escalera desborda sus propios paneles (secciones J de
+     tests/pnl-chart.test.js y los tiers de tests/responsive.test.js)—, así que el libro vuelve
+     a lo alto de #sidebar, donde el tier de la franja ya sabe desplazarse en horizontal.
+     Se MUEVE el nodo, no se duplica: los ids tienen que seguir siendo únicos (lo comprueba
+     tests/bitunix.test.js) y js/orderBook.js pinta por id, así que no le importa en qué columna
+     está. La primera versión de esto era solo CSS (`#bookCol { display:none }` debajo del corte)
+     y el resultado era que en tablet y teléfono el libro DESAPARECÍA; lo cazó la suite. */
+  UI.ubicarLibro = function () {
+    const bk = document.getElementById('bookCard');
+    const col = document.getElementById('bookCol');
+    const sb = document.getElementById('sidebar');
+    if (!bk || !col || !sb) return;
+    const ancho = window.matchMedia('(min-width: 1360px)');
+    const enColumna = col.contains(bk);
+    if (ancho.matches && !enColumna) col.appendChild(bk);
+    else if (!ancho.matches && enColumna) sb.insertBefore(bk, sb.firstElementChild);
+  };
+  try {
+    window.matchMedia('(min-width: 1360px)').addEventListener('change', () => UI.ubicarLibro());
+  } catch (e) { /* MediaQueryList sin addEventListener: basta con la llamada del arranque */ }
+
   UI.init = function () {
+    UI.ubicarLibro();
     UI._wireTopbar();
     UI._wireToolbar();
     UI._wireReplay();

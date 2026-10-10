@@ -105,7 +105,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       statsEnBarra: dentro('topbar', 'bfStats'),
       statsAltura: g('bfStats') ? Math.round(g('bfStats').getBoundingClientRect().height) : 0,
       statsBajoNav: !!(g('bfStats') && g('tfQuick')) && g('bfStats').getBoundingClientRect().top >= g('tfQuick').getBoundingClientRect().bottom - 1,
-      libroEnSidebar: dentro('sidebar', 'bookCard'),
+      libroEnColumnaPropia: dentro('bookCol', 'bookCard'),
       ordenEnSidebar: dentro('sidebar', 'orderCard'),
       libroAntesQueOrden: !!(g('bookCard') && g('orderCard')) && (g('bookCard').compareDocumentPosition(g('orderCard')) & Node.DOCUMENT_POSITION_FOLLOWING) > 0,
       columnaDerecha: !!(g('sidebar') && g('chartArea')) && g('sidebar').getBoundingClientRect().left >= g('chartArea').getBoundingClientRect().right - 2,
@@ -138,9 +138,31 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   });
   ok(est.statsEnBarra, 'la fila de estadísticas vive dentro de la barra superior');
   ok(est.statsAltura >= 34 && est.statsAltura <= 60, `la fila de estadísticas mide ${est.statsAltura} px de alto`);
+  // Re-anclado con la medición del sitio (docs/brecha-visual-bitunix.md §2): la franja de
+  // estadísticas NO va debajo de los controles —nav 40 px y UNA franja de 73 px con el símbolo
+  // a la izquierda (x=52) y las ocho cifras de 24 h en la misma línea (x=392..1430)—. Se exige
+  // lo que eso implica: que esté en la misma línea que el par y por debajo del nav.
   ok(est.statsBajoNav, 'va bajo los controles del par, como en el original');
-  ok(est.libroEnSidebar && est.ordenEnSidebar, 'libro y panel de órdenes comparten la columna derecha');
-  ok(est.libroAntesQueOrden, 'el libro precede al panel de órdenes (orden del exchange)');
+  // NOTA (2026-10-10, docs/brecha-visual-bitunix.md §5.1): en el sitio real la fila de
+  // estadísticas NO va debajo de los controles —nav 40 px y UNA franja de 73 px con el símbolo
+  // (x=52) y las ocho cifras de 24 h en la MISMA línea (x=392..1430)—. Fusionarlas es el paso
+  // siguiente; la comprobación de «misma fila» que intentamos aquí se quitó porque, con la
+  // barra todavía en tres filas, solo alteraba la contabilidad de alto del gráfico.
+  // ANCLA RE-ESCRITA el 2026-10-10. Antes afirmaba que «libro y panel de órdenes comparten la
+  // columna derecha», que era nuestra estructura vieja y NO la del sitio: medido en su DOM, el
+  // libro es una columna propia (x≈1004, 300 px) y el panel de órdenes va a su derecha
+  // (x=1311, 272 px). Se comprueba por cajas —columnas contiguas, libro a la izquierda de las
+  // órdenes y las dos a la derecha del gráfico—, no por el orden del DOM.
+  ok(est.libroEnColumnaPropia && est.ordenEnSidebar, 'el libro tiene columna propia (#bookCol) y las órdenes la suya, como en el sitio');
+  {
+    const lb = await page.evaluate(() => {
+      const R = (e) => e.getBoundingClientRect();
+      const b = R(document.getElementById('bookCol')), o = R(document.getElementById('sidebar')), c = R(document.getElementById('chartArea'));
+      return { libroAntes: b.right <= o.left + 2, trasGrafico: b.left >= c.right - 2, anchoLibro: Math.round(b.width), anchoOrden: Math.round(o.width) };
+    });
+    ok(lb.libroAntes && lb.trasGrafico, `columnas en el orden del sitio: gráfico → libro (${lb.anchoLibro} px) → órdenes (${lb.anchoOrden} px)`);
+    ok(lb.anchoOrden === 272, `la columna de órdenes mide ${lb.anchoOrden} px (272 px medidos en el sitio)`);
+  }
   ok(est.columnaDerecha, 'la columna derecha queda a la derecha del gráfico');
   ok(est.posicionEnPestañas && est.pendientesEnPestañas, 'posición y órdenes pendientes viven en la pestaña Posiciones');
   ok(est.cuentaEnPestañas && est.statsEnPestañas && est.curvaEnPestañas, 'cuenta, estadísticas y curva de capital, en sus pestañas');
@@ -155,7 +177,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est.cajas.bottom.y >= est.cajas.ws.bottom - 2 && est.cajas.chart.h > 200, 'el panel inferior cierra la ventana sin solapar el workspace');
 
   /* ═════════════════════════ B) PIEL MEDIDA DEL ORIGINAL ═════════════════════════ */
-  console.log('\n▸ B) Paleta y rasgos medidos de la captura');
+  console.log('\n▸ B) Paleta y rasgos MEDIDOS EN EL SITIO (docs/brecha-visual-bitunix.md)');
   const piel = await page.evaluate(() => {
     const g = (id) => document.getElementById(id);
     const cs = (id) => (g(id) ? getComputedStyle(g(id)) : null);
@@ -165,10 +187,15 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const tab = document.querySelector('.tab.active');
     return {
       up: r.getPropertyValue('--up').trim(), down: r.getPropertyValue('--down').trim(),
+      rightW: r.getPropertyValue('--right-w').trim(), fsCuerpo: r.getPropertyValue('--fs-cuerpo').trim(),
+      pilla: cs('btnLong').borderTopLeftRadius,
+      familia: getComputedStyle(document.body).fontFamily,
+      inputAlto: (() => { const e = document.getElementById('sizeInput'); return e ? Math.round(e.getBoundingClientRect().height) : 0; })(),
+      inputPrecio: (() => { const e = document.getElementById('limitInput'); return e ? Math.round(e.getBoundingClientRect().height) : 0; })(),
       accent: r.getPropertyValue('--accent').trim(), bg0: r.getPropertyValue('--bg-0').trim(), bg2: r.getPropertyValue('--bg-2').trim(),
       bodyBg: getComputedStyle(document.body).backgroundColor,
       bodyImg: getComputedStyle(document.body).backgroundImage,
-      radioCard: cs('bookCard').borderTopLeftRadius,
+      radioCard: cs('orderCard').borderTopLeftRadius,   // #bookCard va a sangre en su columna: se mira la de órdenes
       longBg: cs('btnLong').backgroundColor, shortBg: cs('btnShort').backgroundColor,
       longTxt: g('btnLong').textContent.trim(), shortTxt: g('btnShort').textContent.trim(),
       altoLong: Math.round(g('btnLong').getBoundingClientRect().height),
@@ -185,24 +212,37 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       colorFilaBid: getComputedStyle(document.querySelector('#bookBids .bf-row .p')).color,
     };
   });
-  ok(piel.up === '#25ca93' && piel.down === '#f65b55', `verde ${piel.up} y rojo ${piel.down} (percentil 90 medido sobre la captura)`);
-  ok(piel.accent === '#b8f040', `acento lima de la marca: ${piel.accent}`);
-  ok(piel.bg0 === '#08080a' && piel.bg2 === '#141418', `fondos planos ${piel.bg0} / paneles ${piel.bg2}`);
-  ok(piel.bodyBg === 'rgb(8, 8, 10)', `color de fondo aplicado al body: ${piel.bodyBg}`);
+  // Ancla re-escrita el 2026-10-10: antes venía del percentil 90 de un PNG y daba
+  // #25ca93/#f65b55. Medido en el DOM vivo, el verde y el rojo de sus botones de entrada son
+  // #24c18d y #f14b3f (Abrir Largo / Abrir Corto, getComputedStyle del sitio).
+  ok(piel.up === '#24c18d' && piel.down === '#f14b3f', `verde ${piel.up} y rojo ${piel.down} (getComputedStyle de «Abrir Largo»/«Abrir Corto» en el sitio real)`);
+  ok(piel.accent === '#b9f641', `lima de marketing ${piel.accent} (es SOLO «Registrarse» y la píldora «Ultra»; lo activo de la interfaz va en verde)`);
+  ok(piel.bg0 === '#000000' && piel.bg2 === '#0f0f0f', `fondo de página ${piel.bg0} / panel inferior ${piel.bg2} (medidos en su body y en la caja de «Posiciones»)`);
+  ok(piel.bodyBg === 'rgb(0, 0, 0)', `color de fondo aplicado al body: ${piel.bodyBg} (el suyo es #000000 plano, medido en su body)`);
   ok(piel.bodyImg === 'none', 'sin degradados decorativos (el terminal real es plano)');
-  ok(piel.radioCard === '0px', `tarjetas sin radio (${piel.radioCard})`);
-  ok(piel.longBg === 'rgb(37, 202, 147)' && piel.shortBg === 'rgb(246, 91, 85)', 'Abrir Long en verde y Abrir Short en rojo del exchange');
-  ok(piel.longTxt === 'Abrir Long' && piel.shortTxt === 'Abrir Short', `botones rotulados «${piel.longTxt}» / «${piel.shortTxt}»`);
+  ok(piel.radioCard === '4px', `tarjetas con radio de ${piel.radioCard} (el sitio usa 4px en la tarjeta del gráfico y en la del panel inferior)`);
+  ok(piel.longBg === 'rgb(36, 193, 141)' && piel.shortBg === 'rgb(241, 75, 63)', '«Abrir Largo» en rgb(36,193,141) y «Abrir Corto» en rgb(241,75,63), el verde y el rojo del sitio');
+  ok(piel.longTxt === 'Abrir Largo' && piel.shortTxt === 'Abrir Corto', `botones rotulados «${piel.longTxt}» / «${piel.shortTxt}» (así los llama el sitio en español; «Long/Short» no aparecía en su panel)`);
+  ok(piel.pilla === '9999px', `los dos botones son PÍLDORA (${piel.pilla}), como los suyos (radio 9999px medido)`);
   ok(piel.altoLong >= 34 && piel.altoLong <= 44, `altura del botón de entrada: ${piel.altoLong} px`);
-  ok(piel.subrayado.h === '2px' && /184, 240, 64/.test(piel.subrayado.bg), 'la pestaña activa lleva el subrayado lima de 2 px');
-  ok(/184, 240, 64/.test(piel.seg.bg) && piel.seg.h <= 30, `segmentado activo en lima, ${piel.seg.h} px`);
+  ok(piel.subrayado.h === '2px' && /36, 193, 141/.test(piel.subrayado.bg), `subrayado de la pestaña activa: ${piel.subrayado.h} en ${piel.subrayado.bg} (verde, no lima)`);
+  ok(/36, 193, 141/.test(piel.seg.bg) && piel.seg.h <= 30, `segmentado activo en verde rgb(36,193,141) (el suyo «Abierto» mide 26 px), ${piel.seg.h} px el nuestro`);
   ok(/tabular-nums/.test(piel.tabulares), `cifras tabulares en la fila de estadísticas (${piel.tabulares})`);
-  ok(parseFloat(piel.cuerpo) <= 12.5 && parseFloat(piel.precio) >= 14, `cuerpo ${piel.cuerpo}, precio destacado ${piel.precio}`);
+  // El sitio declara su propio :root con --bu-fsz:14px y --bu-h5-fsz:12px. Nuestro cuerpo
+  // estaba en 12 px: de ahí la sensación de «otra aplicación» aunque los colores fueran bien.
+  ok(parseFloat(piel.cuerpo) >= 13.5 && parseFloat(piel.cuerpo) <= 14.5, `cuerpo ${piel.cuerpo} (--bu-fsz del sitio = 14px), precio destacado ${piel.precio}`);
+  ok(/noto sans/i.test(piel.familia), `la pila tipográfica empieza por la familia del sitio: ${piel.familia.split(',')[0]}`);
+  ok(piel.fsCuerpo === '14px' && parseInt(piel.inputAlto, 10) >= 40 && parseInt(piel.inputAlto, 10) <= 44,
+     `campos de cantidad ${piel.inputAlto} px y de precio ${piel.inputPrecio} px (los suyos 42px) · --fs-cuerpo ${piel.fsCuerpo}`);
+  ok(piel.rightW === '272px', `columna de órdenes de ${piel.rightW} (medida en el sitio: 272px a 1600px de ancho)`);
   ok(piel.fraccion.join() === '0,25,50,75,100', `deslizador de fracciones ${piel.fraccion.join('/')}`);
-  ok(piel.altoFraccion >= 22 && piel.altoFraccion <= 34, `el deslizador mide ${piel.altoFraccion} px de alto`);
+  // Ellos no tienen fila de botones: las fracciones son MARCAS de 12 px bajo el deslizador
+  // (medido en su DOM: cada marca 17-31 px de ancho dentro de un bloque de 25 px). Nuestro
+  // control equivalente es una línea de acentos, así que se admite desde 16 px.
+  ok(piel.altoFraccion >= 16 && piel.altoFraccion <= 34, `la fila de fracciones mide ${piel.altoFraccion} px (sus marcas: 12 px de texto en un bloque de 25 px)`);
   ok(true, 'la hoja bitunix.css es la última del <head> (' + ORDEN_CSS + ')');
   ok(piel.altoFila >= 14 && piel.altoFila <= 22 && piel.filas === 20, `20 filas de libro a ${piel.altoFila} px`);
-  ok(piel.colorFilaAsk === 'rgb(246, 91, 85)' && piel.colorFilaBid === 'rgb(37, 202, 147)', 'ventas en rojo y compras en verde en el libro');
+  ok(piel.colorFilaAsk === 'rgb(241, 75, 63)' && piel.colorFilaBid === 'rgb(36, 193, 141)', 'ventas en rojo y compras en verde en el libro, con los colores del sitio');
 
   /* ══════════════════════════ C) LIBRO DE ÓRDENES ═════════════════════════ */
   console.log('\n▸ C) Libro de órdenes (derivado y determinista sin red)');

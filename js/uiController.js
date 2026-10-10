@@ -26,7 +26,32 @@
 
   /* ================================= INICIO ================================= */
 
+  /* El LIBRO cambia de contenedor con el ancho, como en el sitio. Medido en su DOM a 1600 px:
+     el libro es una columna propia de ~300 px (x≈1004) y el panel de órdenes va a su derecha
+     (x=1311, 272 px); por debajo de ese ancho el nuestro no puede permitirse los 300 px —le
+     roba el alto al gráfico y la escalera desborda sus propios paneles (secciones J de
+     tests/pnl-chart.test.js y los tiers de tests/responsive.test.js)—, así que el libro vuelve
+     a lo alto de #sidebar, donde el tier de la franja ya sabe desplazarse en horizontal.
+     Se MUEVE el nodo, no se duplica: los ids tienen que seguir siendo únicos (lo comprueba
+     tests/bitunix.test.js) y js/orderBook.js pinta por id, así que no le importa en qué columna
+     está. La primera versión de esto era solo CSS (`#bookCol { display:none }` debajo del corte)
+     y el resultado era que en tablet y teléfono el libro DESAPARECÍA; lo cazó la suite. */
+  UI.ubicarLibro = function () {
+    const bk = document.getElementById('bookCard');
+    const col = document.getElementById('bookCol');
+    const sb = document.getElementById('sidebar');
+    if (!bk || !col || !sb) return;
+    const ancho = window.matchMedia('(min-width: 1360px)');
+    const enColumna = col.contains(bk);
+    if (ancho.matches && !enColumna) col.appendChild(bk);
+    else if (!ancho.matches && enColumna) sb.insertBefore(bk, sb.firstElementChild);
+  };
+  try {
+    window.matchMedia('(min-width: 1360px)').addEventListener('change', () => UI.ubicarLibro());
+  } catch (e) { /* MediaQueryList sin addEventListener: basta con la llamada del arranque */ }
+
   UI.init = function () {
+    UI.ubicarLibro();
     UI._wireTopbar();
     UI._wireToolbar();
     UI._wireReplay();

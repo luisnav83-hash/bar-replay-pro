@@ -180,12 +180,44 @@ async function medirGeometria(page, paso) {
     dy: document.documentElement.scrollHeight - document.documentElement.clientHeight,
     cw: document.documentElement.clientWidth,
   }));
+  // Que la tarjeta de órdenes quepa EN LA VENTANA: si los botones de entrada asoman por debajo
+  // del pliegue, el usuario ve el formulario pero no puede operar (fue exactamente lo que pasó
+  // al pasar la columna a 272 px con cuerpo de 14 px, y ningún otro test lo cazaba).
+  const entrada = await page.evaluate(() => {
+    const b = document.getElementById('btnLong');
+    const card = document.getElementById('orderCard');
+    if (!b || !card) return null;
+    const r = b.getBoundingClientRect(), c = card.getBoundingClientRect();
+    const col = document.getElementById('sidebar').getBoundingClientRect();
+    // Oclusión de verdad: no basta con que el recto caiga dentro de la ventana. La tarjeta mide
+    // 629 px y la fila del workspace, 495, así que el borde inferior del botón puede estar
+    // DENTRO de la ventana pero TAPADO por el panel inferior (o fuera del scrollport de la
+    // columna). `elementFromPoint` en el centro del botón dice quién se ve realmente.
+    const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+    const quien = document.elementFromPoint(cx, cy);
+    const tocable = !!quien && (quien === b || b.contains(quien) || b.closest('.order-actions') === quien || !!(quien.closest && quien.closest('#btnLong')));
+    return { abajo: Math.round(r.bottom), altoVentana: innerHeight, alto: Math.round(r.height),
+             visible: tocable && r.bottom <= innerHeight && r.top >= 0 && r.bottom <= col.bottom + 2,
+             tocable, tapadoPor: quien ? (quien.id ? '#' + quien.id : quien.tagName.toLowerCase()) : 'nada',
+             col: Math.round(col.bottom), x: cx, y: cy,
+             tarjeta: Math.round(c.height), dentro: card.scrollHeight - card.clientHeight };
+  });
+  if (entrada) {
+    notear(`Botones de entrada a la vista sin desplazar (${paso.nombre})`,
+      entrada.visible ? 'CUADRA' : (entrada.altoVentana < 400 ? 'A DECIDIR' : 'NO CUADRA'),
+      `#btnLong: ${entrada.alto} px de alto, su borde inferior en y=${entrada.abajo} con la ventana en ${entrada.altoVentana} y la columna en ${entrada.col} · se puede pinchar desde ese punto: ${entrada.tocable}` +
+      (entrada.tocable ? '' : ` (lo que hay encima: ${entrada.tapadoPor})`) + ` · tarjeta ${entrada.tarjeta} px · ${entrada.dentro} px ocultos por su propio scroll`,
+      '#orderCard · css/bitunix.css (bloque 11)',
+      entrada.visible ? '' : (entrada.altoVentana < 400
+        ? `ventana de prueba de ${entrada.altoVentana} px de alto: por debajo de ~400 px no cabe el formulario completo en ninguna pantalla de trading, así que se anota como criterio y no como defecto`
+        : 'la tarjeta no cabe en la ventana: «Abrir Largo/Corto» quedan fuera y no se puede operar sin desplazar'));
+  }
   notear(`Scroll horizontal de la página (${paso.nombre})`, scroll.dx > 0 ? 'NO CUADRA' : 'CUADRA',
     `Δx ${scroll.dx} px sobre ${scroll.cw} px · Δy ${scroll.dy} px`, 'documento',
     scroll.dx > 0 ? 'algo más ancho que la ventana: aparece una barra horizontal y el gráfico se desplaza solo al arrastrar' : '');
 
   // 3 · recortes dentro de las tarjetas de gráfico y libro
-  for (const raiz of ['#chartArea', '#bookCard', '#panelsCard', '#bottomPanel']) {
+  for (const raiz of ['#chartArea', '#bookCard', '#panelsCard', '#bottomPanel', '#orderCard']) {
     let r = await page.evaluate((s) => window.__med.recortes(s, 900), raiz);
     if (r) r = r.filter((x) => !/^#book(Asks|Bids)$/.test(x.id));   // eso lo mide la aritmética de filas
     if (!r) { notear(`Contenedor ${raiz} ausente (${paso.nombre})`, 'NO CUADRA', 'querySelector → null', raiz, ''); continue; }

@@ -373,31 +373,46 @@
   </section>
 
   <!-- ---------- BARRA LATERAL ---------- -->
-  <aside id="sidebar">
-    <!-- =============================================================
-         LIBRO DE ÓRDENES (esquilo Bitunix)
-         Ventas en rojo de mayor a menor, precio último en el centro con su
-         flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
-         salen del espejo público de Binance cuando hay red y, si no, se
-         derivan de las velas del replay (js/orderBook.js lo etiqueta).
-         ============================================================= -->
-    <div class="card bf-book" id="bookCard">
-      <div class="card-head">
-        <span class="card-title">Libro de órdenes</span>
-        <span class="tag tag-muted" id="bookSrc">—</span>
-        <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
-      </div>
-      <div class="card-body">
-        <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
-        <div class="bf-asks" id="bookAsks"></div>
-        <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
-        <div class="bf-bids" id="bookBids"></div>
-        <div class="bf-book-frac">
-          <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
-          <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
-        </div>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       COLUMNA DEL LIBRO · colocada como en el sitio real
+
+       Medido en su DOM (docs/brecha-visual-bitunix.md §2): el libro es una columna propia
+       de ~300 px a la IZQUIERDA del panel de órdenes (libro en x≈1004, órdenes en x=1311),
+       las dos bajo la franja del símbolo y encima del panel de posiciones. Aquí el libro
+       vivía APILADO dentro de #sidebar, así que la tarjeta de órdenes empezaba en y≈470 y
+       sus botones de entrada caían en y=1098 con la ventana en 900 px: se veía el
+       formulario y no se podía operar (lo comprueba tools/barrido-graficos.js con
+       «Botones de entrada a la vista sin desplazar»). Y de paso, con columna propia el
+       libro deja de ir recortado a 102 px de alto con 170 px de filas pintadas.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <aside id="bookCol">
+
+  <!-- =============================================================
+       LIBRO DE ÓRDENES (esquilo Bitunix)
+       Ventas en rojo de mayor a menor, precio último en el centro con su
+       flecha y compras en verde debajo; al pie, la banda bid/ask. Los datos
+       salen del espejo público de Binance cuando hay red y, si no, se
+       derivan de las velas del replay (js/orderBook.js lo etiqueta).
+       ============================================================= -->
+  <div class="card bf-book" id="bookCard">
+    <div class="card-head">
+      <span class="card-title">Libro de órdenes</span>
+      <span class="tag tag-muted" id="bookSrc">—</span>
+      <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
+    </div>
+    <div class="card-body">
+      <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+      <div class="bf-asks" id="bookAsks"></div>
+      <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
+      <div class="bf-bids" id="bookBids"></div>
+      <div class="bf-book-frac">
+        <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
+        <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
       </div>
     </div>
+  </aside>
+
+  <aside id="sidebar">
 
 
     <!-- PANELES DE INDICADORES (estilo OpenMarket): lista con los valores
@@ -420,8 +435,8 @@
              (js/tradingEngine.js: `marginMode`). -->
         <div class="bf-margin-row">
           <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
-            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzado</button>
-            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislado</button>
+            <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzada</button>
+            <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislada</button>
           </div>
           <div class="bf-lev" title="Apalancamiento actual">
             <b id="bfLevVal">1x</b>
@@ -437,10 +452,10 @@
              su fila propia porque solo aparece en modo «Límite». -->
         <div class="ord-segs">
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
-            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)"><i class="ic">⚡</i>Mercado</button>
-            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)"><i class="ic">⏳</i>Límite</button>
-            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda."><i class="ic">🎯</i>Trigger</button>
-            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen."><i class="ic">🌀</i>Trailing</button>
+            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">Mercado</button>
+            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">Límite</button>
+            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
+            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
@@ -590,10 +605,7 @@
              Vive DENTRO de «Avanzado» por dos razones: en Bitunix es un ajuste de la cuenta (está en
              el menú del panel, no entre el precio y el tamaño) y el contrato del teléfono exige que
              el formulario en reposo se vea entero sin deslizar —29 px de fila aquí ya lo rompían;
-             medido en tests/responsive.test.js—, y «Avanzado» es justamente el sitio que se pliega. --> Fiel a la API: `change_position_mode` admite
-             ONE_WAY|HEDGE y se RECHAZA con 200014 si hay posiciones u órdenes abiertas (por eso el
-             conmutador está aquí, a la vista, y no enterrado en Ajustes), y en hedge cada orden
-             declara su papel con `tradeSide` OPEN|CLOSE. -->
+             medido en tests/responsive.test.js—, y «Avanzado» es justamente el sitio que se pliega. -->
         <div class="ord-segs" id="posModeRow">
           <div class="seg seg-order" id="segPosMode" role="group" aria-label="Modo de posición">
             <button class="seg-btn active" data-pmode="ONE_WAY" title="Una sola posición: una orden al otro lado la reduce">ONE-WAY</button>
@@ -672,8 +684,8 @@
         </div>
 
         <div class="order-actions">
-          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Long</button>
-          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Short</button>
+          <button class="btn btn-long" id="btnLong" title="Abrir posición LONG (B)">Abrir Largo</button>
+          <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Corto</button>
         </div>
         <div class="bf-cost" id="bfCost">
           <span class="c">Coste <b id="bfCostVal">—</b></span>

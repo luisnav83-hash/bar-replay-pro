@@ -17,14 +17,17 @@
   const CM = {};
 
   const COLORS = {
-    // Paleta MEDIDA sobre la captura del terminal de futuros (css/bitunix.css):
-    // fondo casi negro, velas verde #25ca93 / rojo #f65b55 y la línea de
-    // entrada en blanco, como marca el exchange.
-    bg: '#0a0a0b', grid: '#1a1a1f', gridSoft: '#141418', border: '#242429',
-    text: '#8b8e96', crosshair: '#4a4d55',
-    up: '#25ca93', down: '#f65b55',
-    entry: '#f2f3f5', sl: '#f65b55', tp: '#25ca93', liq: '#f0b90b',
-    limit: '#b8f040',   // órdenes límite pendientes (lima de la marca, punteada)
+    // Paleta MEDIDA EN EL DOM del sitio real (tools/captura-bitunix.js →
+    // docs/brecha-visual-bitunix.md §1), no sobre un PNG: la tarjeta del gráfico
+    // es #121212, la rejilla #1f2020, el texto de los ejes #919499 y el verde y
+    // el rojo de sus botones son #24c18d / #f14b3f. Antes estaban los valores del
+    // tema anterior (casi negro azulado + #25ca93/#f65b55), que es justo lo que
+    // hacía que el lienzo «no pareciera Bitunix».
+    bg: '#121212', grid: '#1f2020', gridSoft: '#191a1a', border: '#292a2b',
+    text: '#919499', crosshair: '#4a4d55',
+    up: '#24c18d', down: '#f14b3f',
+    entry: '#ffffff', sl: '#f14b3f', tp: '#24c18d', liq: '#f0b90b',
+    limit: '#b9f641',   // órdenes límite pendientes (lima de la marca, punteada)
   };
 
   /**
@@ -143,7 +146,10 @@
     /* ---------------------- Curva de capital ---------------------- */
     CM.equityChart = LightweightCharts.createChart(document.getElementById('equityChart'), {
       autoSize: true,
-      layout: { background: { type: 'solid', color: COLORS.bg }, textColor: COLORS.text, fontSize: 9, fontFamily: 'ui-monospace, monospace' },
+      /* Sus ejes van en la misma sans del sitio (no en mono) y a 12 px; antes 9 px mono,
+     que era la firma visual de «herramienta de backtesting» en vez de exchange. */
+      layout: { background: { type: 'solid', color: COLORS.bg }, textColor: COLORS.text, fontSize: 12,
+        fontFamily: '"noto sans", "Noto Sans", Inter, system-ui, sans-serif' },
       grid: { vertLines: { color: COLORS.gridSoft }, horzLines: { color: COLORS.grid } },
       rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.15, bottom: 0.1 } },
       timeScale: { visible: false },

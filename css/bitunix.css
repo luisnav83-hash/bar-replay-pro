@@ -19,39 +19,65 @@
    ========================================================================= */
 
 :root {
-  /* ---- fondos: neutros casi negras, sin tinte azul (medido) ---- */
-  --bg-0: #08080a;
-  --bg-1: #0d0d10;
-  --bg-2: #141418;
-  --bg-3: #1c1c22;
-  --bg-4: #26262e;
-  --line: #242429;
-  --line-soft: #1b1b20;
+  /* ═══════════════════════════════════════════════════════════════════════
+     TOKENS MEDIDOS EN EL SITIO REAL, no en una captura.
+    Arnés: tools/captura-bitunix.js → docs/bitunix/medida.json (2026-10-10,
+    1600×900, es-ES, https://www.bitunix.com/contract-trade/BTCUSDT).
+    La tabla completa con su coordenada está en docs/brecha-visual-bitunix.md §1.
+     Antes de esta pasada el bloque venía de percentiles de color de un PNG y de
+     lo que decían los artículos de ayuda, y se había ido quedando en «terminal
+     azul» (fondo #08080a, paneles #141418, todo en versalitas con letter-spacing):
+     eso era la mitad de la diferencia que se ve a simple vista.
+     ═══════════════════════════════════════════════════════════════════════ */
 
-  /* ---- texto: grises neutros ---- */
-  --tx-1: #f2f3f5;
-  --tx-2: #c2c4ca;
-  --tx-3: #8b8e96;
-  --tx-4: #5f626b;
+  /* ---- fondos: negro puro de página, tarjetas #121212 / paneles #0f0f0f,
+            campos #222324 con hover #2c2c2e. Medido del DOM del sitio. ---- */
+  --bg-0: #000000;
+  --bg-1: #121212;
+  --bg-2: #0f0f0f;
+  --bg-3: #222324;
+  --bg-4: #2c2c2e;
+  --line: #292a2b;
+  --line-soft: #1f2020;
 
-  /* ---- acentos medidos ---- */
-  --up: #25ca93;
-  --up-dim: #10402f;
-  --down: #f65b55;
-  --down-dim: #4a1b19;
-  --accent: #b8f040;
-  --accent-ink: #101206;
-  --accent-2: #25ca93;
+  /* ---- texto: tres niveles, sin tintes. El `--tx-4` suelto que teníamos
+            (#5f626b) se queda como «apagado» de verdad: #66686b. ---- */
+  --tx-1: #ffffff;
+  --tx-2: #c9cbce;
+  --tx-3: #919499;
+  --tx-4: #66686b;
+
+  /* ---- acentos: el verde y el rojo de SUS botones de entrada. El lima no es
+            un acento de interfaz: en el sitio solo lo llevan «Registrarse» y la
+            píldora «Ultra», con tinta casi negra encima. ---- */
+  --up: #24c18d;
+  --up-dim: #0f3d2e;
+  --down: #f14b3f;
+  --down-dim: #4a1a17;
+  --accent: #b9f641;
+  --accent-ink: #131f00;
+  --accent-2: #24c18d;
   --warn: #f0b90b;
+  /* Lo activo en la interfaz de trading NO es lima: pestaña de timeframe = fondo
+     #272829, segmentado activo = #24c18d. Se declara aparte para poder decirlo. */
+  --activo: #24c18d;
+  --seg-fondo: #272829;
 
-  /* ---- métricas: radio mínimo y tipografía compacta ---- */
+  /* ---- métricas: cuerpo 14 px y rótulo 12 px (el sitio declara --bu-fsz:14px y
+     --bu-h5-fsz:12px en su propio :root); radios 4 px en todo y píldora en los
+     botones de entrada; la columna de órdenes mide 272 px en ellos. ---- */
+  --fs-cuerpo: 14px;
+  --fs-rotulo: 12px;
+  --fs-precio: 20px;
   --r-sm: 2px;
   --r: 4px;
-  --r-lg: 6px;
+  --r-lg: 4px;
+  --r-pill: 9999px;
   --topbar-h: 90px;
   --stats-h: 42px;
   --toolbar-h: 34px;
-  --right-w: 336px;
+  --right-w: 272px;
+  --book-w: 300px;   /* medido en el sitio: su columna del libro hace ~300 px (x≈1004..1300) */
   --row-h: 17px;
 }
 
@@ -60,8 +86,11 @@
 body {
   /* sin degradados: el terminal real es plano */
   background: var(--bg-0);
-  font-size: 12px;
-  letter-spacing: .1px;
+  font-size: var(--fs-cuerpo);
+  /* Sin letter-spacing: el sitio no lo usa en ningún rótulo (medido en su body). Y las cifras
+     se alinean con tabular-nums, como hacen ellos, no con una tipografía mono. */
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* todos los números, en cifras tabulares: las columnas no «bailan» */
@@ -102,8 +131,8 @@ body {
 #topbar .topbar-group { flex: 1 1 auto; min-width: 0; padding: 6px 12px; gap: 8px; }
 #topbar .topbar-right { flex: 0 0 auto; margin-left: auto; padding: 6px 10px 6px 0; }
 
-.brand-name { font-size: 13px; letter-spacing: .6px; }
-.brand-sub { color: var(--tx-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; }
+.brand-name { font-size: var(--fs-cuerpo); }
+.brand-sub { color: var(--tx-4); font-size: var(--fs-rotulo); }
 
 /* ---- fila de estadísticas ---- */
 .bf-stats {
@@ -133,7 +162,7 @@ body {
   line-height: 1.15;
   white-space: nowrap;
 }
-.bf-stat .bf-k { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.bf-stat .bf-k { font-size: var(--fs-rotulo); color: var(--tx-3); }   /* el sitio: etiqueta 12 px #919499, en minúsculas */
 .bf-stat .bf-v { font-size: 13.5px; font-weight: 600; color: var(--tx-1); }
 .bf-stat .bf-sub { font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bf-stat.bf-last { min-width: 138px; }
@@ -172,9 +201,7 @@ body {
   border-right: 0;
   justify-content: center;
   color: var(--tx-4);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: .7px;
+  font-size: var(--fs-rotulo);
   cursor: help;
 }
 .bf-stat.bf-src::before { content: 'ⓘ '; color: var(--warn); }
@@ -213,8 +240,11 @@ body {
   margin: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  /* Radio 4 px y superficie #0f0f0f, medidos en las tarjetas de su columna (la del «Margen» y la
+     de «Activos»): `#0f0f0f`, radio 4px, sin sombra. Se queda el pelo inferior en vez de borde
+     completo porque aquí los bloques van apilados sin hueco. */
+  border-radius: var(--r);
+  background: var(--bg-2);
   box-shadow: none;
 }
 
@@ -227,12 +257,12 @@ body {
   border-bottom: 1px solid var(--line-soft);
   background: var(--bg-1);
 }
+/* Títulos de tarjeta como los de ellos («Margen», «Activos (USDT)»): 14 px blanco, peso 600,
+   en minúsculas y sin spacing. Medido en su DOM a 14 px con color-text-1 = #ffffff. */
 .card-title {
-  font-size: 11.5px;
+  font-size: var(--fs-cuerpo);
   font-weight: 600;
-  letter-spacing: .3px;
-  color: var(--tx-2);
-  text-transform: uppercase;
+  color: var(--tx-1);
 }
 .card-body { padding: 9px 10px 11px; }
 
@@ -257,10 +287,9 @@ body {
 .bf-book-cols {
   display: grid;
   grid-template-columns: 1.1fr 1fr .9fr;
-  padding: 4px 10px 3px;
-  font-size: 9.5px;
-  color: var(--tx-4);
-  letter-spacing: .3px;
+  padding: 5px 10px 4px;
+  font-size: var(--fs-rotulo);
+  color: var(--tx-3);
 }
 .bf-book-cols span:last-child { text-align: right; }
 .bf-asks, .bf-bids { display: flex; flex-direction: column; max-height: 118px; overflow: hidden; }
@@ -388,19 +417,25 @@ body {
   border-radius: 0;
   background: transparent;
   color: var(--tx-3);
-  font-size: 11px;
+  font-size: var(--fs-cuerpo);
   font-weight: 500;
-  letter-spacing: .2px;
 }
 .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
 .seg-btn:hover { color: var(--tx-1); background: var(--bg-4); }
-.seg-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+/* Medido en su segmentado «Abierto | Cerrado»: activo = fondo #24c18d con texto BLANCO, peso
+   normal. El lima del sitio solo aparece en «Registrarse» y en la píldora «Ultra». */
+.seg-btn.active { background: var(--activo); color: #fff; font-weight: 500; }
 
 .field { margin-bottom: 7px; }
-.field-label { font-size: 9.5px; color: var(--tx-4); text-transform: uppercase; letter-spacing: .5px; }
+.field-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 input[type="number"], input[type="text"], input[type="datetime-local"], select {
-  height: 30px;
-  font-size: 12px;
+  /* Ellos: caja de 272×42 con el número a 14 px y el sufijo a 12 px. Aquí el alto global se
+     queda en 34 px porque estos campos también viven en la barra superior (la fecha del replay)
+     y con 42 la barra crece 24 px, le roba el alto al gráfico y la escalera desborda sus propios
+     paneles —lo miden tests/responsive.test.js y la sección J de tests/pnl-chart.test.js—.
+     Los dos campos que SÍ son los del sitio (precio y cantidad) vuelven a 42 px en el bloque 11. */
+  height: 34px;
+  font-size: var(--fs-cuerpo);
   background: var(--bg-3);
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -473,10 +508,11 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 
 /* Long / Short a sangre completa: el par de botones del original */
 .order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
-.order-actions .btn { height: 38px; font-size: 13px; font-weight: 700; border: 0; border-radius: var(--r); }
-.btn-long { background: var(--up); color: #04241a; }
+/* Medido: dos botones de 131×40, radio PÍLDORA (9999px), texto blanco a 14 px peso 500. */
+.order-actions .btn { height: 40px; font-size: var(--fs-cuerpo); font-weight: 500; border: 0; border-radius: var(--r-pill); }
+.btn-long { background: var(--up); color: #fff; }
 .btn-long:hover { background: #2fd9a0; }
-.btn-short { background: var(--down); color: #2b0a09; }
+.btn-short { background: var(--down); color: #fff; }
 .btn-short:hover { background: #ff6d67; }
 .btn-long:disabled, .btn-short:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -527,11 +563,11 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .tab {
   position: relative;
   height: 100%;
-  padding: 0 13px;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: var(--tx-3);
-  font-size: 11px;
+  font-size: var(--fs-cuerpo);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -542,7 +578,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
   position: absolute;
   left: 10px; right: 10px; bottom: 0;
   height: 2px;
-  background: var(--accent);
+  /* En el sitio la pestaña activa se subraya en VERDE (#24c18d) —«Posiciones», «Libro de
+     órdenes»—; el lima solo aparece en marketing («Registrarse», «Ultra»). */
+  background: var(--activo);
 }
 .tab .count, .tab span[id] { color: var(--tx-4); font-variant-numeric: tabular-nums; }
 .tabs-right { margin-left: auto; display: flex; align-items: center; gap: 5px; }
@@ -571,7 +609,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 }
 .pos-mgmt { gap: 5px; }
 .pm-row { gap: 5px; }
-.pm-label { font-size: 10.5px; color: var(--tx-3); letter-spacing: .2px; }
+.pm-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 .pm-row input { height: 26px; }
 .mini-btn {
   height: 24px;
@@ -686,7 +724,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 1px r
 .speed-btn.active { background: var(--bg-4); border-color: #3d3d47; color: var(--tx-1); }
 .rb-info { font-size: 10.5px; color: var(--tx-3); }
 .rb-clock-val { font-size: 11.5px; color: var(--tx-1); }
-.rb-status { font-size: 9px; padding: 1px 6px; border-radius: var(--r-sm); letter-spacing: .6px; }
+.rb-status { font-size: var(--fs-rotulo); padding: 2px 7px; border-radius: var(--r-sm); }
 .rb-status.playing { background: rgba(37, 202, 147, .16); color: var(--up); }
 .rb-status.paused { background: var(--bg-4); color: var(--tx-3); }
 #progressRange { accent-color: var(--accent); }
@@ -697,12 +735,10 @@ table { font-size: 11px; }
 thead th {
   position: sticky;
   top: 0;
-  padding: 5px 8px;
-  font-size: 9.5px;
+  padding: 6px 9px;
+  font-size: var(--fs-rotulo);
   font-weight: 500;
-  color: var(--tx-4);
-  text-transform: uppercase;
-  letter-spacing: .5px;
+  color: var(--tx-3);
   background: var(--bg-2);
   border-bottom: 1px solid var(--line);
 }
@@ -726,7 +762,7 @@ tbody tr:hover td { background: var(--bg-2); }
   border: 1px solid var(--line-soft);
   border-radius: 0;
 }
-.stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--tx-4); }
+.stat-label { font-size: var(--fs-rotulo); color: var(--tx-3); }
 .stat b { font-size: 13px; }
 
 .kv { padding: 3px 0; font-size: 11.5px; border-bottom: 1px dashed var(--line-soft); }
@@ -760,7 +796,7 @@ tbody tr:hover td { background: var(--bg-2); }
   box-shadow: 0 18px 60px rgba(0, 0, 0, .66);
 }
 .modal-head { border-bottom: 1px solid var(--line); }
-.modal-head h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--tx-2); }
+.modal-head h3 { font-size: 16px; color: var(--tx-1); font-weight: 600; }
 .modal-body { font-size: 12px; }
 .toast {
   border: 1px solid var(--line);
@@ -789,7 +825,7 @@ kbd {
 .tf-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
 /* botón «live» del libro: apagado = derivado del replay, encendido = red */
-#btnBookLive { letter-spacing: .3px; }
+#btnBookLive { font-size: var(--fs-rotulo); }
 #btnBookLive.on { color: var(--up); border-color: rgba(37, 202, 147, .45); }
 #btnBookLive.off { color: var(--tx-4); }
 
@@ -803,8 +839,7 @@ kbd {
    el aspecto sea el mismo cuando aparezca. */
 #btnOrderAvanzado { display: none; align-items: center; gap: 4px; height: 18px; padding: 0 6px;
                     border: 1px solid var(--line); border-radius: 2px; background: var(--bg-3, #17171c);
-                    color: var(--txt-2, #8b8e96); font: 600 9px/1 var(--font-ui, ui-sans-serif);
-                    letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+                    color: var(--tx-3); font: 500 var(--fs-rotulo)/1 var(--sans); cursor: pointer; }
 #btnOrderAvanzado .ar { font-size: 9px; line-height: 1; }
 #btnOrderAvanzado:hover { color: var(--txt-1, #e6e7ea); border-color: var(--line-2, #2a2a32); }
 
@@ -1681,4 +1716,131 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   .pane-resize::after { top: 5px; width: 42px; height: 3px; }
   #posPnlSpark { max-width: 128px; height: 22px; }
   #posPnlSparkNote { font-size: 9px; max-width: 118px; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   11) PIEL MEDIDA (2) · la tarjeta de órdenes, tal y como cabe en 272 px
+   ═══════════════════════════════════════════════════════════════════════════
+   Medido en su DOM (docs/brecha-visual-bitunix.md §2): la columna entera hace
+   272 px de ancho y la tarjeta 613 px de alto, y DENTRO de esos 613 px caben la
+   barra de margen, el modo de posición, las pestañas de tipo, Disponible, Precio
+   (42 px), Cantidad (42 px), el deslizador con sus marcas, la casilla TP/SL, los
+   dos botones de entrada, las cuatro cifras de coste y el pie de comisiones.
+   La nuestra, al pasar a 272 px con cuerpo de 14 px, recortaba los rótulos del
+   segmentado (se leía «Aislad») y empujaba «Abrir Largo/Corto» fuera del pliegue
+   de 900 px: se veía la tarjeta y no se podía operar. Las reglas de abajo
+   recuperan esos ~50 px SIN tocar el contrato del teléfono (≤640 px), que tiene
+   su propio alto de fila medido en tests/responsive.test.js. */
+
+/* Rótulos sin emoji y sin recorte silencioso: si no cabe, que se vea el punto
+   suspensivo (es lo que hacen ellos con las etiquetas largas del libro). */
+#orderCard .seg { min-width: 0; }
+#orderCard .seg .seg-btn { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#orderCard .ic { display: none; }
+
+/* Los dos campos que sí son «los de ellos» (Precio y Cantidad) mantienen los
+   42 px medidos; los secundarios (SL, TP, activación, trailing, riesgo) van a
+   34 px, que es lo que nos separa de sus 613 px de tarjeta. */
+@media (min-width: 641px) {
+  #orderCard .field input, #orderCard .field select { height: 34px; font-size: 13px; }
+  #orderCard #limitInput, #orderCard #sizeInput { height: 42px; font-size: var(--fs-cuerpo); }
+  #orderCard .field { margin-bottom: 5px; }
+  #orderCard > .card-head { height: 26px; }
+  #orderCard .seg .seg-btn { height: 26px; font-size: 12px; padding: 0 6px; }
+  /* La barra superior de su tarjeta es UNA caja #222324 de 28-30 px con el modo de
+     margen a la izquierda y el apalancamiento a la derecha (ellos: «Cruzada | 10X 10X»). */
+  #orderCard .bf-margin-row { min-height: 30px; background: var(--bg-3); border-radius: var(--r);
+                              padding: 2px 6px; align-items: center; }
+  /* Y la caja del apalancamiento tiene que poder partirse en dos líneas: en HEDGE añade la
+     pareja «largo/corto» (#levLados) y con la caja rígida desbordaba la tarjeta 96 px. */
+  #orderCard .bf-lev { min-width: 0; flex-wrap: wrap; row-gap: 0; }
+  #orderCard .bf-lev .lev-lados { flex-basis: 100%; text-align: right; }
+  #orderCard .bf-margin-row .seg { background: transparent; height: 100%; }
+  #orderCard .bf-margin-row .seg-btn { border-radius: var(--r); }
+  /* Las fracciones 0/25/50/75/100 en el sitio son MARCAS bajo el deslizador (12 px
+     #919499, 16 px de alto), no una fila de botones encajonados: así se ahorran 8 px
+     y se lee como lo que es, un atajo. */
+  #orderCard .bf-slide-quick { min-height: 18px; border: 0; background: transparent; }
+  #orderCard .bf-slide-quick button { height: 16px; min-width: 30px; border: 0; background: transparent;
+                                      font-size: 11px; color: var(--tx-3); border-radius: var(--r-sm); }
+  #orderCard .bf-slide-quick button + button { border-left: 0; }
+  #orderCard .bf-slide-quick button.active { color: var(--tx-1); background: var(--seg-fondo); }
+
+  /* LOS PARES DE CAMPOS, A UNA COLUMNA. `.grid-2` repartía 188+188 px dentro de una tarjeta
+     de 251 útiles: la segunda columna (TAKE PROFIT) se salía 125 px de la tarjeta —es el mismo
+     desbordamiento de `.grid-2` en #orderCard que veníamos arrastrando y reportando desde hace
+     días, y que al estrechar la columna a 272 px pasó de 19 a 125 px—. En el sitio cada campo
+     (Precio, Cantidad) ocupa la fila ENTERA, así que aquí se apilan: más fiel y sin recorte. */
+  #orderCard .grid-2, #orderCard .grid-2-min { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  #orderCard .grid-2 > .field + .field, #orderCard .grid-2-min > .field + .field { margin-top: 5px; }
+
+  /* Los rótulos de los segmentados: caben con 11,5 px y 3 px de lado. Con 12 px y 6 px el
+     recorte era de 1 px en «Mercado» y de 16 en «Cruzada» (medido: scrollWidth 63 vs caja 62,
+     y 62 vs 46), y el ellipsis lo disfrazaba de «Merca…». */
+  #orderCard .seg .seg-btn { font-size: 11.5px; padding: 0 3px; }
+  #orderCard #segOrderType { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  #orderCard .bf-margin-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 4px; }
+  #orderCard .bf-lev { padding: 0 5px; }
+  #orderCard .bf-lev input[type=range] { width: 62px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   12) COLUMNA DEL LIBRO, como en el sitio (medido: x≈1004 w≈300, con el panel
+   de órdenes a su derecha en x=1311 w=272). A partir de 1025 px el espacio de
+   trabajo pasa a TRES columnas —gráfico · libro · órdenes— y por debajo de ese
+   ancho el libro vuelve a meterse en la columna de la derecha (así el teléfono
+   y la tablet mantienen el contrato de alto medido en tests/responsive.test.js).
+   ═══════════════════════════════════════════════════════════════════════════ */
+#bookCol { display: none; }
+@media (min-width: 1360px) {
+  #workspace { grid-template-columns: minmax(0, 1fr) var(--book-w, 300px) var(--right-w); }
+  #bookCol {
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    border-left: 1px solid var(--line); background: var(--bg-2);
+  }
+  #bookCol > .card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+                     margin: 0; border: 0; border-radius: 0; background: transparent; }
+  #bookCol .card-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  /* El libro deja de tener presupuesto fijo de alto: en su propia columna se reparte
+     el espacio (`.bf-asks/.bf-bids` al 50 %) y por eso las 10 filas de OB.ROWS caben
+     ENTERAS — era el «nada se recorta a ojo» que prometía el propio CSS y no cumplía:
+     10 filas × 17 px = 170 px dentro de una caja de 102 px con overflow:hidden. */
+  #bookCol .bf-asks, #bookCol .bf-bids { max-height: none; flex: 1 1 0; min-height: 0; overflow: hidden; }
+  /* El tope de 322 px de la hoja (`.bf-book .card-body`) era lo que dejaba las 10 filas de
+     cada lado en 106 px. En columna propia el cuerpo ocupa la tarjeta entera y se reparte. */
+  #bookCol .bf-book .card-body { max-height: none; --cuerpo: auto; }
+  #bookCol .bf-book-last { flex: 0 0 auto; }
+  #bookCol .bf-book-frac { flex: 0 0 auto; }
+  /* Y la columna de órdenes arranca arriba del todo: su tarjeta de 629 px entra entera
+     en una ventana de 900 px, que es lo que hacen ellos (613 px de tarjeta). */
+  #sidebar { border-left: 1px solid var(--line); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   13) Ventanas BAJAS: la barra de arriba deja de exigir su min-height.
+   La versión «fiel» de esta barra es la suya —nav de 40 px y UNA franja de 73 px
+   con el símbolo y las ocho cifras de 24 h en la misma línea (medido y anotado en
+   docs/brecha-visual-bitunix.md §2, pendiente de maquetar)—. Mientras la nuestra
+   son tres filas, en una ventana de 800 px de alto el lienzo se comía 34 px de su
+   propia escalera (sección J de tests/pnl-chart.test.js: «caja 240 con fila 171»).
+   Aquí se recorta SOLO el alto de la barra en ventanas <=820 px de alto, que es
+   donde aprieta; a 900 px de alto no se toca nada, para no mover la contabilidad
+   de PC.comprimeEscalera (sus pruebas de determinismo y de «inline suelto» viven a
+   1440×900, y tocar ahí produce diferencias de 1 px que son ruido, no progreso).
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-height: 820px) {
+  #topbar { min-height: 0; padding: 3px 10px 4px; }
+  #topbar .brand { min-height: 0; padding: 4px 8px; }
+  #topbar .topbar-group { padding: 3px 8px; }
+  /* Los controles de la barra (par, temporalidades, fecha de inicio, botones) a 28 px:
+     es el alto con el que el sitio pinta su buscador y su fila de símbolo. */
+  #topbar input[type=date], #topbar input[type=text], #topbar select, #topbar .btn { height: 28px; font-size: 12px; }
+  :root { --topbar-h: 74px; --stats-h: 32px; --toolbar-h: 28px; }
+  /* Y el suelo del lienzo baja a 208 px: en 800 px de alto, con los tres paneles abiertos y
+     alguno con su alto en línea (los 81 px que dejan las pruebas de RSI/MACD), el hueco que
+     quedaba era de 31 px y el gráfico rebosaba la escalera. Bajar el suelo en ventanas bajas es
+     lo que hacen ellos —el gráfico tiene menos alto y el resto se desplaza—; a 900 px de alto
+     el suelo sigue en 240, que es donde viven las demás comprobaciones. */
+  #chartWrap { min-height: 208px; }
 }

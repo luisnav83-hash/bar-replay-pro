@@ -71,7 +71,9 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   ok(a.tipos.join(',') === 'market,limite,trigger,trailing',
     `el selector ofrece los cuatro tipos de la API (F1: Limit · Market · Trigger · Trailing Stop): ${a.tipos.join(' · ')}`);
-  ok(a.textos.every((t) => /Mercado|Límite|Trigger|Trailing/.test(t)), `los rótulos son legibles: ${a.textos.join(' / ')}`);
+  // El cuarto rótulo se renombró a la palabra del sitio en español («Activador», medido en su
+  // pestaña «Activador ▾»); «Trigger» sigue valiendo porque es el nombre de la API.
+  ok(a.textos.every((t) => /Mercado|Límite|Activador|Trigger|Trailing/.test(t)), `los rótulos son legibles: ${a.textos.join(' / ')}`);
   ok(!a.trigVisible && !a.limVisible && !a.effVisible && !a.trailVisible,
     'en modo Mercado no sobra ninguna fila condicional (ni la de validez ni la del retroceso)');
   ok(a.validez.join(',') === 'GTC,IOC,FOK,POST_ONLY', `la validez ofrece las cuatro de la API: ${a.validez.join(' · ')}`);
