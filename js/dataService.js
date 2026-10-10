@@ -482,6 +482,8 @@
   DS.MARKET = {
     TIMEOUT: 4200,
     BITGET: 'https://api.bitget.com',
+    /* Bitunix, que es el exchange replicado: lo suyo manda sobre lo de Bitget. */
+    BITUNIX: 'https://fapi.bitunix.com',
     PRODUCT: 'USDT-FUTURES',
     _cache: new Map(),
 
@@ -526,6 +528,78 @@
       throw last || new Error('sin hosts que probar');
     },
 
+    /* ---------------- RIESGO Y FUNDING DE BITUNIX (endpoints públicos) ----------------
+     Rutas literales de la documentación (F8/F7 del estudio), medidas contra el host real:
+       GET /api/v1/futures/position/get_position_tiers?symbol=BTCUSDT
+       GET /api/v1/futures/market/funding_rate?symbol=BTCUSDT
+     Como en lo demás, primero se intenta el proxy del mismo origen (`server.js`, único sitio
+     con red del proyecto) y si no lo hay se prueba directo: la API de Bitunix no manda CORS,
+     así que desde el navegador sin proxy la llamada FALLA y el terminal se queda con la tabla
+     de la documentación. No se finge un dato ausente: quien llama decide qué decir, y
+     `App.aplicarRiesgoBitunix` lo escribe en el registro.
+     La respuesta de Bitunix trae `data` como lista en unos endpoints y como objeto en otros
+     (funding_rate es objeto, aunque el ejemplo de la doc muestre un array) → se aceptan las
+     dos formas en vez de suponer una. */
+    bxLista(r) {
+      if (!r || !r.data) return [];
+      return Array.isArray(r.data) ? r.data : [r.data];
+    },
+
+    /** `code !== 0` es error en Bitunix aunque el HTTP sea 200 (p. ej. 20015 «not allowed to trade»). */
+    bxDatos(r, que) {
+      if (!r) throw new Error(que + ': sin respuesta');
+      if (+r.code !== 0) throw new Error(que + ': ' + (r.msg || 'código ' + r.code));
+      const filas = DS.MARKET.bxLista(r);
+      if (!filas.length) throw new Error(que + ': respuesta vacía');
+      return filas;
+    },
+
+    /**
+     * Bitunix NO manda `Access-Control-Allow-Origin`, así que sus rutas SOLO se piden al proxy del
+     * mismo origen (`server.js`). Sin servidor detrás NO se intenta la llamada directa: la invariante
+     * del proyecto es que la app abierta con doble clic no saque nada a internet (lo vigila
+     * tests/preview-live.test.js), y además el intento acabaría en un error de CORS en la consola.
+     * Aquí se corta antes, con un mensaje que dice qué falta.
+     */
+    async bxSoloProxy(pathAndQuery, ttl) {
+      if (!DS.MISMO_ORIGEN_UTIL) throw new Error('sin proxy: los datos de Bitunix solo los pide server.js');
+      return await DS.MARKET.json('px|' + pathAndQuery, pathAndQuery, ttl);
+    },
+
+    /** Tabla de niveles de riesgo, en el formato que come `TE.configure({ niveles })`. */
+    async bitunixTiers(symbol) {
+      const q = 'symbol=' + symbol;
+      const r = await DS.MARKET.bxSoloProxy('/api/bx/position-tiers?' + q, 300000);
+      return DS.MARKET.bxDatos(r, 'niveles de Bitunix').map((t) => ({
+        level: +t.level, startValue: +t.startValue, endValue: +t.endValue,
+        leverage: +t.leverage, maintenanceMarginRate: +t.maintenanceMarginRate,
+        deAPI: true,
+      }));
+    },
+
+    /**
+     * Mark, index, funding y su RITMO REAL. Ojo con las unidades: `fundingRate` viene en
+     * PORCENTAJE, no en fracción — se ve en que `maxFundingRate`/`minFundingRate` son ±0,3, el
+     * tope típico en %, no en fracción (0,3 = 30 % por 8 h sería absurdo). `fundingPct` del motor
+     * también es un porcentaje, así que se pasa el número TAL CUAL: multiplicarlo por 100 inflaría
+     * el coste 100 veces, y ese es el tipo de error que convierte un backtest en ruido.
+     */
+    async bitunixFunding(symbol) {
+      const q = 'symbol=' + symbol;
+      const r = await DS.MARKET.bxSoloProxy('/api/bx/funding-rate?' + q, 20000);
+      const d = DS.MARKET.bxDatos(r, 'funding de Bitunix')[0];
+      return {
+        mark: d.markPrice != null ? +d.markPrice : null,
+        last: d.lastPrice != null ? +d.lastPrice : null,
+        index: d.indexPrice != null ? +d.indexPrice : null,
+        fundingPct: d.fundingRate != null ? +d.fundingRate : null,
+        cadaHoras: +d.fundingInterval > 0 ? +d.fundingInterval : 8,
+        proxima: +d.nextFundingTime || null,
+        minPct: d.minFundingRate != null ? +d.minFundingRate : null,
+        maxPct: d.maxFundingRate != null ? +d.maxFundingRate : null,
+      };
+    },
+
     /** Libro real (bid/ask) del espejo spot: [[precio, cantidad], …]. */
     async depth(symbol, limit = 30) {
       const r = await DS.MARKET.binance(`/api/v3/depth?symbol=${symbol}&limit=${limit}`, 2500);
@@ -551,16 +625,18 @@
       const q = `symbol=${symbol}&productType=${P}`;
       // Cada dato intenta primero el proxy del mismo origen y si no, la API
       // pública de Bitget (admite CORS, así que en Pages funciona igual).
-      const [tk, fr, ls] = await Promise.allSettled([
+      const [tk, fr, ls, bx] = await Promise.allSettled([
         DS.MARKET.proxied(`/api/market/futures-ticker?${q}`, `${B}/api/v2/mix/market/ticker?${q}`, 15000),
         DS.MARKET.proxied(`/api/market/funding?${q}`, `${B}/api/v2/mix/market/current-fund-rate?${q}`, 60000),
         DS.MARKET.proxied(`/api/market/long-short?${q}&period=1h`, `${B}/api/v2/mix/market/account-long-short?${q}&period=1h`, 300000),
+        DS.MARKET.bitunixFunding(symbol),
       ]);
       const pick = (r) => (r && r.status === 'fulfilled' && r.value && r.value.data ? r.value.data[0] : null);
       const d = pick(tk);
       const f = pick(fr);
       const l = pick(ls);
-      if (!d && !f && !l) throw new Error('Bitget sin datos');
+      const b = (bx && bx.status === 'fulfilled') ? bx.value : null;
+      if (!d && !f && !l && !b) throw new Error('Bitget sin datos');
       const out = { venues: [] };
       if (d) {
         out.mark = +d.markPrice;
@@ -576,6 +652,18 @@
         out.fundingEvery = +f.fundingRateInterval || 8;
         out.nextFunding = +f.nextUpdate;
         out.venues.push('funding Bitget');
+      }
+      if (b && b.fundingPct != null) {
+        // Lo del propio contrato replicado MANDA sobre el agregado de Bitget: mismo símbolo, otra
+        // regla de liquidación. El OI y el long/short siguen viniendo de Bitget porque Bitunix no
+        // los expone en los endpoints verificados, y así lo dice la fila de procedencia.
+        out.funding = b.fundingPct;
+        out.fundingEvery = b.cadaHoras;
+        if (b.proxima) out.nextFunding = b.proxima;
+        if (b.mark) out.mark = b.mark;
+        if (b.index) out.index = b.index;
+        out.fundingMaxMin = [b.minPct, b.maxPct];
+        out.venues.push('funding Bitunix');
       }
       if (l) {
         out.longPct = +l.longAccountRatio * 100;

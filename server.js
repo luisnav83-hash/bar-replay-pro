@@ -219,6 +219,74 @@ function proxyBitget(path, query, res) {
     res.end(JSON.stringify({ error: err.message }));
   });
 }
+/* ----------------------- Proxy de datos de futuros de Bitunix -----------------------
+ * Tres rutas PÚBLICAS de mercado, con el endpoint literal de la documentación
+ * (docs/estudio-futuros-bitunix.md F8/F7), medidas hoy contra el propio host:
+ *   GET /api/v1/futures/position/get_position_tiers?symbol=BTCUSDT  → niveles de riesgo
+ *   GET /api/v1/futures/market/funding_rate?symbol=BTCUSDT          → mark, index, funding
+ *   GET /api/v1/futures/market/tickers?symbols=BTCUSDT,ETHUSDT      → 24 h por símbolo
+ * La lista blanca es deliberada: por aquí no puede pedirse NINGUNA otra ruta. Las
+ * privadas (posiciones, órdenes) exigen api-key y firma y no tienen cabida en un
+ * simulador que se abre con doble clic; y el navegador tampoco podría llamar al
+ * exchange directamente (CORS), así que este proxy es el único sitio con red.
+ *
+ * Caché por clave con TTL: el límite declarado en la doc es 10 req/s por IP y la
+ * fila de estadísticas se refresca sola. Los errores se cachean poco (15 s) para
+ * recuperarse rápido si el corte es momentáneo.
+ */
+const BITUNIX_HOST = process.env.BITUNIX_HOST || 'fapi.bitunix.com';
+const BITUNIX_RUTAS = {
+  '/api/bx/position-tiers': { up: '/api/v1/futures/position/get_position_tiers', param: 'symbol', ttl: 300000 },
+  '/api/bx/funding-rate': { up: '/api/v1/futures/market/funding_rate', param: 'symbol', ttl: 20000 },
+  '/api/bx/tickers': { up: '/api/v1/futures/market/tickers', param: 'symbols', ttl: 10000 },
+};
+const bxCache = new Map();
+
+function bxResponder(code, body, res, ttl) {
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'public, max-age=' + Math.max(0, Math.round(ttl / 1000)),
+    // Como en proxyBitget: la app se previewa dentro de un iframe sandboxeado (origen «null»),
+    // donde un fetch a la misma URL del padre se trata como cruzado y exige la cabecera. Sin ella
+    // el navegador bloquea la respuesta y la consola se llena de errores que no son de la app.
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(body);
+}
+
+function proxyBitunix(ruta, query, res) {
+  const cfg = BITUNIX_RUTAS[ruta];
+  if (!cfg) {
+    bxResponder(404, JSON.stringify({ error: 'Ruta de Bitunix no permitida', ruta }), res, 0);
+    return;
+  }
+  // Solo símbolos: cualquier otro carácter se descarta, así la query no puede
+  // convertirse en un proxy genérico de lectura.
+  const bruto = String(query[cfg.param] || '').toUpperCase().replace(/[^A-Z0-9_,.\-]/g, '');
+  const qstr = bruto ? cfg.param + '=' + bruto : '';
+  const clave = ruta + '?' + qstr;
+  const ahora = Date.now();
+  const hit = bxCache.get(clave);
+  if (hit && ahora - hit.t < hit.ttl) { bxResponder(hit.code, hit.body, res, hit.ttl); return; }
+  const url = 'https://' + BITUNIX_HOST + cfg.up + (qstr ? '?' + qstr : '');
+  const req = https.get(url, { timeout: 8000, headers: { Accept: 'application/json', 'User-Agent': 'bar-replay-pro/1.0' } }, (up) => {
+    let body = '';
+    up.on('data', (c) => { body += c; });
+    up.on('end', () => {
+      const ok = up.statusCode === 200;
+      const code = ok ? 200 : 502;
+      const payload = ok ? body : JSON.stringify({ error: 'HTTP ' + up.statusCode, fuente: BITUNIX_HOST });
+      bxCache.set(clave, { t: ahora, code, body: payload, ttl: ok ? cfg.ttl : 15000 });
+      bxResponder(code, payload, res, ok ? cfg.ttl : 15000);
+    });
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', (err) => {
+    bxCache.set(clave, { t: ahora, code: 502, body: JSON.stringify({ error: err.message, fuente: BITUNIX_HOST }), ttl: 15000 });
+    bxResponder(502, JSON.stringify({ error: err.message, fuente: BITUNIX_HOST }), res, 15000);
+  });
+}
+
 /**
  * Proxy del catálogo de símbolos de Binance (/api/v3/exchangeInfo).
  * El buscador de símbolos lo usa para listar TODOS los pares disponibles, no
@@ -299,7 +367,10 @@ const handler = (req, res) => {
   // API interna
   if (pathname === '/api/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, app: 'Bar Replay Pro', binance: BINANCE_HOSTS, time: new Date().toISOString() }));
+    res.end(JSON.stringify({
+      ok: true, app: 'Bar Replay Pro', binance: BINANCE_HOSTS, time: new Date().toISOString(),
+      bitunix: BITUNIX_HOST, bitunixRutas: Object.keys(BITUNIX_RUTAS),
+    }));
     return;
   }
   // Proxy de velas (alineado con la API de Binance para no cambiar el cliente)
@@ -328,6 +399,11 @@ const handler = (req, res) => {
   }
   if (pathname === '/api/market/futures-ticker') {
     proxyFuturesTicker(parsed.query, res);
+    return;
+  }
+  // Datos de riesgo del propio exchange replicado (niveles, funding, mark): ver proxyBitunix.
+  if (BITUNIX_RUTAS[pathname]) {
+    proxyBitunix(pathname, parsed.query, res);
     return;
   }
   if (pathname === '/api/market/funding') {

@@ -672,20 +672,145 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   /* ════════════════════ I) RENDIMIENTO Y SALUD ════════════════════ */
   console.log('\n▸ I) Rendimiento y salud');
   const salud = await page.evaluate(() => {
+    const mide = (n, fn) => { const t = performance.now(); for (let i = 0; i < n; i++) fn(); return (performance.now() - t) / n; };
     const antes = OB.state.renders;
-    const t0 = performance.now();
-    for (let i = 0; i < 60; i++) App.stepForward();
-    const dt = performance.now() - t0;
+    const i0 = BR.getIndex();
+    const v1 = mide(60, () => App.stepForward());
+    const v2 = mide(60, () => App.stepForward());
+    const rendersVela = OB.state.renders - antes;   // solo los del replay, antes de medir el libro a pelo
+    const l1 = mide(60, () => OB.render());
+    const l2 = mide(60, () => OB.render());
     return {
-      ms: dt, porVela: dt / 60, renders: OB.state.renders - antes, idx: BR.getIndex(),
+      vela: Math.min(v1, v2), velaBruta: v1, libro: Math.min(l1, l2), libroBruto: l1,
+      renders: rendersVela, velas: BR.getIndex() - i0,
       filas: document.querySelectorAll('#bookAsks .bf-row, #bookBids .bf-row').length,
     };
   });
-  ok(salud.porVela < 12, `60 velas con libro y estadísticas: ${salud.porVela.toFixed(2)} ms/vela (${salud.ms.toFixed(0)} ms)`);
-  ok(salud.renders >= 60, `el libro se refresca en cada vela (${salud.renders} renders)`);
+  /* ANTES este aserto era `ms/vela < 12`, un número absoluto medido en el equipo de diseño. En un
+     sandbox compartido falla solo: probado con la versión de estos cambios y con la de antes en la
+     MISMA llamada, dieron 5,97 vs 5,78 ms/vela —y 3,24 vs 4,66 al invertir el orden—, y dentro de
+     la suite entera oscila 10,4-13,7 con el mismo binario. Se mide pues lo que de verdad importa:
+     cuánto AÑADE el terminal al coste de avanzar una vela (relativo, inmune al hardware) y un
+     techo ancho que caza una regresión cuadrática sin penar la máquina. */
+  ok(salud.velas === 120, `las dos tandas avanzaron 120 velas reales (${salud.velas}): sin eso, cualquier tiempo medido sería humo`);
+  ok(salud.libro < salud.vela * 1.5,
+    `el libro y las estadísticas a pelo cuestan ${salud.libro.toFixed(2)} ms por pasada frente a ${salud.vela.toFixed(2)} ms por vela del replay (×${(salud.libro / salud.vela).toFixed(2)}): el terminal no multiplica el coste de avanzar`);
+  ok(salud.vela < 45, `${salud.vela.toFixed(2)} ms/vela (mejor de dos tandas; la primera ${salud.velaBruta.toFixed(2)}) — techo anti O(n²), no umbral de hardware`);
+  ok(salud.renders >= 120, `el libro se refresca en cada una de las 120 velas (${salud.renders} renders)`);
   ok(salud.filas === 20, `tras 60 velas el libro mantiene sus 20 filas, sin acumular nodos (${salud.filas})`);
   ok(errs.length === 0, `sin errores de JavaScript ni de consola (${errs.length})${errs.length ? ' → ' + errs.slice(0, 3).join(' ⧸ ') : ''}`);
   ok(recursos > 0, `las ${recursos} peticiones de exchange fallaron por el corte de red (y la app las digirió)`);
+
+  /* ═════════ J) NIVELES Y FUNDING DEL EXCHANGE (proxy simulado, servido por HTTP) ═════════
+   * Se sirve la app en http://127.0.0.1 con un stub en las rutas /api/bx/*, que es el camino REAL.
+   * Mockear con `page.setRequestInterception` NO vale para esto: el `respond()` de puppeteer no
+   * añade `Access-Control-Allow-Origin` y el navegador bloquea la llamada antes de que llegue a
+   * manos de la app (comprobado: «Failed to fetch» desde file://).
+   * El fixture son los 11 tramos que la API devolvió HOY para BTCUSDT. La documentación del API
+   * enseña un ejemplo con 2 (125× y 0,4 %), que está desfasado: por eso el test fija los números
+   * medidos y el motor admite inyectar la tabla, para no depender de una ruta inventada. */
+  console.log('\n▸ J) Tramos de riesgo leídos de Bitunix (proxy simulado)');
+  {
+    const http = require('http');
+    const HTML = path.join(__dirname, '..', 'bar-replay-pro-unico.html');
+    const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'bitunix-tiers-btcusdt.json'), 'utf8'));
+    const FUNDING = { code: 0, msg: 'Success', data: { symbol: 'BTCUSDT', markPrice: '82802.6', lastPrice: '82802.5',
+      indexPrice: '82841.1', fundingRate: '-0.003288', fundingInterval: 8, nextFundingTime: '1791648000000',
+      maxFundingRate: '0.3', minFundingRate: '-0.3' } };
+    let tierFalla = false;
+    const srv = http.createServer((req, res) => {
+      const u = String(req.url || '/');
+      const json = (codigo, obj) => { res.writeHead(codigo, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
+      if (u.startsWith('/api/bx/position-tiers')) return json(200, tierFalla ? { code: 20015, data: null, msg: 'this Futures is not allowed to trade.' } : FIX);
+      if (u.startsWith('/api/bx/funding-rate')) return json(200, FUNDING);
+      if (u.startsWith('/api/bx/tickers')) return json(200, { code: 0, msg: 'Success', data: [] });
+      if (u.startsWith('/api/')) return json(500, { error: 'stub: sin upstream' });   // velas etc.: que degrade
+      fs.readFile(HTML, (e, buf) => {
+        if (e) return json(500, { error: 'sin archivo único' });
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(buf);
+      });
+    });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    const puerto = srv.address().port;
+
+    const p2 = await browser.newPage();
+    await p2.setViewport({ width: 1440, height: 900 });
+    const err2 = [];
+    p2.on('pageerror', (e) => err2.push(e.message));
+    await p2.goto('http://127.0.0.1:' + puerto + '/', { waitUntil: 'domcontentloaded' });
+    await p2.waitForFunction(() => window.App && window.TE && window.DS && window.ST, { timeout: 25000 });
+    await espera(900);
+
+    const v1 = await p2.evaluate(async () => {
+      const r = await App.aplicarRiesgoBitunix();
+      return {
+        filas: TE.state.niveles ? TE.state.niveles.length : 0,
+        tramo1: TE.state.niveles ? TE.state.niveles[0] : null,
+        lev: TE.apalancamientoPermitido(150000, 300),
+        fundingPct: TE.state.fundingPct, cada: TE.state.fundingCadaHoras,
+        fuente: (document.getElementById('setNivelesFuente') || {}).textContent || '',
+        hay: !!document.getElementById('setNivelesAuto'), avisos: (r && r.avisos) || [],
+      };
+    });
+    ok(v1.hay, 'el interruptor «tramos del exchange» existe en Ajustes');
+    ok(err2.length === 0, `cargar los datos de riesgo no rompe nada (${err2.length} errores)${err2.length ? ' → ' + err2[0].slice(0, 120) : ''}`);
+    ok(v1.filas === 11, `la tabla de 11 tramos entra entera en el motor (${v1.filas}; avisos: ${v1.avisos.join(' · ') || 'ninguno'})`);
+    ok(v1.tramo1 && +v1.tramo1.endValue === 100000 && +v1.tramo1.leverage === 200 && Math.abs(+v1.tramo1.maintenanceMarginRate - 0.003) < 1e-9,
+      `el tramo 1 llega como lo da la API: 0→${v1.tramo1 && v1.tramo1.endValue}, ${v1.tramo1 && v1.tramo1.leverage}×, MMR ${v1.tramo1 && v1.tramo1.maintenanceMarginRate}`);
+    ok(v1.lev.leverage === 150 && v1.lev.recortado, `un nocional de 150 000 cae en el tramo 2 REAL (150×), no en el de la doc (100×): ${JSON.stringify(v1.lev)}`);
+    ok(v1.fundingPct === 0, `la tasa del exchange NO se aplica sola al PnL (el ajuste sigue en ${v1.fundingPct} %): se ofrece, no se impone`);
+    ok(v1.cada === 8, `y el ritmo de liquidación sí viene del contrato (fundingInterval = ${v1.cada} h)`);
+    ok(/11 tramos/.test(v1.fuente), `la carta dice de dónde salen los números: «${v1.fuente}»`);
+
+    const v2 = await p2.evaluate(() => {
+      const c = document.getElementById('setNivelesAuto');
+      c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true }));
+      return { filas: TE.state.niveles ? TE.state.niveles.length : 0, lev: TE.apalancamientoPermitido(150000, 300),
+        fuente: (document.getElementById('setNivelesFuente') || {}).textContent || '' };
+    });
+    ok(v2.filas === 2 && v2.lev.leverage === 100,
+      `apagar el interruptor devuelve la tabla de la documentación (${v2.filas} tramos, ${v2.lev.leverage}× a 150 000): dos ejecuciones sin red dan lo mismo`);
+    ok(/documentaci.n/.test(v2.fuente), `y se sigue diciendo la fuente: «${v2.fuente}»`);
+
+    tierFalla = true;
+    const v3 = await p2.evaluate(async () => {
+      DS.MARKET._cache.clear();                     // sin esto, la respuesta buena cacheada taparía el caso de error
+      const c = document.getElementById('setNivelesAuto');
+      c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 1200));
+      return { filas: TE.state.niveles ? TE.state.niveles.length : 0, lev: TE.apalancamientoPermitido(150000, 300),
+        fundingPct: TE.state.fundingPct };
+    });
+    ok(v3.filas === 2 && v3.lev.leverage === 100,
+      `si la API responde un error de NEGOCIO con HTTP 200 (code 20015) el motor no se queda sin tabla ni se rompe: ${v3.filas} tramos, ${v3.lev.leverage}×`);
+    ok(v3.fundingPct === 0, 'y un fallo de datos no toca el PnL');
+
+    // La carta de posición: el tramo que genera el precio, y «sin nivel» cuando no lo hay (F8).
+    const v4 = await p2.evaluate(() => {
+      document.getElementById('setNivelesAuto').checked = true;
+      document.getElementById('setNivelesAuto').dispatchEvent(new Event('change', { bubbles: true }));
+      const iso = document.querySelector('[data-mm="isolated"]'); if (iso) iso.click();
+      document.getElementById('sizeInput').value = 20;
+      App.placeOrder('long');
+      UI.refreshPosition();
+      const el = document.getElementById('posLiq');
+      const aislada = { txt: el.textContent, titulo: el.title, precio: TE.liqInfo(TE.state.position).precio };
+      const cr = document.querySelector('[data-mm="cross"]'); if (cr) cr.click();
+      UI.refreshPosition();
+      const info = TE.liqInfo(TE.state.position);
+      return { aislada, cruzada: { txt: el.textContent, sin: info.sinNivel, precio: info.precio },
+        modo: TE.state.marginMode, abierto: !!TE.state.position };
+    });
+    ok(v4.abierto, 'en la página servida por HTTP se puede abrir posición (el snapshot embebido cubre la ausencia de upstream)');
+    ok(/· N\d/.test(v4.aislada.txt), `la carta AISLADA pinta el tramo que genera la liquidación: «${v4.aislada.txt}»`);
+    ok(/mantenimiento/.test(v4.aislada.titulo) && /Margin Rate/.test(v4.aislada.titulo),
+      `y el detalle (MMR, mantenimiento, «Margin Rate») está en el title: ${String(v4.aislada.titulo).slice(0, 120)}…`);
+    ok(v4.cruzada.sin === true && /sin nivel/.test(v4.cruzada.txt),
+      `en CRUZADO con cuenta holgada no hay precio de liquidación y la carta lo dice con palabras en vez de un 0: «${v4.cruzada.txt}» (precio ${v4.cruzada.precio})`);
+
+    await p2.close();
+    await new Promise((r) => srv.close(r));
+  }
 
   console.log('\n' + '─'.repeat(62));
   console.log(`Piel Bitunix: ${pasan} superadas, ${fallan} fallidas`);

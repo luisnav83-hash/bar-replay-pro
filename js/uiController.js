@@ -1280,8 +1280,24 @@
     setText('posMark', U.fmtPrice(price));
     setText('posSlDist', p.sl ? `${U.fmtPrice(p.sl)} (${U.fmtPct(((p.sl - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin SL');
     setText('posTpDist', p.tp ? `${U.fmtPrice(p.tp)} (${U.fmtPct(((p.tp - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin TP');
-    const liq = TE.liquidationPrice(p);
-    setText('posLiq', p.leverage > 1 && liq ? U.fmtPrice(liq) : '—');
+    // F6/F8: se pinta el precio CON el tramo que lo genera, y cuando el cálculo dice que no hay
+    // nivel (el `liqPrice ≤ 0` de la API, «riesgo bajo») se escribe «sin nivel»: un 0 en la carta
+    // se lee como «ya estás liquidado» y no es lo que significa.
+    const liq = TE.liqInfo(p);
+    const mr = TE.marginRate(p);
+    setText('posLiq', liq.sinNivel ? 'sin nivel'
+      : U.fmtPrice(liq.precio) + (liq.nivel ? ' · N' + liq.nivel : ''));
+    {
+      const el = document.getElementById('posLiq');
+      if (el) el.title = liq.sinNivel
+        ? 'Sin precio de liquidación a este apalancamiento: el margen libre de la cuenta cubre de ' +
+          'sobra (en la API de Bitunix esto es un liqPrice ≤ 0).'
+        : `Tramo N${liq.nivel || '—'} · máximo ${liq.apalancamientoMax || '—'}× · mantenimiento ` +
+          `${U.fmtMoney(liq.mantenimiento)} (MMR ${(liq.mmr * 100).toFixed(2)} % sobre el precio de ENTRADA)` +
+          ` · disponible ${U.fmtMoney(mr.disponible)} · «Margin Rate» ${(mr.ratio * 100).toFixed(3)} %` +
+          (mr.enRiesgo ? ' · EN RIESGO (disponible < mantenimiento)' : '') +
+          (liq.fueraDeTabla ? ' · por encima de lo medido: se usa la última tasa conocida' : '');
+    }
     setText('posRR', (p.sl && p.tp)
       ? U.num(Math.abs(p.tp - p.entryPrice) / Math.abs(p.entryPrice - p.sl), 2) + ' : 1'
       : '—');

@@ -25,6 +25,14 @@
   /* -------------------------------- Estado -------------------------------- */
 
   App.pair = 'BTCUSDT';
+
+  /* ─────────────────── NIVELES Y FUNDING REALES DEL SÍMBOLO (Bitunix) ───────────────────
+   * El motor trae como defecto la tabla de niveles que aparece en la documentación del API.
+   * Ese ejemplo está VIEJO: medido hoy, BTCUSDT tiene 11 tramos y el primero llega a 200× con
+   * MMR 0,3 % (la doc decía 125× y 0,4 % hasta 50 000). Con proxy de `server.js` se leen los
+   * reales y se aplican; sin proxy se queda la de la doc y se avisa, sin simular que hay datos.
+   * `App.riesgo.doc` guarda la tabla de arranque para poder volver a ella con el interruptor. */
+  App.riesgo = { doc: null, niveles: null, funding: null, fuente: null, auto: true };
   App.interval = '1h';
   // Ancla temporal exacta entre cambios de serie: la fecha en la que está el
   // replay. Se conserva mientras no se mueva el cursor, de modo que encadenar
@@ -64,6 +72,11 @@
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
+    App.riesgo.auto = s.nivelesAuto !== false;      // leer niveles del exchange (por defecto, sí)
+    {                                               // el interruptor de Ajustes nace con ese valor
+      const chk = document.getElementById('setNivelesAuto');
+      if (chk) chk.checked = App.riesgo.auto;
+    }
     DT.gesture.on = s.gestureDraw !== false;      // dibujar manteniendo pulsado
     U.sound.enabled = s.sound;
 
@@ -202,11 +215,88 @@
     return algo;
   };
 
+  /** Vuelve a la tabla de la documentación (lo que el motor trae por defecto). */
+  App.usarNivelesDeDoc = function (motivo) {
+    TE.configure({ niveles: App.riesgo.doc && App.riesgo.doc.length ? App.riesgo.doc : null });
+    App.riesgo.niveles = null;
+    App.riesgo.fuente = 'documentación de Bitunix (' + (App.riesgo.doc ? App.riesgo.doc.length : 0) +
+      ' tramos' + (motivo ? ') · ' + motivo : ')');
+    App.pintarFuenteRiesgo();
+  };
+
+  App.pintarFuenteRiesgo = function () {
+    const el = document.getElementById('setNivelesFuente');
+    if (el) {
+      el.textContent = 'Niveles: ' + (App.riesgo.fuente || 'sin leer');
+      el.title = 'De dónde sale la tabla de tramos de riesgo y el margen de mantenimiento que usa el motor. ' +
+        'La liquidación y el apalancamiento máximo permitido dependen de ella.';
+    }
+  };
+
+  /** Lee niveles y funding del símbolo activo y los aplica al motor. Nunca rompe la carga. */
+  App.aplicarRiesgoBitunix = async function () {
+    if (!App.riesgo.doc) {
+      App.riesgo.doc = (TE.state.niveles || []).map((t) => Object.assign({}, t));
+    }
+    const sim = String(App.pair || 'BTCUSDT').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!App.riesgo.auto) { App.usarNivelesDeDoc('auto desactivado'); return null; }
+    const out = { niveles: null, funding: null, avisos: [] };
+    try {
+      const filas = await DS.MARKET.bitunixTiers(sim);
+      TE.configure({ niveles: filas });
+      out.niveles = filas;
+      App.riesgo.niveles = filas;
+      const maxLev = filas.reduce((a, t) => Math.max(a, +t.leverage || 0), 0);
+      App.riesgo.fuente = `API Bitunix · ${sim} · ${filas.length} tramos · leídos ${new Date().toISOString().slice(0, 16)} UTC`;
+      U.log(`📐 ${sim}: ${filas.length} tramos de riesgo de Bitunix (hasta ${maxLev}×; MMR ${(filas[0].maintenanceMarginRate * 100).toFixed(2)} % en el tramo 1).`, 'sys');
+    } catch (e) {
+      out.avisos.push('niveles: ' + e.message);
+      // Que no haya proxy NO es una incidencia: es el modo normal de un archivo abierto con doble
+      // clic. Solo se avisa en amarillo si la llamada sí se hizo y vino mal.
+      const sinProxy = /sin proxy/.test(e.message);
+      App.usarNivelesDeDoc(sinProxy ? 'sin servidor detrás' : 'la API no respondió');
+      U.log(`📐 ${sim}: ${sinProxy ? 'sin datos de red (se abre como archivo único: se usa la tabla de la documentación)'
+        : 'niveles de la API no disponibles (' + e.message + ') → se usa la tabla de la documentación.'}`, sinProxy ? 'sys' : 'warn');
+    }
+    try {
+      const f = await DS.MARKET.bitunixFunding(sim);
+      out.funding = f;
+      App.riesgo.funding = f;
+      // El RITMO sí se aplica: 8 h es lo que declara el contrato, pero hay tramos horarios y la
+      // próxima liquidación llega del exchange. La TASA no se toca sin permiso del usuario:
+      // cambiarle el funding en vivo mientras backtesteas movería el PnL sin que lo veas venir.
+      TE.configure({ fundingCadaHoras: f.cadaHoras });
+      const el = document.getElementById('setFunding');
+      if (el) el.title = `Funding del contrato ${sim} ahora mismo: ${f.fundingPct} % cada ${f.cadaHoras} h` +
+        (f.proxima ? ' (próxima liquidación ' + new Date(f.proxima).toISOString().slice(0, 16) + ' UTC)' : '') +
+        `. Límites del contrato: ${f.minPct} % / ${f.maxPct} %. Escribe esa cifra para aplicarla a la simulación.`;
+      U.log(`💸 ${sim}: funding ${f.fundingPct} % cada ${f.cadaHoras} h` +
+        (f.proxima ? ` (próximo ${new Date(f.proxima).toISOString().slice(11, 16)} UTC)` : '') +
+        ` — en la simulación se aplica ${TE.state.fundingPct} % (el valor del ajuste).`, 'sys');
+    } catch (e) {
+      out.avisos.push('funding: ' + e.message);
+    }
+    App.pintarFuenteRiesgo();
+    return out;
+  };
+
+  /* El interruptor vive en Ajustes: apagarlo deja la tabla de la documentación y ya no se pide la
+     API, que es lo que quieres si buscas que dos ejecuciones del mismo snapshot den lo mismo. */
+  document.addEventListener('change', (e) => {
+    const c = e && e.target && e.target.id === 'setNivelesAuto' ? e.target : null;
+    if (!c) return;
+    App.riesgo.auto = !!c.checked;
+    ST.setSettings({ nivelesAuto: App.riesgo.auto });
+    if (App.riesgo.auto) App.aplicarRiesgoBitunix();
+    else App.usarNivelesDeDoc('auto desactivado');
+  });
+
   App.loadDataFromForm = async function (opts = {}) {
     const pair = document.getElementById('pairSelect').value;
     const interval = document.getElementById('tfSelect').value;
     if (!DS.TIMEFRAMES[interval]) { U.toast('Temporalidad no válida', 'err'); return; }
     App.pair = pair; App.interval = interval;
+    App.aplicarRiesgoBitunix();      // niveles y ritmo de funding del símbolo que se va a cargar
 
     const tfSec = DS.TIMEFRAMES[interval].ms / 1000;
     const now = Math.floor(Date.now() / 1000);
@@ -1133,6 +1223,7 @@
     UI.showLoader('Restaurando sesión…');
 
     App.pair = s.meta.pair; App.interval = s.meta.interval;
+    App.aplicarRiesgoBitunix();      // el símbolo manda: los tramos son por contrato
     document.getElementById('pairSelect').value = App.pair;
     document.getElementById('tfSelect').value = App.interval;
 

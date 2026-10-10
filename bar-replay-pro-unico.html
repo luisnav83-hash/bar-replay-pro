@@ -2532,6 +2532,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setSound" checked><span>🔊 Sonido al ejecutar órdenes</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setAutoReveal" checked><span>🔎 Auto-scroll al avanzar el replay</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setAveraging" checked><span>➕ Promediar entradas: COMPRAR/VENDER con posición abierta del mismo lado <b>añade</b> a la posición (precio medio ponderado) en vez de avisar</span></label></div>
+      <div class="switch-row"><label class="switch"><input type="checkbox" id="setNivelesAuto" checked><span>📐 Tramos de riesgo del símbolo leídos de Bitunix — <span class="hint hint-tiny" id="setNivelesFuente">sin leer</span>. Desactívalo para que la liquidación dependa solo de la tabla de la documentación: así la simulación da lo mismo con o sin red.</span></label></div>
       <div class="switch-row"><label class="switch"><input type="checkbox" id="setGesture" checked><span>✍️ Dibujar manteniendo pulsado (⅓ s y trazar: recta = tendencia, horizontal = soporte, rectángulo, elipse, Fibonacci; garabato = borrar)</span></label></div>
       <div class="modal-note">Los cambios de capital reinician la cuenta. La comisión se cobra al abrir y al cerrar (ida y vuelta).</div>
     </div>
@@ -3711,6 +3712,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   DS.MARKET = {
     TIMEOUT: 4200,
     BITGET: 'https://api.bitget.com',
+    /* Bitunix, que es el exchange replicado: lo suyo manda sobre lo de Bitget. */
+    BITUNIX: 'https://fapi.bitunix.com',
     PRODUCT: 'USDT-FUTURES',
     _cache: new Map(),
 
@@ -3755,6 +3758,78 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       throw last || new Error('sin hosts que probar');
     },
 
+    /* ---------------- RIESGO Y FUNDING DE BITUNIX (endpoints públicos) ----------------
+     Rutas literales de la documentación (F8/F7 del estudio), medidas contra el host real:
+       GET /api/v1/futures/position/get_position_tiers?symbol=BTCUSDT
+       GET /api/v1/futures/market/funding_rate?symbol=BTCUSDT
+     Como en lo demás, primero se intenta el proxy del mismo origen (`server.js`, único sitio
+     con red del proyecto) y si no lo hay se prueba directo: la API de Bitunix no manda CORS,
+     así que desde el navegador sin proxy la llamada FALLA y el terminal se queda con la tabla
+     de la documentación. No se finge un dato ausente: quien llama decide qué decir, y
+     `App.aplicarRiesgoBitunix` lo escribe en el registro.
+     La respuesta de Bitunix trae `data` como lista en unos endpoints y como objeto en otros
+     (funding_rate es objeto, aunque el ejemplo de la doc muestre un array) → se aceptan las
+     dos formas en vez de suponer una. */
+    bxLista(r) {
+      if (!r || !r.data) return [];
+      return Array.isArray(r.data) ? r.data : [r.data];
+    },
+
+    /** `code !== 0` es error en Bitunix aunque el HTTP sea 200 (p. ej. 20015 «not allowed to trade»). */
+    bxDatos(r, que) {
+      if (!r) throw new Error(que + ': sin respuesta');
+      if (+r.code !== 0) throw new Error(que + ': ' + (r.msg || 'código ' + r.code));
+      const filas = DS.MARKET.bxLista(r);
+      if (!filas.length) throw new Error(que + ': respuesta vacía');
+      return filas;
+    },
+
+    /**
+     * Bitunix NO manda `Access-Control-Allow-Origin`, así que sus rutas SOLO se piden al proxy del
+     * mismo origen (`server.js`). Sin servidor detrás NO se intenta la llamada directa: la invariante
+     * del proyecto es que la app abierta con doble clic no saque nada a internet (lo vigila
+     * tests/preview-live.test.js), y además el intento acabaría en un error de CORS en la consola.
+     * Aquí se corta antes, con un mensaje que dice qué falta.
+     */
+    async bxSoloProxy(pathAndQuery, ttl) {
+      if (!DS.MISMO_ORIGEN_UTIL) throw new Error('sin proxy: los datos de Bitunix solo los pide server.js');
+      return await DS.MARKET.json('px|' + pathAndQuery, pathAndQuery, ttl);
+    },
+
+    /** Tabla de niveles de riesgo, en el formato que come `TE.configure({ niveles })`. */
+    async bitunixTiers(symbol) {
+      const q = 'symbol=' + symbol;
+      const r = await DS.MARKET.bxSoloProxy('/api/bx/position-tiers?' + q, 300000);
+      return DS.MARKET.bxDatos(r, 'niveles de Bitunix').map((t) => ({
+        level: +t.level, startValue: +t.startValue, endValue: +t.endValue,
+        leverage: +t.leverage, maintenanceMarginRate: +t.maintenanceMarginRate,
+        deAPI: true,
+      }));
+    },
+
+    /**
+     * Mark, index, funding y su RITMO REAL. Ojo con las unidades: `fundingRate` viene en
+     * PORCENTAJE, no en fracción — se ve en que `maxFundingRate`/`minFundingRate` son ±0,3, el
+     * tope típico en %, no en fracción (0,3 = 30 % por 8 h sería absurdo). `fundingPct` del motor
+     * también es un porcentaje, así que se pasa el número TAL CUAL: multiplicarlo por 100 inflaría
+     * el coste 100 veces, y ese es el tipo de error que convierte un backtest en ruido.
+     */
+    async bitunixFunding(symbol) {
+      const q = 'symbol=' + symbol;
+      const r = await DS.MARKET.bxSoloProxy('/api/bx/funding-rate?' + q, 20000);
+      const d = DS.MARKET.bxDatos(r, 'funding de Bitunix')[0];
+      return {
+        mark: d.markPrice != null ? +d.markPrice : null,
+        last: d.lastPrice != null ? +d.lastPrice : null,
+        index: d.indexPrice != null ? +d.indexPrice : null,
+        fundingPct: d.fundingRate != null ? +d.fundingRate : null,
+        cadaHoras: +d.fundingInterval > 0 ? +d.fundingInterval : 8,
+        proxima: +d.nextFundingTime || null,
+        minPct: d.minFundingRate != null ? +d.minFundingRate : null,
+        maxPct: d.maxFundingRate != null ? +d.maxFundingRate : null,
+      };
+    },
+
     /** Libro real (bid/ask) del espejo spot: [[precio, cantidad], …]. */
     async depth(symbol, limit = 30) {
       const r = await DS.MARKET.binance(`/api/v3/depth?symbol=${symbol}&limit=${limit}`, 2500);
@@ -3780,16 +3855,18 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const q = `symbol=${symbol}&productType=${P}`;
       // Cada dato intenta primero el proxy del mismo origen y si no, la API
       // pública de Bitget (admite CORS, así que en Pages funciona igual).
-      const [tk, fr, ls] = await Promise.allSettled([
+      const [tk, fr, ls, bx] = await Promise.allSettled([
         DS.MARKET.proxied(`/api/market/futures-ticker?${q}`, `${B}/api/v2/mix/market/ticker?${q}`, 15000),
         DS.MARKET.proxied(`/api/market/funding?${q}`, `${B}/api/v2/mix/market/current-fund-rate?${q}`, 60000),
         DS.MARKET.proxied(`/api/market/long-short?${q}&period=1h`, `${B}/api/v2/mix/market/account-long-short?${q}&period=1h`, 300000),
+        DS.MARKET.bitunixFunding(symbol),
       ]);
       const pick = (r) => (r && r.status === 'fulfilled' && r.value && r.value.data ? r.value.data[0] : null);
       const d = pick(tk);
       const f = pick(fr);
       const l = pick(ls);
-      if (!d && !f && !l) throw new Error('Bitget sin datos');
+      const b = (bx && bx.status === 'fulfilled') ? bx.value : null;
+      if (!d && !f && !l && !b) throw new Error('Bitget sin datos');
       const out = { venues: [] };
       if (d) {
         out.mark = +d.markPrice;
@@ -3805,6 +3882,18 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         out.fundingEvery = +f.fundingRateInterval || 8;
         out.nextFunding = +f.nextUpdate;
         out.venues.push('funding Bitget');
+      }
+      if (b && b.fundingPct != null) {
+        // Lo del propio contrato replicado MANDA sobre el agregado de Bitget: mismo símbolo, otra
+        // regla de liquidación. El OI y el long/short siguen viniendo de Bitget porque Bitunix no
+        // los expone en los endpoints verificados, y así lo dice la fila de procedencia.
+        out.funding = b.fundingPct;
+        out.fundingEvery = b.cadaHoras;
+        if (b.proxima) out.nextFunding = b.proxima;
+        if (b.mark) out.mark = b.mark;
+        if (b.index) out.index = b.index;
+        out.fundingMaxMin = [b.minPct, b.maxPct];
+        out.venues.push('funding Bitunix');
       }
       if (l) {
         out.longPct = +l.longAccountRatio * 100;
@@ -10819,8 +10908,24 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('posMark', U.fmtPrice(price));
     setText('posSlDist', p.sl ? `${U.fmtPrice(p.sl)} (${U.fmtPct(((p.sl - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin SL');
     setText('posTpDist', p.tp ? `${U.fmtPrice(p.tp)} (${U.fmtPct(((p.tp - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin TP');
-    const liq = TE.liquidationPrice(p);
-    setText('posLiq', p.leverage > 1 && liq ? U.fmtPrice(liq) : '—');
+    // F6/F8: se pinta el precio CON el tramo que lo genera, y cuando el cálculo dice que no hay
+    // nivel (el `liqPrice ≤ 0` de la API, «riesgo bajo») se escribe «sin nivel»: un 0 en la carta
+    // se lee como «ya estás liquidado» y no es lo que significa.
+    const liq = TE.liqInfo(p);
+    const mr = TE.marginRate(p);
+    setText('posLiq', liq.sinNivel ? 'sin nivel'
+      : U.fmtPrice(liq.precio) + (liq.nivel ? ' · N' + liq.nivel : ''));
+    {
+      const el = document.getElementById('posLiq');
+      if (el) el.title = liq.sinNivel
+        ? 'Sin precio de liquidación a este apalancamiento: el margen libre de la cuenta cubre de ' +
+          'sobra (en la API de Bitunix esto es un liqPrice ≤ 0).'
+        : `Tramo N${liq.nivel || '—'} · máximo ${liq.apalancamientoMax || '—'}× · mantenimiento ` +
+          `${U.fmtMoney(liq.mantenimiento)} (MMR ${(liq.mmr * 100).toFixed(2)} % sobre el precio de ENTRADA)` +
+          ` · disponible ${U.fmtMoney(mr.disponible)} · «Margin Rate» ${(mr.ratio * 100).toFixed(3)} %` +
+          (mr.enRiesgo ? ' · EN RIESGO (disponible < mantenimiento)' : '') +
+          (liq.fueraDeTabla ? ' · por encima de lo medido: se usa la última tasa conocida' : '');
+    }
     setText('posRR', (p.sl && p.tp)
       ? U.num(Math.abs(p.tp - p.entryPrice) / Math.abs(p.entryPrice - p.sl), 2) + ' : 1'
       : '—');
@@ -11567,6 +11672,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   /* -------------------------------- Estado -------------------------------- */
 
   App.pair = 'BTCUSDT';
+
+  /* ─────────────────── NIVELES Y FUNDING REALES DEL SÍMBOLO (Bitunix) ───────────────────
+   * El motor trae como defecto la tabla de niveles que aparece en la documentación del API.
+   * Ese ejemplo está VIEJO: medido hoy, BTCUSDT tiene 11 tramos y el primero llega a 200× con
+   * MMR 0,3 % (la doc decía 125× y 0,4 % hasta 50 000). Con proxy de `server.js` se leen los
+   * reales y se aplican; sin proxy se queda la de la doc y se avisa, sin simular que hay datos.
+   * `App.riesgo.doc` guarda la tabla de arranque para poder volver a ella con el interruptor. */
+  App.riesgo = { doc: null, niveles: null, funding: null, fuente: null, auto: true };
   App.interval = '1h';
   // Ancla temporal exacta entre cambios de serie: la fecha en la que está el
   // replay. Se conserva mientras no se mueva el cursor, de modo que encadenar
@@ -11606,6 +11719,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
+    App.riesgo.auto = s.nivelesAuto !== false;      // leer niveles del exchange (por defecto, sí)
+    {                                               // el interruptor de Ajustes nace con ese valor
+      const chk = document.getElementById('setNivelesAuto');
+      if (chk) chk.checked = App.riesgo.auto;
+    }
     DT.gesture.on = s.gestureDraw !== false;      // dibujar manteniendo pulsado
     U.sound.enabled = s.sound;
 
@@ -11744,11 +11862,88 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return algo;
   };
 
+  /** Vuelve a la tabla de la documentación (lo que el motor trae por defecto). */
+  App.usarNivelesDeDoc = function (motivo) {
+    TE.configure({ niveles: App.riesgo.doc && App.riesgo.doc.length ? App.riesgo.doc : null });
+    App.riesgo.niveles = null;
+    App.riesgo.fuente = 'documentación de Bitunix (' + (App.riesgo.doc ? App.riesgo.doc.length : 0) +
+      ' tramos' + (motivo ? ') · ' + motivo : ')');
+    App.pintarFuenteRiesgo();
+  };
+
+  App.pintarFuenteRiesgo = function () {
+    const el = document.getElementById('setNivelesFuente');
+    if (el) {
+      el.textContent = 'Niveles: ' + (App.riesgo.fuente || 'sin leer');
+      el.title = 'De dónde sale la tabla de tramos de riesgo y el margen de mantenimiento que usa el motor. ' +
+        'La liquidación y el apalancamiento máximo permitido dependen de ella.';
+    }
+  };
+
+  /** Lee niveles y funding del símbolo activo y los aplica al motor. Nunca rompe la carga. */
+  App.aplicarRiesgoBitunix = async function () {
+    if (!App.riesgo.doc) {
+      App.riesgo.doc = (TE.state.niveles || []).map((t) => Object.assign({}, t));
+    }
+    const sim = String(App.pair || 'BTCUSDT').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!App.riesgo.auto) { App.usarNivelesDeDoc('auto desactivado'); return null; }
+    const out = { niveles: null, funding: null, avisos: [] };
+    try {
+      const filas = await DS.MARKET.bitunixTiers(sim);
+      TE.configure({ niveles: filas });
+      out.niveles = filas;
+      App.riesgo.niveles = filas;
+      const maxLev = filas.reduce((a, t) => Math.max(a, +t.leverage || 0), 0);
+      App.riesgo.fuente = `API Bitunix · ${sim} · ${filas.length} tramos · leídos ${new Date().toISOString().slice(0, 16)} UTC`;
+      U.log(`📐 ${sim}: ${filas.length} tramos de riesgo de Bitunix (hasta ${maxLev}×; MMR ${(filas[0].maintenanceMarginRate * 100).toFixed(2)} % en el tramo 1).`, 'sys');
+    } catch (e) {
+      out.avisos.push('niveles: ' + e.message);
+      // Que no haya proxy NO es una incidencia: es el modo normal de un archivo abierto con doble
+      // clic. Solo se avisa en amarillo si la llamada sí se hizo y vino mal.
+      const sinProxy = /sin proxy/.test(e.message);
+      App.usarNivelesDeDoc(sinProxy ? 'sin servidor detrás' : 'la API no respondió');
+      U.log(`📐 ${sim}: ${sinProxy ? 'sin datos de red (se abre como archivo único: se usa la tabla de la documentación)'
+        : 'niveles de la API no disponibles (' + e.message + ') → se usa la tabla de la documentación.'}`, sinProxy ? 'sys' : 'warn');
+    }
+    try {
+      const f = await DS.MARKET.bitunixFunding(sim);
+      out.funding = f;
+      App.riesgo.funding = f;
+      // El RITMO sí se aplica: 8 h es lo que declara el contrato, pero hay tramos horarios y la
+      // próxima liquidación llega del exchange. La TASA no se toca sin permiso del usuario:
+      // cambiarle el funding en vivo mientras backtesteas movería el PnL sin que lo veas venir.
+      TE.configure({ fundingCadaHoras: f.cadaHoras });
+      const el = document.getElementById('setFunding');
+      if (el) el.title = `Funding del contrato ${sim} ahora mismo: ${f.fundingPct} % cada ${f.cadaHoras} h` +
+        (f.proxima ? ' (próxima liquidación ' + new Date(f.proxima).toISOString().slice(0, 16) + ' UTC)' : '') +
+        `. Límites del contrato: ${f.minPct} % / ${f.maxPct} %. Escribe esa cifra para aplicarla a la simulación.`;
+      U.log(`💸 ${sim}: funding ${f.fundingPct} % cada ${f.cadaHoras} h` +
+        (f.proxima ? ` (próximo ${new Date(f.proxima).toISOString().slice(11, 16)} UTC)` : '') +
+        ` — en la simulación se aplica ${TE.state.fundingPct} % (el valor del ajuste).`, 'sys');
+    } catch (e) {
+      out.avisos.push('funding: ' + e.message);
+    }
+    App.pintarFuenteRiesgo();
+    return out;
+  };
+
+  /* El interruptor vive en Ajustes: apagarlo deja la tabla de la documentación y ya no se pide la
+     API, que es lo que quieres si buscas que dos ejecuciones del mismo snapshot den lo mismo. */
+  document.addEventListener('change', (e) => {
+    const c = e && e.target && e.target.id === 'setNivelesAuto' ? e.target : null;
+    if (!c) return;
+    App.riesgo.auto = !!c.checked;
+    ST.setSettings({ nivelesAuto: App.riesgo.auto });
+    if (App.riesgo.auto) App.aplicarRiesgoBitunix();
+    else App.usarNivelesDeDoc('auto desactivado');
+  });
+
   App.loadDataFromForm = async function (opts = {}) {
     const pair = document.getElementById('pairSelect').value;
     const interval = document.getElementById('tfSelect').value;
     if (!DS.TIMEFRAMES[interval]) { U.toast('Temporalidad no válida', 'err'); return; }
     App.pair = pair; App.interval = interval;
+    App.aplicarRiesgoBitunix();      // niveles y ritmo de funding del símbolo que se va a cargar
 
     const tfSec = DS.TIMEFRAMES[interval].ms / 1000;
     const now = Math.floor(Date.now() / 1000);
@@ -12675,6 +12870,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.showLoader('Restaurando sesión…');
 
     App.pair = s.meta.pair; App.interval = s.meta.interval;
+    App.aplicarRiesgoBitunix();      // el símbolo manda: los tramos son por contrato
     document.getElementById('pairSelect').value = App.pair;
     document.getElementById('tfSelect').value = App.interval;
 
