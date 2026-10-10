@@ -338,6 +338,7 @@
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
     UI.initOrdenAvanzado();
     UI.initOrdenRapida();
+    UI.initOrdenCondicional();
   };
 
   /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
@@ -865,6 +866,19 @@
     document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.otype === App.orderType);
     });
+    /* El desplegable `Activador ▾` (BLOQUE 18 de la piel) dice en su propio rótulo lo que hay
+       dentro: con `trailing` activo la fila entera pasa a decir «Trailing», que es lo que hace el
+       sitio, y al elegir una de las dos opciones el panel se cierra solo. Se marca y se cierra
+       AQUI, y no en el listener del botón, para que `setOrderType` siga siendo el único camino
+       (las plantillas, las órdenes rápidas y `test:formulario` lo llaman directo). */
+    const mas = document.getElementById('otypeMore');
+    if (mas) {
+      const cond = App.orderType === 'trigger' || App.orderType === 'trailing';
+      mas.classList.toggle('active', cond);
+      const lbl = document.getElementById('otypeMoreTxt');
+      if (lbl) lbl.textContent = App.orderType === 'trailing' ? 'Trailing' : 'Activador';
+      if (cond) mas.open = false;
+    }
     const esLimite = App.orderType === 'limite';
     const esTrigger = App.orderType === 'trigger';
     const esTrail = App.orderType === 'trailing';
@@ -2393,5 +2407,23 @@
     g('qrBuy').addEventListener('click', () => colocar('long'));
     g('qrSell').addEventListener('click', () => colocar('short'));
     if (window.ST && ST.get && ST.get('ordenRapida', false) === true) muestra(true);
+    return true;
+  };
+
+  /* DESPLEGABLE DE CONDICIONALES (BLOQUE 18). `<details>` ya abre, cierra y gestiona el foco con
+     el teclado; lo que hace esto es lo que el elemento nativo no hace solo: cerrar al pulsar fuera
+     (si no, el panel se queda colgando sobre el `#limitRow` mientras operas) y devolver el foco al
+     resumen con Escape. Se engancha con `pointerdown` en fase de captura porque el `click` de la
+     pestaña de dentro ya habría burbujeado. */
+  UI.initOrdenCondicional = function () {
+    const mas = document.getElementById('otypeMore');
+    const res = document.getElementById('otypeMoreBtn');
+    if (!mas || !res || mas.dataset.montado) return false;
+    mas.dataset.montado = '1';
+    const fuera = (e) => { if (mas.open && e.target && !mas.contains(e.target)) mas.open = false; };
+    document.addEventListener('pointerdown', fuera, true);
+    res.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mas.open) { mas.open = false; res.focus(); }
+    });
     return true;
   };

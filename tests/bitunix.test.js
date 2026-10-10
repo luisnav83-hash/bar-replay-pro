@@ -289,6 +289,50 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     await espera(500);
   }
 
+  /* `Activador ▾` COMO DESPLEGABLE (ítem 2 del registro, 11-oct). Su segmentado son dos botones y
+     un desplegable con lo condicional; lo que se comprueba aquí es que la fila tiene la forma, que
+     las dos opciones siguen vivas dentro de `#segOrderType` (el cableado no se mueve) y que el
+     rótulo del resumen cuenta qué está elegido. */
+  {
+    const fila = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const R = (e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+      const seg = g('segOrderType');
+      const mas = g('otypeMore');
+      const dentro = [...seg.querySelectorAll('.otype-panel [data-otype]')].map((b) => b.dataset.otype);
+      const antes = { hijos: [...seg.children].map((e) => e.getAttribute('data-otype') || e.tagName.toLowerCase()),
+                      alto: R(seg).h, desborda: seg.scrollWidth > seg.clientWidth + 1, dentro };
+      g('otypeMoreBtn').click();
+      await new Promise((r) => setTimeout(r, 160));
+      const p = g('otypeMore');
+      const panel = p.querySelector('.otype-panel');
+      const caja = document.getElementById('orderCard').getBoundingClientRect();
+      const pr = panel.getBoundingClientRect();
+      const abierto = { visible: getComputedStyle(panel).display !== 'none' && pr.height > 20,
+                        alto: Math.round(pr.height), abrio: g('otypeMore').open,
+                        desc: Math.round(caja.right - pr.right), izq: Math.round(pr.left - caja.left),
+                        porDentroDelCajon: pr.right <= caja.right + 1 && pr.left >= caja.left - 1,
+                        opciones: [...panel.querySelectorAll('.seg-btn')].map((b) => ({ o: b.dataset.otype, t: b.textContent.trim() })) };
+      panel.querySelector('[data-otype="trailing"]').click();
+      await new Promise((r) => setTimeout(r, 220));
+      const elegido = { tipo: window.App.orderType, cerrado: !g('otypeMore').open,
+                        rotulo: g('otypeMoreTxt').textContent.trim(), activo: g('otypeMore').classList.contains('active') };
+      document.querySelector('#segOrderType [data-otype="market"]').click();
+      await new Promise((r) => setTimeout(r, 160));
+      const vuelve = { tipo: window.App.orderType, activo: g('otypeMore').classList.contains('active'),
+                       rotulo: g('otypeMoreTxt').textContent.trim() };
+      return { antes, abierto, elegido, vuelve };
+    });
+    ok(fila.antes.hijos.join(',') === 'market,limite,details' && fila.antes.alto <= 30 && !fila.antes.desborda && fila.antes.dentro.join(',') === 'trigger,trailing',
+      `la fila del tipo es \`${fila.antes.hijos.join(' · ')}\` en ${fila.antes.alto} px sin desbordar, con lo condicional dentro del mismo segmentado (${fila.antes.dentro.join(' · ')}) - como el sitio, cuatro pestañas fuera`);
+    ok(fila.abierto.visible && fila.abierto.porDentroDelCajon && fila.abierto.opciones.length === 2,
+      `el desplegable abre y ofrece ${fila.abierto.opciones.map((o) => o.t).join(' / ')} sin salirse de la tarjeta (panel ${fila.abierto.alto} px, abierto=${fila.abierto.abrio}, le sobran ${fila.abierto.desc} px por la derecha y ${fila.abierto.izq} por la izquierda)`);
+    ok(fila.elegido.tipo === 'trailing' && fila.elegido.cerrado && fila.elegido.rotulo === 'Trailing' && fila.elegido.activo,
+      `elegir «Trailing» dentro del panel cambia el formulario (${fila.elegido.tipo}), cierra el desplegable y el rótulo lo dice («${fila.elegido.rotulo}»)`);
+    ok(fila.vuelve.tipo === 'market' && !fila.vuelve.activo && fila.vuelve.rotulo === 'Activador',
+      `y al volver a Mercado el rótulo del desplegable recupera su nombre neutro («${fila.vuelve.rotulo}») sin marcarse`);
+  }
+
   /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
      Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
      695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna

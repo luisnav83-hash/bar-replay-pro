@@ -227,6 +227,7 @@ eq(TE.pendingPorTipo().trailing, 0, 'y cancelar una no toca las demás');
   await espera(500);
 
   console.log('\n▸ J) El cuarto botón cambia el formulario a lo que un trailing necesita');
+  await page.click('#otypeMoreBtn');                     // ahora vive detrás del desplegable
   await page.click('#segOrderType [data-otype="trailing"]');
   await espera(260);
   const j = await page.evaluate(() => ({

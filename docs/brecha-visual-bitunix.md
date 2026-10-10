@@ -302,6 +302,24 @@ en vez de `reemplazar`) sin que se enterase ninguna suite. Desde ahora: **parche
 desbordaba 6 px; los útiles del riel pasan a 25 px de alto y el `gap` del clúster a 1 px (28×25
 sigue por encima del mínimo de 22 que vigilan las pruebas de puntero).
 
+· **`Activador ▾` como desplegable** (era el punto 2 de la lista de abajo): el segmentado del
+  sitio son DOS botones y un desplegable con lo condicional; aquí vivían cuatro en 272 px (cabían,
+  pero la forma era nuestra). `#segOrderType` sigue siendo el padre de los cuatro `data-otype` -el
+  cableado es `#segOrderType .seg-btn` (js/uiController.js:294) y `UI.setOrderType` recorre ese
+  selector para marcar `.active`; moverlos fuera habría roto también `test:formulario`, que los
+  ancla, y el `querySelector('#segOrderType .seg-btn.active')` con el que leen media pruebas-, así
+  que `<details>` solo cambia DÓNDE se ven y el rótulo del resumen dice lo que hay dentro
+  (`Trailing` cuando el trailing está activo, como allí). Medido a 1440: fila `251×28` con
+  `Mercado 80 · Límite 80 · Activador ▾ 89` y panel `138×59` dentro de la tarjeta; a 390 la
+  fila compartida con `% equity` queda en 151 px, Δ 0 de desborde en los dos casos.
+· **Tres cosas que el desplegable obligó a arreglar por el camino** (todas medidas, no supuestas):
+  Chrome cierra el contenido de un `<details>` con `content-visibility: hidden`, que deja caja sin
+  pintura -las opciones medían 10 px y las anclas de área táctil caían-: el panel cerrado ahora es
+  `display:none` de verdad. `.seg-btn` llega con `flex: 1 1 0%` y en un contenedor en COLUMNA el
+  `height` no manda: las dos opciones salían de 14 px hasta poner `flex: 0 0 26px`. Y en
+  `test:formulario` los `page.click` sobre trigger/trailing tenían que abrir antes el panel
+  (un click real no alcanza lo que no está pintado), que de paso es una ancla mejor que la anterior.
+
 · **`#overlayCanvas` a 1× en pantallas 2×**: `DT.resize()` sí lee `devicePixelRatio`, pero nadie
   lo llamaba cuando lo que cambia es la relación de pixeles (el `ResizeObserver` mira la caja del
   `#chartWrap`, y moverse a otra pantalla no la toca). Añadido `DT._vigilaDpr()`: escucha el media
@@ -313,16 +331,15 @@ empezar la serie (recortes del libro ×2, teclado, dpr, contraste, botones de en
 
 **LO QUE SIGUE ABIERTO, con su aritmética:**
 
-1. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
-   pestañas; con 272 px el rótulo ya no se recorta (11,5 px) pero la forma de la fila sigue
-   siendo nuestra. Ojo: `test:formulario` ancla los cuatro `data-otype` en el DOM.
-3. **Abiertos del barrido:** ninguno. Ver el bloque de arriba: se cerraron el dpr del lienzo de
-   dibujos, la tecla Space, el contraste de los `.hint` y las filas del libro.
-5. **El reposo del teléfono aprieta los campos.** Medido con la app en el commit previo y con los cambios de
+Nada de la lista del §6 queda abierta: banda, formulario, recorte del libro, riel de dibujo,
+filas del libro al espacio, Space, contraste, dpr, caja de orden rápida y `Activador ▾` están
+hechos y anclados. Lo que sigue son DOS criterios anotados, no defectos por arreglar:
+
+1. **El reposo del teléfono aprieta los campos.** Medido con la app en el commit previo y con los cambios de
    esta pasada, es lo mismo (no es culpa del bloque 15): a 390×844 el cuerpo de la tarjeta está
    topeado a 221 px y sus hijos se encogen, así que `#sizeInput` mide **24 px en vez de 42**. El
    sitio mantiene 42 px a ese ancho. La ancla de `test:bitunix` tolera ≥24 y pasa; el día que se
    arregle, hay que subirla a 40.
-6. **Ventanas cortas por debajo de 400 px de alto:** `A DECIDIR` en el barrido (320×240), que no
+2. **Ventanas cortas por debajo de 400 px de alto:** `A DECIDIR` en el barrido (320×240), que no
    es una pantalla de trading; se anota como criterio, no como defecto.
 

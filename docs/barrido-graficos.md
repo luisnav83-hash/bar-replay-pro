@@ -76,8 +76,8 @@ _Nada: el barrido no encontró defectos medibles._
 | Controles que lanzan una excepción al pulsarlos | ninguno de los 40 sondados | `click() sobre cada control` |
 | Leyenda OHLC al cambiar de temporalidad | 0 temporalidades probadas · con NaN/undefined: ninguna | `js/barReplay.js · #ohlcLegend` |
 | Atajos de tecla con el foco dentro de un campo | foco en #sizeInput · teclas b/s/t/f/x y espacio · órdenes nuevas 0 · play alternado false | `js/uiController.js (guarda `typing`)` |
-| Teclado sobre un botón enfocado (#btnIndicators) | clicks contados en el botón: tras la barra 1 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=false, índice 887) | `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>` |
-| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 76,976.01 H 77,204.68 L 76,772.05 C 77,130.02 » · cierre de la vela actual 77130.02 | `#ohlcLegend` |
+| Teclado sobre un botón enfocado (#btnIndicators) | clicks contados en el botón: tras la barra 1 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=false, índice 885) | `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>` |
+| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 77,210.55 H 77,395.04 L 76,851.25 C 77,061.99 » · cierre de la vela actual 77061.99 | `#ohlcLegend` |
 | Lienzos duplicados tras seis cambios de tamaño | 15 lienzos antes · 15 después de 6 resize | `#mainChart/#chartPnl/#overlayCanvas` |
 | Vaivén de la altura de la escalera (ResizeObserver) | alturas medidas tras estabilizar: 0 · 0 · 0 · 0 · 0 px (establecida 0 → 0) | `js/pnlChart.js · #paneArea` |
 | Zona de gráficos con la máquina recién reiniciada | velas 2000 · índice 879 · NaN en la leyenda false · «NaN» escrito en 0 sitios | `estado inicial` |

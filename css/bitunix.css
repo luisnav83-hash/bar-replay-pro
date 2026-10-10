@@ -1436,7 +1436,12 @@ kbd {
      contrato de «el formulario en reposo se ve entero» que miden responsive/plantillas—. El emoji
      sigue estando en `textContent`, así que las pruebas que comparan rótulos no se enteran. */
   #orderCard #segOrderType .ic { display: none; }
+  /* Con el desplegable `Activador ▾` la fila tiene tres huecos, no cuatro: el rótulo del
+     summary y los dos botones de dentro se aprietan igual que antes (a 390 px el recorte era de
+     35 px con cuatro pestañas; ver el comentario de arriba). */
   #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard #segOrderType .otype-more > summary { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard #segOrderType { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
   /* Lo mismo con el CUARTO modo de tamaño («Riesgo», 223/225): cuatro unidades en la misma línea
      compartida con el segmentado de tipos desbordaban 21 px más. */
   #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
@@ -1783,7 +1788,9 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      recorte era de 1 px en «Mercado» y de 16 en «Cruzada» (medido: scrollWidth 63 vs caja 62,
      y 62 vs 46), y el ellipsis lo disfrazaba de «Merca…». */
   #orderCard .seg .seg-btn { font-size: 11.5px; padding: 0 3px; }
-  #orderCard #segOrderType { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  /* Tres huecos: dos pestañas + el desplegable, que se apoya en `auto` para que «Trailing» —la
+     más larga de las cuatro etiquetas que puede lucir— no le coma milímetros a Mercado/Límite. */
+  #orderCard #segOrderType { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 0; }
   #orderCard .bf-margin-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 4px; }
   #orderCard .bf-lev { padding: 0 5px; }
   #orderCard .bf-lev input[type=range] { width: 62px; }
@@ -2119,3 +2126,58 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
    herramientas de dibujo activas, `.tool.active`). */
 #btnQuickOrder.qr-abierto { background: var(--seg-fondo); border-color: var(--line); color: var(--tx-1); }
 @media (max-width: 700px) { #qrCard { width: min(312px, calc(100% - 24px)); } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 18 — `Activador ▾` COMO DESPLEGABLE, no como tercera y cuarta pestaña
+   (11-oct-2026, ítem 2 del registro `docs/brecha-visual-bitunix.md`).
+
+   El segmentado del sitio tiene DOS botones —`Mercado | Límite`— y a la derecha un
+   `Activador ▾` que abre lo condicional. Aquí las cuatro opciones convivían en una fila
+   de 272 px: cabían (11,5 px de rótulo) pero la forma no era la suya. Ahora la fila es
+   la suya y, sobre todo, el botón que elige el modo cuenta en su propio rótulo qué hay
+   dentro (`Activador` / `Trailing`), que con cuatro pestañas era un literal más.
+
+   Dos decisiones que no son estética:
+     · Los dos `button data-otype` se quedan DENTRO de `#segOrderType` (el cableado es
+       `#segOrderType .seg-btn` en js/uiController.js:294 y `UI.setOrderType` recorre ese
+       selector para marcar `.active`; moverlos fuera rompería además las anclas de
+       tests/formulario y el `querySelector('#segOrderType .seg-btn.active')` de medias
+       pruebas). `<details>` solo cambia DÓNDE se ven.
+     · `.seg` lleva `overflow:hidden` para que las esquinas recorten; el panel necesita
+       salirse del cajón, así que `#segOrderType` pasa a `overflow:visible` y las dos
+       esquinas se redondean a mano en el primer hijo y en el desplegable.
+   ════════════════════════════════════════════════════════════════════════════ */
+#orderCard .seg#segOrderType { overflow: visible; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
+#segOrderType > .seg-btn:first-child { border-radius: var(--r) 0 0 var(--r); }
+#segOrderType .otype-more { position: relative; display: block; height: 100%; }
+#segOrderType .otype-more > summary {
+  list-style: none; cursor: pointer; height: 100%; display: flex; align-items: center; gap: 3px;
+  padding: 0 7px; font-size: var(--fs-cuerpo); font-weight: 500; color: var(--tx-3);
+  background: transparent; border-left: 1px solid var(--line); white-space: nowrap;
+  border-radius: 0 var(--r) var(--r) 0; user-select: none;
+}
+#segOrderType .otype-more > summary::-webkit-details-marker { display: none; }
+#segOrderType .otype-more > summary:hover { color: var(--tx-1); background: var(--bg-4); }
+#segOrderType .otype-more > summary .caret { font-style: normal; font-size: 8px; color: var(--tx-4); transition: transform .12s ease; }
+#segOrderType .otype-more.active > summary { background: var(--activo); color: #fff; }
+#segOrderType .otype-more.active > summary .caret { color: rgba(255,255,255,.75); }
+#segOrderType .otype-panel {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 40; min-width: 138px;
+  display: flex; flex-direction: column; gap: 1px; padding: 2px;
+  background: #1a1b1c; border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: 0 10px 26px rgba(0,0,0,.55);
+}
+/* CERRADO = FUERA DE LA PANTALLA de verdad. Sin esta línea bastaba `display:flex` para que el
+   contenido de un `<details>` cerrado siguiera teniendo caja: Chrome aplica
+   `content-visibility: hidden` y el botón no se ve ni se le puede pinchar, pero MEDÍA 10 px, y
+   anclas como «controles del formulario demasiado bajos para el dedo» caían por los
+   contenidos ocultos (11-oct, medido). Con `display:none` desaparece del layout y del barrido de
+   áreas táctiles, que es lo correcto: lo que no está en pantalla no promete 20 px. */
+#segOrderType .otype-more:not([open]) > .otype-panel { display: none; }
+/* `flex: 0 0 26px` es obligatorio, no un adorno: `.seg-btn` llega con `flex: 1 1 0%` de la rejilla
+   del segmentado, y en un contenedor en COLUMNA el tamaño principal lo manda el `flex-basis` -el
+   `height` se ignora—. Sin esto las dos opciones medían 14 px (y 10 en el teléfono), que es justo
+   lo que la ancla de área táctil no deja pasar. */
+#segOrderType .otype-panel .seg-btn { flex: 0 0 26px; height: 26px; text-align: left; padding: 0 7px; border-radius: 3px; color: var(--tx-2); }
+#segOrderType .otype-panel .seg-btn + .seg-btn { border-left: 0; }
+#segOrderType .otype-panel .seg-btn.active { background: var(--activo); color: #fff; }

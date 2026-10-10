@@ -1588,6 +1588,8 @@ kbd {
   #orderCard .bf-margin-row { min-height: 22px; }
   #orderCard #segOrderType .ic { display: none; }
   #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard #segOrderType .otype-more > summary { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard #segOrderType { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
   #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
   #orderCard .lev-lados { font-size: 9.5px; }   // en el teléfono, solo más pequeño: no hay sitio
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
@@ -1713,7 +1715,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #orderCard .grid-2, #orderCard .grid-2-min { grid-template-columns: minmax(0, 1fr); gap: 0; }
   #orderCard .grid-2 > .field + .field, #orderCard .grid-2-min > .field + .field { margin-top: 5px; }
   #orderCard .seg .seg-btn { font-size: 11.5px; padding: 0 3px; }
-  #orderCard #segOrderType { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  #orderCard #segOrderType { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 0; }
   #orderCard .bf-margin-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 4px; }
   #orderCard .bf-lev { padding: 0 5px; }
   #orderCard .bf-lev input[type=range] { width: 62px; }
@@ -1821,6 +1823,30 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 #qrCard .bf-qr-x:hover { color: var(--tx-1); }
 #btnQuickOrder.qr-abierto { background: var(--seg-fondo); border-color: var(--line); color: var(--tx-1); }
 @media (max-width: 700px) { #qrCard { width: min(312px, calc(100% - 24px)); } }
+#orderCard .seg#segOrderType { overflow: visible; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
+#segOrderType > .seg-btn:first-child { border-radius: var(--r) 0 0 var(--r); }
+#segOrderType .otype-more { position: relative; display: block; height: 100%; }
+#segOrderType .otype-more > summary {
+  list-style: none; cursor: pointer; height: 100%; display: flex; align-items: center; gap: 3px;
+  padding: 0 7px; font-size: var(--fs-cuerpo); font-weight: 500; color: var(--tx-3);
+  background: transparent; border-left: 1px solid var(--line); white-space: nowrap;
+  border-radius: 0 var(--r) var(--r) 0; user-select: none;
+}
+#segOrderType .otype-more > summary::-webkit-details-marker { display: none; }
+#segOrderType .otype-more > summary:hover { color: var(--tx-1); background: var(--bg-4); }
+#segOrderType .otype-more > summary .caret { font-style: normal; font-size: 8px; color: var(--tx-4); transition: transform .12s ease; }
+#segOrderType .otype-more.active > summary { background: var(--activo); color: #fff; }
+#segOrderType .otype-more.active > summary .caret { color: rgba(255,255,255,.75); }
+#segOrderType .otype-panel {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 40; min-width: 138px;
+  display: flex; flex-direction: column; gap: 1px; padding: 2px;
+  background: #1a1b1c; border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: 0 10px 26px rgba(0,0,0,.55);
+}
+#segOrderType .otype-more:not([open]) > .otype-panel { display: none; }
+#segOrderType .otype-panel .seg-btn { flex: 0 0 26px; height: 26px; text-align: left; padding: 0 7px; border-radius: 3px; color: var(--tx-2); }
+#segOrderType .otype-panel .seg-btn + .seg-btn { border-left: 0; }
+#segOrderType .otype-panel .seg-btn.active { background: var(--activo); color: #fff; }
 </style>
 </head>
 <body>
@@ -2298,11 +2324,23 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
              gap que el formulario necesita para no esconder nada. El precio límite baja a
              su fila propia porque solo aparece en modo «Límite». -->
         <div class="ord-segs">
+          <!-- ORDEN RÁPIDA DEL SITIO, fila por fila: el segmentado solo tiene `Mercado | Límite`
+               y las condicionales viven detrás de un `Activador ▾`. Cuatro pestañas en 272 px
+               funcionaban (11,5 px) pero la forma era nuestra; ahora la fila es la suya y los dos
+               botones siguen VIVOS dentro de `#segOrderType`, que es el selector del que cuelga
+               todo el cableado (`#segOrderType .seg-btn`) y las pruebas. -->
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
             <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">Mercado</button>
             <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">Límite</button>
-            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
-            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
+            <details class="otype-more" id="otypeMore">
+              <summary id="otypeMoreBtn" title="Órdenes condicionales: activador y trailing (no reservan margen mientras aguardan)">
+                <span id="otypeMoreTxt">Activador</span><i class="caret">▾</i>
+              </summary>
+              <div class="otype-panel" role="group" aria-label="Orden condicional">
+                <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
+                <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
+              </div>
+            </details>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
@@ -10934,6 +10972,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
     UI.initOrdenAvanzado();
     UI.initOrdenRapida();
+    UI.initOrdenCondicional();
   };
 
   /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
@@ -11461,6 +11500,19 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.otype === App.orderType);
     });
+    /* El desplegable `Activador ▾` (BLOQUE 18 de la piel) dice en su propio rótulo lo que hay
+       dentro: con `trailing` activo la fila entera pasa a decir «Trailing», que es lo que hace el
+       sitio, y al elegir una de las dos opciones el panel se cierra solo. Se marca y se cierra
+       AQUI, y no en el listener del botón, para que `setOrderType` siga siendo el único camino
+       (las plantillas, las órdenes rápidas y `test:formulario` lo llaman directo). */
+    const mas = document.getElementById('otypeMore');
+    if (mas) {
+      const cond = App.orderType === 'trigger' || App.orderType === 'trailing';
+      mas.classList.toggle('active', cond);
+      const lbl = document.getElementById('otypeMoreTxt');
+      if (lbl) lbl.textContent = App.orderType === 'trailing' ? 'Trailing' : 'Activador';
+      if (cond) mas.open = false;
+    }
     const esLimite = App.orderType === 'limite';
     const esTrigger = App.orderType === 'trigger';
     const esTrail = App.orderType === 'trailing';
@@ -12989,6 +13041,24 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     g('qrBuy').addEventListener('click', () => colocar('long'));
     g('qrSell').addEventListener('click', () => colocar('short'));
     if (window.ST && ST.get && ST.get('ordenRapida', false) === true) muestra(true);
+    return true;
+  };
+
+  /* DESPLEGABLE DE CONDICIONALES (BLOQUE 18). `<details>` ya abre, cierra y gestiona el foco con
+     el teclado; lo que hace esto es lo que el elemento nativo no hace solo: cerrar al pulsar fuera
+     (si no, el panel se queda colgando sobre el `#limitRow` mientras operas) y devolver el foco al
+     resumen con Escape. Se engancha con `pointerdown` en fase de captura porque el `click` de la
+     pestaña de dentro ya habría burbujeado. */
+  UI.initOrdenCondicional = function () {
+    const mas = document.getElementById('otypeMore');
+    const res = document.getElementById('otypeMoreBtn');
+    if (!mas || !res || mas.dataset.montado) return false;
+    mas.dataset.montado = '1';
+    const fuera = (e) => { if (mas.open && e.target && !mas.contains(e.target)) mas.open = false; };
+    document.addEventListener('pointerdown', fuera, true);
+    res.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mas.open) { mas.open = false; res.focus(); }
+    });
     return true;
   };
 

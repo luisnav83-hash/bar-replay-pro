@@ -80,6 +80,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ═════════ B) Cambiar a Trigger muestra disparo, ejecución y validez ═════════ */
   console.log('\n▸ B) Al elegir Trigger aparecen el disparo y la ejecución por separado');
+  await page.click('#otypeMoreBtn');                    // `Activador ▾` es un desplegable (BLOQUE 18)
   await page.click('#segOrderType [data-otype="trigger"]');
   await espera(220);
   const b = await page.evaluate(() => ({
@@ -107,6 +108,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   const c2 = await page.evaluate(() => App.orderType);
   ok(c1 === 'trailing', `desde Trigger, T pasa a Trailing —el orden del selector, no un interruptor de dos—: «${c1}»`);
   ok(c2 === 'market', `y la siguiente cierra el ciclo de cuatro volviendo a Mercado: «${c2}»`);
+  await page.click('#otypeMoreBtn');
   await page.click('#segOrderType [data-otype="trigger"]');
   await espera(160);
 
@@ -262,21 +264,35 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   const i2 = await page.evaluate(async () => {
     const card = document.getElementById('orderCard') || document.body;
     const seg = document.getElementById('segOrderType');
+    const mas = document.getElementById('otypeMore');
     const dx = () => card.scrollWidth - card.clientWidth;
     const base = dx();
-    document.querySelector('#segOrderType [data-otype="trigger"]').click();
+    /* A 390 px la fila del tipo ya no son cuatro pestañas: son dos y un `Activador ▾` que abre.
+       Se mide la fila cerrada (es el estado en reposo, el que desbordaba) y con el panel abierto,
+       que es cuando las dos condicionales tienen que caber también -el panel absoluto no empuja
+       nada, pero sí puede salirse de la tarjeta, y eso es lo que se comprueba aquí—. */
+    mas.open = true;
+    await new Promise((r) => setTimeout(r, 180));
+    const pr = mas.querySelector('.otype-panel').getBoundingClientRect();
+    const cr = card.getBoundingClientRect();
+    const abierto = [...mas.querySelectorAll('.seg-btn')].map((x) => ({ t: x.textContent.trim(), w: Math.round(x.getBoundingClientRect().width) }));
+    const medidas = { altoPanel: Math.round(pr.height), dentro: pr.left >= cr.left - 1 && pr.right <= cr.right + 1 };
+    seg.querySelector('[data-otype="trigger"]').click();
     await new Promise((r) => setTimeout(r, 260));
     return {
       base,
       dx: dx(),
       segDx: seg.scrollWidth - seg.clientWidth,
-      botones: [...seg.querySelectorAll('.seg-btn')].map((x) => ({ t: x.textContent.trim(), visible: x.clientWidth > 0 && x.getBoundingClientRect().width > 0, w: x.clientWidth })),
+      pestañas: [...seg.querySelectorAll(':scope > .seg-btn')].map((x) => ({ t: x.textContent.trim(), w: Math.round(x.getBoundingClientRect().width) })),
+      resumen: Math.round(document.getElementById('otypeMoreBtn').getBoundingClientRect().width),
+      abierto, medidas,
     };
   });
   ok(i2.segDx !== null && i2.dx <= i2.base,
     `a 390 px la tarjeta con las filas visibles no desborda más que con ellas ocultas (${i2.base} → ${i2.dx} px)`);
-  ok(i2.segDx <= 0 && i2.botones.length === 4 && i2.botones.every((x) => x.visible && x.w >= 24),
-    `los cuatro tipos caben y se pueden pulsar en el teléfono (Δ ${i2.segDx} px; anchos ${i2.botones.map((x) => x.w.toFixed(0)).join('/')} px; ${i2.botones.map((x) => x.t).join(' / ')})`);
+  ok(i2.segDx <= 0 && i2.pestañas.length === 2 && i2.resumen >= 28 && i2.medidas.altoPanel >= 40 && i2.medidas.dentro &&
+     [...i2.pestañas.map((x) => x.w), i2.resumen, ...i2.abierto.map((x) => x.w)].every((w) => w >= 24),
+     `a 390 px la fila del tipo es ${i2.pestañas.map((x) => `${x.t} ${x.w}`).join(' · ')} + «Activador ▾» de ${i2.resumen} px sin desbordar (Δ ${i2.segDx} px), y las dos condicionales caben en su panel abierto (${i2.abierto.map((x) => `${x.t} ${x.w}`).join(' / ')}, ${i2.medidas.altoPanel} px, dentro de la tarjeta: ${i2.medidas.dentro ? 'sí' : 'NO'})`);
   await page.setViewport({ width: 1360, height: 900 });
   await espera(250);
   ok(errs.length === 0, `sin errores de JavaScript en toda la sesión de clics (${errs.length})${errs.length ? ' → ' + errs.slice(0, 2).join(' ⧸ ') : ''}`);

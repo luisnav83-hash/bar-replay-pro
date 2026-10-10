@@ -487,11 +487,23 @@
              gap que el formulario necesita para no esconder nada. El precio límite baja a
              su fila propia porque solo aparece en modo «Límite». -->
         <div class="ord-segs">
+          <!-- ORDEN RÁPIDA DEL SITIO, fila por fila: el segmentado solo tiene `Mercado | Límite`
+               y las condicionales viven detrás de un `Activador ▾`. Cuatro pestañas en 272 px
+               funcionaban (11,5 px) pero la forma era nuestra; ahora la fila es la suya y los dos
+               botones siguen VIVOS dentro de `#segOrderType`, que es el selector del que cuelga
+               todo el cableado (`#segOrderType .seg-btn`) y las pruebas. -->
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
             <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">Mercado</button>
             <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">Límite</button>
-            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
-            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
+            <details class="otype-more" id="otypeMore">
+              <summary id="otypeMoreBtn" title="Órdenes condicionales: activador y trailing (no reservan margen mientras aguardan)">
+                <span id="otypeMoreTxt">Activador</span><i class="caret">▾</i>
+              </summary>
+              <div class="otype-panel" role="group" aria-label="Orden condicional">
+                <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">Activador</button>
+                <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen.">Trailing</button>
+              </div>
+            </details>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
