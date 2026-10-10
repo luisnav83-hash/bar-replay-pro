@@ -340,6 +340,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
        fuera del recorte por diseño (su centro mide x = −11 px). Lo que se comprueba aquí
        es lo que la persona ve y toca: los precios de SL/TP y los atajos de % . */
     const avanzados = ['slInput', 'tpInput'];
+    // `#chkTpSl`: SL/TP viven detras de su casilla desde el item 5b de la piel (asi en el sitio,
+    // medido: en reposo llega desmarcada). Para comprobar que NINGUNO queda recortado sin senal
+    // hay que desplegarlos primero; lo que esta ancla defiende sigue siendo el foco con clic y el
+    // valor que entra, no el numero de clics que hacen falta para llegar al campo.
     const geo = () => ({
       area: Math.round(g('chartArea').getBoundingClientRect().height),
       fila: Math.round(parseFloat(getComputedStyle(g('chartArea')).gridTemplateRows.split(' ')[1])),
@@ -366,6 +370,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     // SL/TP se enfoca CON CLIC y escribe (si estuviera bajo un recorte, el foco se
     // quedaría en el body y el valor no entraría).
     abierto.escritos = [];
+    g('chkTpSl').click();                       // marca TP/SL y saca las dos cajas
+    await new Promise((r) => setTimeout(r, 260));
+    if (g('orderCard').classList.contains('adv-cerrado')) g('btnOrderAvanzado').click();
+    await new Promise((r) => setTimeout(r, 320));
     for (const id of avanzados) {
       const e = g(id);
       e.scrollIntoView({ block: 'center' });

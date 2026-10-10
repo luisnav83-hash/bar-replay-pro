@@ -1961,6 +1961,100 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #orderCard .bf-lev-chip { min-width: 18px; font-size: 10.5px; }
   #orderCard .bf-lev-chips { gap: 5px; }
 }
+#orderCard .bf-tpsl { margin: 2px 0 0; }
+#orderCard .bf-tpsl-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px;
+}
+#orderCard .bf-check {
+  position: relative; display: flex; align-items: center; gap: 4px; cursor: pointer;
+  -webkit-user-select: none; user-select: none; min-width: 0; min-height: 22px;
+}
+#orderCard .bf-check input {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; pointer-events: none;
+}
+#orderCard .bf-check-caja { flex: 0 0 auto; display: block; width: 12px; height: 12px; overflow: visible; }
+#orderCard .bf-check-caja rect { fill: transparent; stroke: var(--line); stroke-width: 1; }
+#orderCard .bf-check-tick { fill: none; stroke: var(--tx-1); stroke-width: 1.6; stroke-linecap: round; opacity: 0; }
+#orderCard .bf-check:has(input:checked) .bf-check-caja rect { fill: var(--up); stroke: var(--up); }
+#orderCard .bf-check:has(input:checked) .bf-check-tick { opacity: 1; }
+#orderCard .bf-check:has(input:focus-visible) .bf-check-caja { outline: 2px solid var(--tx-1); outline-offset: 2px; border-radius: 3px; }
+#orderCard .bf-check-txt { font-size: 12px; font-weight: 400; color: var(--tx-1); white-space: nowrap; }
+#orderCard .bf-tpsl-sum {
+  font-size: 12px; font-weight: 400; color: var(--tx-3);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#orderCard .bf-tpsl-cajas { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+#orderCard .bf-tpsl-cajas[hidden] { display: none; }
+#orderCard .bf-in {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  height: 40px; margin: 0; padding: 0 12px; background: var(--bg-3); border-radius: var(--r);
+}
+#orderCard .bf-in input {
+  flex: 1 1 auto; min-width: 0; height: 100%; border: 0; background: transparent;
+  color: var(--tx-1); font-size: 14px; font-weight: 400; padding: 0;
+}
+#orderCard .bf-in input::placeholder { color: var(--tx-3); opacity: 1; }
+#orderCard .bf-in input::-webkit-outer-spin-button, #orderCard .bf-in input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#orderCard .bf-in input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+#orderCard .bf-in-unidad { flex: 0 0 auto; font-size: 14px; font-weight: 400; color: var(--tx-3); }
+#orderCard .bf-in:focus-within { box-shadow: inset 0 0 0 1px var(--tx-3); }
+@media (max-width: 640px) {
+  #orderCard .bf-in { padding: 0 10px; gap: 6px; }
+  #orderCard .bf-in-unidad { font-size: 12px; }
+  #orderCard .bf-tpsl-cajas { gap: 6px; margin-top: 10px; }
+  #orderCard .bf-tpsl-cajas .quick-row { margin: 2px 0 0; }
+}
+body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-spacing: 0; }
+#bfVistas { display: none; }
+@media (max-width: 640px) {
+  #bfVistas { display: inline-flex; align-items: center; height: 26px; padding: 0;
+              background: #1a1b1c; border-radius: 9999px; }
+  #bfVistas .bf-vista { width: 44px; height: 26px; padding: 0; border: 0; border-radius: 9999px;
+    background: transparent; color: var(--tx-3); font-size: 15px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center; }
+  #bfVistas .bf-vista.active { background: #272829; color: #fff; }
+  #bfVistas .bf-vista:active { filter: brightness(.9); }
+  body[data-vista="operar"] #chartArea { display: none; }
+  body[data-vista="operar"] #sidebar { display: grid; max-height: none; align-items: start;
+    grid-template-columns: minmax(0, 1fr) 175px; gap: 15px; padding: 6px 15px 12px;
+    overflow: visible; }
+  body[data-vista="operar"] #sidebar > .card { max-height: none; }
+  body[data-vista="operar"] #sidebar > #orderCard > .card-body { max-height: none; overflow: visible;
+    padding: 6px 8px 8px; gap: 6px; }
+  body[data-vista="operar"] #sidebar > .card { height: auto; }
+  body[data-vista="operar"] #sidebar > .card > .card-body { height: auto; --cuerpo: auto; }
+  body[data-vista="operar"] #sidebar > .card { margin-left: 0; margin-right: 0; }
+  body[data-vista="operar"] #sidebar > .card { width: auto; min-width: 0; max-width: none; }
+  body[data-vista="operar"] #orderCard > .card-head { flex-wrap: wrap; row-gap: 2px; min-height: 24px; }
+  body[data-vista="operar"] #orderCard > .card-head > * { min-width: 0; }
+  body[data-vista="operar"] #sidebar > #orderCard > .card-body { padding-left: 4px; padding-right: 4px; }
+  body[data-vista="operar"] #orderCard .seg { overflow-x: auto; scrollbar-width: none; }
+  body[data-vista="operar"] #orderCard .seg > .seg-btn { min-width: max-content; text-overflow: clip; }
+  body[data-vista="operar"] #bookCard > .card-head { flex-wrap: wrap; row-gap: 2px; min-height: 24px; }
+  body[data-vista="operar"] #bookCard > .card-head { height: auto; padding-top: 2px; }
+  body[data-vista="operar"] #sidebar > .card > .card-head { height: auto; }
+  body[data-vista="operar"] #bookCard .bf-agreg { position: relative; }
+  #sidebar > #bookCard > .card-body > .bf-book-frac > .bf-frac-lab { width: 100%; }
+  body[data-vista="operar"] #bookCard > .card-head > * { min-width: 0; }
+  body[data-vista="operar"] #orderCard .bf-cost .bf-flat { grid-column: 1 / -1; justify-self: start;
+    white-space: nowrap; }
+  body[data-vista="operar"] #orderCard .field { flex-direction: column; align-items: stretch; gap: 2px; }
+  body[data-vista="operar"] #orderCard .field .field-label { font-size: 12px; white-space: normal; }  
+  body[data-vista="operar"] #orderCard .field .field-label { font-weight: 400; }
+  body[data-vista="operar"] #orderCard .ord-segs { display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 6px; }
+  body[data-vista="operar"] #orderCard .order-actions { display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 15px; }
+  body[data-vista="operar"] #orderCard .order-actions .btn { height: 40px; font-size: 14px;
+    border-radius: 9999px; }
+  body[data-vista="operar"] #orderCard .bf-cost { display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px 8px   ; font-size: 12px; min-height: 0; align-items: center; }
+  body[data-vista="operar"] #orderCard .bf-cost .bf-flat { height: 24px; font-size: 12px; }
+  #topbar #tfQuick { gap: 4px; }
+  #topbar #tfQuick .tf-btn { height: 22px; min-width: 30px; padding: 0 5px; font-size: 12px;
+    border: 0; border-radius: 4px; background: transparent; color: var(--tx-3); }
+  #topbar #tfQuick .tf-btn.active { background: #272829; color: #fff; }
+}
 </style>
 </head>
 <body>
@@ -2078,6 +2172,24 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
         <option value="1w">1 semana</option>
       </select>
     </label>
+    <!-- El conmutador va AQUI, dentro de la fila del par, y no como hijo directo de `#topbar`:
+         el cabecero movil es una rejilla de dos columnas y tres filas de alto fijo (medido:
+         `28px 32px 24px` / `186px 188px`), y meter un quinto hijo la auto-colocacion lo sentaba
+         ENCIMA de la fila del par -`#bfVistas` y `.topbar-group` salian los dos en x=8 y=30 de 374x32,
+         y `elementFromPoint` devolvia la pildora en el centro del boton del simbolo: el boton del par
+         y el chip activo dejaban de ser alcanzables (lo canto `test:layout`)-. Aqui ademas queda a la
+         vista sin deslizar la fila, que para un boton de cambiar de vista es obligatorio. -->
+  <!-- Conmutador de vista del telefono (piel §5.6). En su pagina es un grupo `pill-tabs` de DOS
+       items de 44x32 con radio 999 sobre #1a1b1c, SIN texto (medido: los dos dan `t:""`) -es lo que
+       da acceso a la carta cuando el formulario y el libro se quedan toda la pantalla—. En nuestro
+       movil hace el mismo servicio: `Carta` deja el terminal como estaba y `Operar` monta sus dos
+       columnas. Solo existe en la franja estrecha (css/bitunix.css, BLOQUE 24). -->
+    <div class="bf-vistas" id="bfVistas" role="group" aria-label="Vista del teléfono">
+    <button class="bf-vista active" type="button" data-vista="carta" aria-label="Vista de carta"
+            title="Carta: el terminal ocupa la pantalla">▦</button>
+    <button class="bf-vista" type="button" data-vista="operar" aria-label="Vista de operar"
+            title="Operar: formulario y libro, como en su aplicación">⇄</button>
+    </div>
 
     <label class="field" title="Fecha y hora en la que empieza el replay (las velas anteriores sirven de contexto)">
       <span class="field-label">Inicio replay</span>
@@ -2706,25 +2818,61 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           </label>
         </div>
 
-        <div class="grid-2">
-          <label class="field">
-            <span class="field-label" id="lbSl">Stop Loss (precio)</span>
-            <input type="number" id="slInput" step="any" placeholder="opcional">
-          </label>
-          <label class="field">
-            <span class="field-label" id="lbTp">Take Profit (precio)</span>
-            <input type="number" id="tpInput" step="any" placeholder="opcional">
-          </label>
-        </div>
+        <!-- ══ TP/SL, MEDIDO EN SU PÁGINA (11-oct, 1600x900, es-ES, sin sesión) ══
+             La fila es de 272x18: una CASILLA de 12x12 (svg, no una caja con borde de 16) +
+             `TP/SL` a 12 px / peso 400 en #ffffff a 4 px del icono, y `space-between` con un
+             `Avanzado` de 55x14 + caret de 12 en el extremo derecho. Al marcarla salen DOS CAJAS
+             de 272x40 con paso de 48 (8 de hueco), fondo #222324, radio 4 px y `padding: 0 12px`;
+             DENTRO, el input de 146x38 a 14 px en blanco con `placeholder="TP"` la de arriba y
+             `placeholder="SL"` la de abajo -ASI distinguen ellas: no hay rótulo fuera ni prefijo,
+             el prefijo mide 0 px-, y a la derecha un sufijo de 100x38 con `Precio (USDT)` a 14 px
+             en #919499 y su caret de 12. La fila de arriba queda a 12 px y los botones a 16; los
+             botones bajan 100 px. Todo eso está copiado.
+             LO QUE NO SE COPIA, dicho: (1) el `Avanzado` de ESA fila abre sus opciones avanzadas
+             de TP/SL (tipo de disparo, ratio, etc.), que aquí no existen -inventar un botón que no
+             abre nada sería decoración-; en su sitio va la RESUMEN de lo escrito cuando la casilla
+             está desmarcada, que sí es dato; (2) el `Precio (USDT) ▾` suyo es un selector de unidad
+             (precio / % / margen) que sin sesión no se pudo abrir, así que lo pintamos como texto
+             de unidad -que es exactamente lo que dice- y sin caret: nuestros campos son niveles de
+             precio y no hay segunda unidad que elegir; (3) el `▾`/`▸` y el orden TP-antes-de-SL sí
+             se copian: el nuestro estaba al revés y eso era una diferencia de verdad. -->
+        <div class="bf-tpsl" id="bfTpSl">
+          <div class="bf-tpsl-row">
+            <label class="bf-check" for="chkTpSl" title="Take profit / stop loss: desmarcar APAGA los dos niveles (lo escrito se guarda, no se envía)">
+              <input type="checkbox" id="chkTpSl">
+              <svg class="bf-check-caja" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="11" height="11" rx="2"></rect>
+                <path class="bf-check-tick" d="M2.7 6.2 4.9 8.4 9.3 3.7"></path>
+              </svg>
+              <span class="bf-check-txt">TP/SL</span>
+            </label>
+            <span class="bf-tpsl-sum" id="bfTpSlSum" hidden></span>
+          </div>
+          <div class="bf-tpsl-cajas" id="bfTpSlCajas" hidden>
+            <label class="field bf-in">
+              <span class="field-label visually-hidden" id="lbTp">Take Profit (precio)</span>
+              <input type="number" id="tpInput" step="any" placeholder="TP" title="Precio de take profit (nivel de precio, no distancia)">
+              <span class="bf-in-unidad">Precio (USDT)</span>
+            </label>
+            <label class="field bf-in">
+              <span class="field-label visually-hidden" id="lbSl">Stop Loss (precio)</span>
+              <input type="number" id="slInput" step="any" placeholder="SL" title="Precio de stop loss (nivel de precio, no distancia)">
+              <span class="bf-in-unidad">Precio (USDT)</span>
+            </label>
 
-        <div class="quick-row" id="quickSlTp">
-          <button class="chip" data-slpct="0.5">SL 0.5%</button>
-          <button class="chip" data-slpct="1">SL 1%</button>
-          <button class="chip" data-slpct="2">SL 2%</button>
-          <button class="chip" data-tppct="1">TP 1%</button>
-          <button class="chip" data-tppct="2">TP 2%</button>
-          <button class="chip" data-tppct="4">TP 4%</button>
-        </div>
+          <!-- Los atajos viven dentro del grupo porque lo que hacen es ESCRIBIR en esas dos
+               cajas: con la casilla apagada no tendrían destino. Medido: en su fila de 272 no hay
+               atajos, así que estos seis chips son nuestros y se quedan con su tipografía. -->
+            <div class="quick-row" id="quickSlTp">
+              <button class="chip" data-slpct="0.5">SL 0.5%</button>
+              <button class="chip" data-slpct="1">SL 1%</button>
+              <button class="chip" data-slpct="2">SL 2%</button>
+              <button class="chip" data-tppct="1">TP 1%</button>
+              <button class="chip" data-tppct="2">TP 2%</button>
+              <button class="chip" data-tppct="4">TP 4%</button>
+            </div>
+          </div><!-- /bf-tpsl-cajas -->
+        </div><!-- /bf-tpsl -->
 
         <!-- PLANTILLAS DE ORDEN (js/orderTemplates.js) — la fila de «custom trading templates»
              del panel de órdenes de Bitunix. Vive DENTRO de «Avanzado» a propósito: en el
@@ -11324,12 +11472,46 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       U.log(`💱 Comisión configurada: ${e.target.value}% por lado`, 'sys');
     });
 
+    document.getElementById('slInput').addEventListener('input', UI.vigilaTpSl);
+    document.getElementById('tpInput').addEventListener('input', UI.vigilaTpSl);
     document.getElementById('slInput').addEventListener('input', UI.updateOrderHint);
     document.getElementById('tpInput').addEventListener('input', UI.updateOrderHint);
+    // La casilla de TP/SL (ítem 5b de la piel): desplegada por defecto y recordada.
+    {
+      const chk = document.getElementById('chkTpSl');
+      if (chk) {
+        /* El reposo es DESMARCADO, que es como viene en el sitio (medido: su `☐ TP/SL` llega sin
+           marcar y por eso su panel no pasa nunca de 347 px). No es un capricho de parecido: con
+           la casilla marcada por defecto el bloque mide 315 px, la columna del panel derecho tiene
+           556 y `autoAprieta` -que vigila que los botones no queden bajo el borde- pliega
+           «Avanzado» solo a 1440x900, que es el viewport de once suites. */
+        try { chk.checked = !!(window.ST && ST.get('tpslOn', false)); } catch (e) {}
+        chk.addEventListener('change', () => {
+          try { if (window.ST && ST.set) ST.set('tpslOn', !!chk.checked); } catch (e) {}
+          /* Marcando, el bloque crece ~115 px y a 1440x900 (y a 1600x900, medido) `autoAprieta`
+             lo PLEGABA: la casilla tapaba justo las dos cajas que acaba de pedir, que es el peor
+             modo de perder una interaccion. Desde aqui manda la intencion de la persona -la misma
+             via que deja el clic en el boton de «Avanzado»— y el automatico se aparta; si ya no
+             cabe, la columna desliza y el pie avisa del recorte (`marcaDesborde`), que es lo que
+             hace el sitio con su panel de 347 px dentro de una columna mas alta. */
+          if (chk.checked) { const bt = document.getElementById('btnOrderAvanzado'); if (bt) bt.dataset.explicit = '1'; }
+          UI.syncTpSl(); UI.updateOrderHint();
+          if (!chk.checked && (document.getElementById('slInput').value || document.getElementById('tpInput').value)) {
+            // Se apaga con niveles escritos: se guardan, no se envian, y se dice. La razon por la que
+            // esto es un aviso y no un bloqueo es la misma de arriba -la persona mando—, por eso el
+            // aviso va primero y `UI.vigilaTpSl` no lo desanda.
+
+            U.toast('TP/SL apagados: los precios siguen escritos y volverán al marcar la casilla', 'info');
+          }
+        });
+        UI.syncTpSl();
+      }
+    }
     U.$$('#quickSlTp .chip').forEach((c) => c.addEventListener('click', () => {
       const price = App.currentPrice();
       if (!price) { U.toast('No hay datos cargados', 'warn'); return; }
       if (c.dataset.slpct) document.getElementById('slInput').value = U.round(price * (1 - +c.dataset.slpct / 100), 6);
+      if (c.dataset.slpct || c.dataset.tppct) { UI.vigilaTpSl(); UI.syncTpSl(); }   // el resumen de la fila va detras
       if (c.dataset.tppct) document.getElementById('tpInput').value = U.round(price * (1 + +c.dataset.tppct / 100), 6);
       UI.updateOrderHint();
     }));
@@ -11550,6 +11732,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     };
     UI._sincronizaOrden = sincroniza;
     sincroniza();
+    UI.vistasMoviles();
     pinta();
     autoAprieta();
     // `#limitRow` lo muestra y lo oculta OTRO módulo (escribe `style.display` y no avisa):
@@ -13199,15 +13382,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const hint = document.getElementById('orderHint');
     if (!hint) return;
     if (!price) { hint.textContent = 'Carga datos para operar.'; return; }
-    const sl = parseFloat(val('slInput'));
-    const tp = parseFloat(val('tpInput'));
+    const tsl = App.tpSlLee();
     const parts = [];
-    if (Number.isFinite(sl)) parts.push(`SL a ${U.fmtPct(((price - sl) / price) * 100, 2)} del precio`);
-    if (Number.isFinite(tp)) parts.push(`TP a ${U.fmtPct(((tp - price) / price) * 100, 2)}`);
+    if (tsl.sl !== null) parts.push(`SL a ${U.fmtPct(((price - tsl.sl) / price) * 100, 2)} del precio`);
+    if (tsl.tp !== null) parts.push(`TP a ${U.fmtPct(((tsl.tp - price) / price) * 100, 2)}`);
+    /* Con la casilla apagada el aviso lo dice, no se calla: callar equivaldría a que los campos
+       escritos no existen, y existen -lo que no viajan es a la orden—. */
+    if (!tsl.on && (val('slInput') || val('tpInput'))) parts.push('TP/SL apagados (guardados, sin enviar)');
     // Riesgo estimado
     const { notional } = App.estimateSize(price);
-    if (Number.isFinite(sl) && notional > 0) {
-      const risk = Math.abs(price - sl) / price * notional;
+    if (tsl.sl !== null && notional > 0) {
+      const risk = Math.abs(price - tsl.sl) / price * notional;
       const eq = TE.state.balance;
       parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
     }
@@ -13285,6 +13470,72 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const abierto = !!(ed && !ed.hidden);
       caret.setAttribute('aria-expanded', String(abierto));
       caret.classList.toggle('abierto', abierto);
+    }
+  };
+
+  /* LA CASILLA TP/SL (ítem 5b). No es un adorno del encabezado: apagarla saca las dos cajas y los
+     atajos de %, deja un resumen con lo escrito (para que lo apagado no se confunda con lo vacío)
+     e invalida la caché del alto de «Avanzado», que es justo lo que decide el plegado automático.
+     Nace MARCADA y se recuerda: `test:layout` exige que SL/TP estén visibles y escribibles con
+     «Avanzado» abierto, y el sitio también los muestra marcados al abrir la página. */
+  UI.syncTpSl = function () {
+    const c = document.getElementById('chkTpSl');
+    if (!c) return;
+    const on = !!c.checked;
+    const cajas = document.getElementById('bfTpSlCajas');
+    if (cajas) cajas.hidden = !on;
+    const sum = document.getElementById('bfTpSlSum');
+    if (sum) {
+      const trozos = [];
+      const lee = (id, nombre) => {
+        const e = document.getElementById(id);
+        const n = e ? parseFloat(e.value) : NaN;
+        if (Number.isFinite(n) && n > 0) trozos.push(nombre + ' ' + U.fmtPrice(n));
+      };
+      lee('slInput', 'SL'); lee('tpInput', 'TP');
+      sum.textContent = trozos.length ? trozos.join(' · ') : 'sin niveles';
+      sum.hidden = on;
+    }
+    { const ab = document.getElementById('btnOrderAvanzado'); if (ab) delete ab.dataset.altoAdv; }
+  };
+
+  /* REGLA: escribir un nivel ENCINEDE la casilla. La casilla contesta a «¿van estos niveles en la
+     orden?», así que un SL/TP puesto -por Riesgo fijo, por una plantilla, por los atajos de % o por
+     lo que sea que sepa mandar el evento `input`- y dejado apagado es un dato en el limbo: escrito,
+     visible en el campo, y no enviado. Lo que NO hace esta regla es contradecir a la persona: apagar
+     la casilla a mano no dispara `input` en los campos, asi que no se reenciende sola; lo escrito se
+     queda donde esta y el resumen de la fila lo nombra (item 5b del registro). */
+  /* Dos vistas en el telefono, porque en 844 px de alto no caben la carta Y el formulario con el
+     libro al lado; su movil hace exactamente lo mismo con su `pill-tabs` (§5.6 del registro). Se
+     recuerda en `ST` y se propaga como `#app[data-vista]`, que es lo que lee la piel: el comportamiento
+     esta aqui y la anatomia, en el CSS. ARRANQUE: en `carta`, no en `operar` como el -el de ellos es
+     una pantalla para operar y la nuestra es una para replay, y abrir sin datos en el formulario
+     seria abrir en vacio—. Quien cambie una vez, se queda con su eleccion. */
+  UI.vistasMoviles = function () {
+    /* La marca va en `body`, no en un `#app`: este documento NO tiene un contenedor con ese id
+       (fallo medido: `getElementById('app')` da null y la piel entera se quedaba sin aplicar). */
+    const raiz = document.body;
+    if (!raiz) return;
+    const botones = [...document.querySelectorAll('#bfVistas .bf-vista')];
+    const pon = (v) => {
+      if (!v) return;
+      raiz.dataset.vista = v;
+      for (const b of botones) b.classList.toggle('active', b.dataset.vista === v);
+      if (window.ST && ST.set) ST.set('vistaMovil', v);
+      /* La escalera mide su contenedor: al volver a Carta, el lienzo cambia de alto y hay que
+         avisar al repartidor (no lo hace nadie mas, porque el cambio no pasa por el). */
+      if (window.PC && PC.ajustaEscalera) requestAnimationFrame(() => { try { PC.ajustaEscalera(); } catch (e) {} });
+    };
+    for (const b of botones) b.addEventListener('click', () => pon(b.dataset.vista));
+    const guardado = (window.ST && ST.get) ? ST.get('vistaMovil', 'carta') : 'carta';
+    pon(guardado === 'operar' ? 'operar' : 'carta');
+  };
+
+  UI.vigilaTpSl = function () {
+    const c = document.getElementById('chkTpSl');
+    if (!c || c.checked) return;
+    if ((document.getElementById('slInput') || {}).value || (document.getElementById('tpInput') || {}).value) {
+      App.enciendeTpSl('un nivel escrito en el formulario');
     }
   };
 
@@ -14715,6 +14966,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // es la copia visible del stop que dimensionó la orden.
     if (slIn) slIn.value = r.sl;
     if (tpIn) tpIn.value = r.tp !== null ? +r.tp.toFixed(6) : '';
+    /* Y se encienden: en Riesgo fijo el stop no es opcional -es LO QUE DIMENSIONA la orden, ver el
+       articulo 223 y el parrafo de arriba—, asi que dejar la casilla TP/SL apagada significaria
+       calcular el tamano sobre un stop que no se envia. `enciendeTpSl` avisa y deja constancia en
+       el hint; sin esto, `test:riesgo-fijo` veia `sl: null` en la posicion colocada. */
+    const encendido = App.enciendeTpSl('Riesgo fijo');
     if (lado) lado.textContent = r.side === 'long'
       ? '▲ COMPRA (el stop está por debajo de la entrada)'
       : '▼ VENTA (el stop está por encima de la entrada)';
@@ -14723,6 +14979,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         + `· pérdida ${U.num(r.riesgo, 2)} USDT si el precio va de ${U.fmtPrice(r.entry)} a ${U.fmtPrice(r.sl)} (${U.num(r.distPct, 2)} %)`;
       if (r.tp !== null) txt += ` · TP ${r.rr}:1 en ${U.fmtPrice(r.tp)}`;
       if (r.excede) txt += ` · recortado a ${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)}): el margen libre no daba para más`;
+      if (encendido) txt += ' · TP/SL encendidos: aquí el stop es el que calcula el tamaño, apagado la orden saldría sin él';
       hint.textContent = txt;
       hint.className = 'hint' + (r.excede ? ' warn' : '');
     }
@@ -14736,6 +14993,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
      pérdida máxima que calcular, y dimensionar con la cifra equivocada es peor que no operar. */
   App.riesgoGuardia = function (side) {
     if (App.sizeMode !== 'riesgo') return true;
+    /* La casilla TP/SL (item 5b de la piel) apaga los niveles: en este modo eso no es un ajuste
+       estetico, es una orden dimensionada sobre un stop que no existe. Se para y se explica. */
+    if (!App.tpSlLee().on) {
+      U.toast('Riesgo fijo necesita el stop encendido: el tamaño sale de la distancia al stop, y con '
+        + 'TP/SL apagados ese stop no se envia. Vuelve a marcar la casilla TP/SL del formulario.', 'err', 5600);
+      return false;
+    }
     const r = App.riesgoCalcula();
     if (!r.ok) { U.toast('Riesgo fijo · ' + r.motivo, 'err', 4800); return false; }
     if (r.side !== side) {
@@ -14767,6 +15031,34 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * Abre una posición. Las casillas de SL/TP se interpretan como NIVELES
    * de precio; la dirección decide hacia qué lado se colocan.
    */
+  /* Lee los dos niveles del formulario. LA CASILLA `#chkTpSl` MANDA (ítem 5b de la piel: en
+     Bitunix TP/SL es una casilla que despliega las dos cajas; medido 11-oct). Desmarcada, lo
+     escrito se CONSERVA en los campos -borrarlo por plegar sería destruir un dato que el usuario
+     tecleó- pero NO viaja a la orden, que es lo que allí significa apagar TP/SL. Devuelve tambien
+     `on` para que el aviso de abajo pueda decirlo en vez de callar. */
+  /** Enciende la casilla TP/SL si estaba apagada. Devuelve true cuando la encendio EL CODIGO
+      (para que quien la enciende pueda decirlo), false si ya estaba encendida. */
+  App.enciendeTpSl = function (motivo) {
+    const c = document.getElementById('chkTpSl');
+    if (!c || c.checked) return false;
+    c.checked = true;
+    c.dispatchEvent(new Event('change', { bubbles: true }));
+    if (window.U && motivo) U.log(`TP/SL encendidos por ${motivo}: el stop calcula el tamano y no puede ir apagado`, 'sys');
+    return true;
+  };
+
+  App.tpSlLee = function () {
+    const c = document.getElementById('chkTpSl');
+    const on = !c || !!c.checked;
+    const nivel = (id) => {
+      if (!on) return null;
+      const e = document.getElementById(id);
+      const n = e ? parseFloat(e.value) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return { on, sl: nivel('slInput'), tp: nivel('tpInput') };
+  };
+
   App.placeOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
     if (App.orderType === 'limite') return App.placeLimitOrder(side);
@@ -14800,10 +15092,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     // SL / TP: de nivel introducido → distancia → nivel según la dirección
     const dir = side === 'long' ? 1 : -1;
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
-    const slDist = Number.isFinite(slIn) && slIn > 0 ? Math.abs(price - slIn) / price : null;
-    const tpDist = Number.isFinite(tpIn) && tpIn > 0 ? Math.abs(tpIn - price) / price : null;
+    const tsl = App.tpSlLee();
+    const slDist = tsl.sl !== null ? Math.abs(price - tsl.sl) / price : null;
+    const tpDist = tsl.tp !== null ? Math.abs(tsl.tp - price) / price : null;
     const sl = slDist !== null ? price * (1 - dir * slDist) : null;
     const tp = tpDist !== null ? price * (1 + dir * tpDist) : null;
 
@@ -14905,8 +15196,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
+    const tsl = App.tpSlLee();
     const ro = document.getElementById('ordReduceOnly');
     const ef = document.getElementById('ordEffect');
 
@@ -14920,8 +15210,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       limitPrice: exec === 'limit' ? lim : null,
       mode: sp.mode,
       size: sp.size,
-      sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
-      tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
+      sl: tsl.sl,
+      tp: tsl.tp,
       leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
@@ -14959,11 +15249,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
 
-    // SL / TP: los campos son NIVELES de precio (opcionales)
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
-    const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
-    const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
+    // SL / TP: los campos son NIVELES de precio (opcionales), y la casilla TP/SL manda
+    const tsl = App.tpSlLee();
+    const sl = tsl.sl;
+    const tp = tsl.tp;
 
     if (App.riesgoGuardia(side) === false) return null;
     const sp = App.sizeParams();

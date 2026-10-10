@@ -826,6 +826,11 @@
     // es la copia visible del stop que dimensionó la orden.
     if (slIn) slIn.value = r.sl;
     if (tpIn) tpIn.value = r.tp !== null ? +r.tp.toFixed(6) : '';
+    /* Y se encienden: en Riesgo fijo el stop no es opcional -es LO QUE DIMENSIONA la orden, ver el
+       articulo 223 y el parrafo de arriba—, asi que dejar la casilla TP/SL apagada significaria
+       calcular el tamano sobre un stop que no se envia. `enciendeTpSl` avisa y deja constancia en
+       el hint; sin esto, `test:riesgo-fijo` veia `sl: null` en la posicion colocada. */
+    const encendido = App.enciendeTpSl('Riesgo fijo');
     if (lado) lado.textContent = r.side === 'long'
       ? '▲ COMPRA (el stop está por debajo de la entrada)'
       : '▼ VENTA (el stop está por encima de la entrada)';
@@ -834,6 +839,7 @@
         + `· pérdida ${U.num(r.riesgo, 2)} USDT si el precio va de ${U.fmtPrice(r.entry)} a ${U.fmtPrice(r.sl)} (${U.num(r.distPct, 2)} %)`;
       if (r.tp !== null) txt += ` · TP ${r.rr}:1 en ${U.fmtPrice(r.tp)}`;
       if (r.excede) txt += ` · recortado a ${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)}): el margen libre no daba para más`;
+      if (encendido) txt += ' · TP/SL encendidos: aquí el stop es el que calcula el tamaño, apagado la orden saldría sin él';
       hint.textContent = txt;
       hint.className = 'hint' + (r.excede ? ' warn' : '');
     }
@@ -847,6 +853,13 @@
      pérdida máxima que calcular, y dimensionar con la cifra equivocada es peor que no operar. */
   App.riesgoGuardia = function (side) {
     if (App.sizeMode !== 'riesgo') return true;
+    /* La casilla TP/SL (item 5b de la piel) apaga los niveles: en este modo eso no es un ajuste
+       estetico, es una orden dimensionada sobre un stop que no existe. Se para y se explica. */
+    if (!App.tpSlLee().on) {
+      U.toast('Riesgo fijo necesita el stop encendido: el tamaño sale de la distancia al stop, y con '
+        + 'TP/SL apagados ese stop no se envia. Vuelve a marcar la casilla TP/SL del formulario.', 'err', 5600);
+      return false;
+    }
     const r = App.riesgoCalcula();
     if (!r.ok) { U.toast('Riesgo fijo · ' + r.motivo, 'err', 4800); return false; }
     if (r.side !== side) {
@@ -878,6 +891,34 @@
    * Abre una posición. Las casillas de SL/TP se interpretan como NIVELES
    * de precio; la dirección decide hacia qué lado se colocan.
    */
+  /* Lee los dos niveles del formulario. LA CASILLA `#chkTpSl` MANDA (ítem 5b de la piel: en
+     Bitunix TP/SL es una casilla que despliega las dos cajas; medido 11-oct). Desmarcada, lo
+     escrito se CONSERVA en los campos -borrarlo por plegar sería destruir un dato que el usuario
+     tecleó- pero NO viaja a la orden, que es lo que allí significa apagar TP/SL. Devuelve tambien
+     `on` para que el aviso de abajo pueda decirlo en vez de callar. */
+  /** Enciende la casilla TP/SL si estaba apagada. Devuelve true cuando la encendio EL CODIGO
+      (para que quien la enciende pueda decirlo), false si ya estaba encendida. */
+  App.enciendeTpSl = function (motivo) {
+    const c = document.getElementById('chkTpSl');
+    if (!c || c.checked) return false;
+    c.checked = true;
+    c.dispatchEvent(new Event('change', { bubbles: true }));
+    if (window.U && motivo) U.log(`TP/SL encendidos por ${motivo}: el stop calcula el tamano y no puede ir apagado`, 'sys');
+    return true;
+  };
+
+  App.tpSlLee = function () {
+    const c = document.getElementById('chkTpSl');
+    const on = !c || !!c.checked;
+    const nivel = (id) => {
+      if (!on) return null;
+      const e = document.getElementById(id);
+      const n = e ? parseFloat(e.value) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return { on, sl: nivel('slInput'), tp: nivel('tpInput') };
+  };
+
   App.placeOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
     if (App.orderType === 'limite') return App.placeLimitOrder(side);
@@ -911,10 +952,9 @@
 
     // SL / TP: de nivel introducido → distancia → nivel según la dirección
     const dir = side === 'long' ? 1 : -1;
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
-    const slDist = Number.isFinite(slIn) && slIn > 0 ? Math.abs(price - slIn) / price : null;
-    const tpDist = Number.isFinite(tpIn) && tpIn > 0 ? Math.abs(tpIn - price) / price : null;
+    const tsl = App.tpSlLee();
+    const slDist = tsl.sl !== null ? Math.abs(price - tsl.sl) / price : null;
+    const tpDist = tsl.tp !== null ? Math.abs(tsl.tp - price) / price : null;
     const sl = slDist !== null ? price * (1 - dir * slDist) : null;
     const tp = tpDist !== null ? price * (1 + dir * tpDist) : null;
 
@@ -1016,8 +1056,7 @@
 
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
+    const tsl = App.tpSlLee();
     const ro = document.getElementById('ordReduceOnly');
     const ef = document.getElementById('ordEffect');
 
@@ -1031,8 +1070,8 @@
       limitPrice: exec === 'limit' ? lim : null,
       mode: sp.mode,
       size: sp.size,
-      sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
-      tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
+      sl: tsl.sl,
+      tp: tsl.tp,
       leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
@@ -1070,11 +1109,10 @@
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
 
-    // SL / TP: los campos son NIVELES de precio (opcionales)
-    const slIn = parseFloat(document.getElementById('slInput').value);
-    const tpIn = parseFloat(document.getElementById('tpInput').value);
-    const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
-    const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
+    // SL / TP: los campos son NIVELES de precio (opcionales), y la casilla TP/SL manda
+    const tsl = App.tpSlLee();
+    const sl = tsl.sl;
+    const tp = tsl.tp;
 
     if (App.riesgoGuardia(side) === false) return null;
     const sp = App.sizeParams();

@@ -259,8 +259,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await limpiar();                             // sin órdenes pendientes que empañen la lista
   await page.evaluate(() => {
     const ref = App.currentPrice();
-    document.getElementById('slInput').value = String(Math.round(ref * 0.99 * 100) / 100);
-    document.getElementById('tpInput').value = String(Math.round(ref * 1.015 * 100) / 100);
+    // escribir Y avisar: desde el item 5b de la piel la casilla TP/SL decide si los niveles viajan,
+    // y es el `input` lo que la enciende (UI.vigilaTpSl). Sin el evento, la prueba dejaria el SL
+    // escrito en un campo oculto y la orden saldria sin el stop que dice llevar.
+    for (const [id, v] of [['slInput', Math.round(ref * 0.99 * 100) / 100], ['tpInput', Math.round(ref * 1.015 * 100) / 100]]) {
+      const e = document.getElementById(id);
+      e.value = String(v);
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     App.flatten();
     App.placeOrder('long');
   });

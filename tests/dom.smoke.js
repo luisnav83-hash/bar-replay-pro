@@ -171,8 +171,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const price = App.currentPrice();
   document.getElementById('sizeInput').value = '50';
   // SL muy cercano (0,3%) y TP lejano (5%): garantiza que salte el stop en pocas velas
-  document.getElementById('slInput').value = String(price * 0.997);
-  document.getElementById('tpInput').value = String(price * 1.05);
+  // Se escribe Y SE AVISA (`input`): desde el item 5b de la piel los campos de SL/TP viven detras
+  // de su casilla, y es el evento el que dice a la app que hay niveles -ponerlos se enciende solos,
+  // ver UI.vigilaTpSl—. Asignar el valor a secas era un gesto incompleto que antes colaba.
+  const ponTpSl = (id, v) => { const e = document.getElementById(id); e.value = String(v);
+    // `window.Event`, no el `Event` de Node: esta prueba corre en jsdom y alli el constructor
+    // global no es el de la ventana (es el patron que ya usa el resto del fichero con MouseEvent).
+    e.dispatchEvent(new window.Event('input', { bubbles: true })); };
+  ponTpSl('slInput', price * 0.997);
+  ponTpSl('tpInput', price * 1.05);
   App.placeOrder('long');
   ok(!!TE.state.position, 'se abre una posición LONG con los datos del formulario');
   ok(TE.state.position && TE.state.position.qty > 0, 'la cantidad calculada es positiva');

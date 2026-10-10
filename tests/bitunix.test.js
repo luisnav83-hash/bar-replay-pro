@@ -676,7 +676,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const holgado = await cabida();                                     // 1440x900, viewport base
 
     ok(!holgado.plegado && !holgado.auto,
-       `con hueco de sobra el bloque «Avanzado» NO se pliega solo (plegado ${holgado.plegado}, por espacio ${holgado.auto}): SL/TP y la comisión se ven sin tocar nada`);
+       `con hueco de sobra el bloque «Avanzado» NO se pliega solo (plegado ${holgado.plegado}, por espacio ${holgado.auto}): la comision y el modo de posicion se ven sin tocar nada (SL/TP, detras de su casilla -asi en el sitio, medido—)`)
     ok(holgado.clip === 0 && holgado.larga && holgado.corta,
        `y los botones de entrada se ven y se pinchan sin deslizar: tarjeta ${holgado.tarjeta} px, ${holgado.clip} px bajo el borde (antes ~140)`);
     await page.setViewport({ width: 1024, height: 768 });
@@ -690,6 +690,174 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     ok(!vuelta.plegado && vuelta.clip === 0,
        `y al devolverle el hueco se deshace el pliegue (${vuelta.plegado ? 'sigue plegado' : 'abierto'}, ${vuelta.clip} px bajo el borde) - el pliegue responde al espacio, no al ancho`);
   }
+
+  /* ─── TP/SL COMO CASILLA QUE DESPLIEGA (ítem §5.5b del registro, 11-oct) ───
+     Medido en su pagina (sonda Chromium, 1600x900, es-ES, sin sesion) pinchando la propia
+     casilla, que es lo que faltaba el dia del 5a: la fila mide 272x18 con una CAJA-SVG de
+     12x12 y el rotulo `TP/SL` a 12 px / peso 400 en blanco, separado 4 px del icono, y a la
+     derecha `Avanzado` (55x14) + caret de 12. Al marcarla salen DOS CAJAS de 272x40 con paso
+     de 48 (hueco 8), fondo #222324, radio 4 y `padding: 0 12px`; dentro, el input de 146x38 a
+     14/400 en blanco cuyo PLACEHOLDER es `TP` el de arriba y `SL` el de abajo (el prefijo mide
+     0 px: asi distinguen ellas, no hay rotulo fuera), y un sufijo de 100x38 con
+     `Precio (USDT)` a 14/400 en #919499. La casilla llega DESMARCADA, y eso es lo que copia
+     esta app: con ella marcada el bloque mide 315 px en una columna de 556 y `autoAprieta`
+     plegaria «Avanzado» a 1440x900 -robar el acceso a la comision y a las plantillas por una
+     apariencia—. Y APAGAR TP/SL no borra lo escrito: los niveles dejan de viajar a la orden
+     (que es lo que apagar significa alli) pero siguen en los campos, con un resumen en la fila
+     para que lo apagado no se confunda con lo vacio. */
+  {
+    const g0 = (id) => document.getElementById(id);
+    const leeTpSl = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const R = (e) => { const q = e.getBoundingClientRect(); return { x: Math.round(q.x), y: Math.round(q.y), w: Math.round(q.width), h: Math.round(q.height) }; };
+      const cs = (e) => getComputedStyle(e);
+      const fila = document.querySelector('#bfTpSl .bf-tpsl-row');
+      const caja = document.querySelector('#bfTpSl .bf-check-caja');
+      const txt = document.querySelector('#bfTpSl .bf-check-txt');
+      const chk = g('chkTpSl'), sum = g('bfTpSlSum'), cajas = g('bfTpSlCajas');
+      const estado = (etiqueta) => {
+        const tp = g('tpInput').closest('.bf-in'), sl = g('slInput').closest('.bf-in');
+        const uni = [...document.querySelectorAll('#bfTpSlCajas .bf-in-unidad')].map((u) => ({
+          t: u.textContent.trim(), fs: Math.round(parseFloat(cs(u).fontSize)), fw: cs(u).fontWeight,
+          color: cs(u).color, caja: (R(tp).x + R(tp).w) + ' pad ' + cs(tp).paddingRight, uni: R(u).x + R(u).w,
+          dentro: Math.abs((R(u).x + R(u).w) - (R(tp).x + R(tp).w - parseFloat(cs(tp).paddingRight))) <= 1 }));
+        return { [etiqueta]: true, alturas: [tp, sl].map((e) => R(e).h), paso: R(sl).y - R(tp).y,
+          tpArriba: R(tp).y < R(sl).y, fondo: cs(tp).backgroundColor, radio: cs(tp).borderTopLeftRadius,
+          pad: cs(tp).paddingLeft, anchos: [R(tp).w, R(sl).w], anchoFila: R(fila).w,
+          placeholders: [g('tpInput').placeholder, g('slInput').placeholder],
+          unidades: uni, visibles: cajas.offsetParent !== null && !cajas.hidden,
+          leido: (window.App && App.tpSlLee) ? App.tpSlLee() : null,
+          valores: [g('slInput').value, g('tpInput').value], resumen: sum.textContent.trim(), resumenVisible: !sum.hidden };
+      };
+      const reposo = {
+        fila: R(fila), caja: R(caja), txt: R(txt),
+        tipografia: { fs: Math.round(parseFloat(cs(txt).fontSize)), fw: cs(txt).fontWeight, color: cs(txt).color },
+        separacion: R(txt).x - (R(caja).x + R(caja).w),
+        marcada: chk.checked, cajasOcultas: cajas.hidden, sinFlash: cajas.offsetParent === null,
+        resumen: sum.textContent.trim(), leido: (window.App && App.tpSlLee) ? App.tpSlLee() : null,
+        diana: R(chk.closest('label')),
+      };
+      chk.click();                                     // la persona marca TP/SL
+      await new Promise((r) => setTimeout(r, 320));
+      /* Marcar hace crecer el bloque ~115 px y el plegado automatico lo cierra -es su trabajo:
+         los botones no pueden quedar bajo el borde de la columna, medido 556 px a 1440x900—. Para
+         mirar las cajas hay que abrir a mano, que es el gesto real y deja `explicit`. */
+      if (g('orderCard').classList.contains('adv-cerrado')) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
+      const marcado = estado('marcado');
+      g('tpInput').value = '80000'; g('tpInput').dispatchEvent(new Event('input', { bubbles: true }));
+      g('slInput').value = '70000'; g('slInput').dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 220));
+      const escritos = estado('escritos');
+      // y una ORDEN DE VERDAD por el camino que pint6 la interfaz: con la casilla marcada, los
+      // dos niveles tienen que llegar a la posicion abierta.
+      if (window.TE && TE.state.position) App.flatten();
+      document.querySelector('#segSize [data-mode="pct"]').click();
+      g('sizeInput').value = '25'; g('sizeInput').dispatchEvent(new Event('input', { bubbles: true }));
+      g('btnLong').click();
+      await new Promise((r) => setTimeout(r, 700));
+      const conNiveles = (() => { const q = window.TE.state.position; return q ? { sl: q.sl, tp: q.tp } : null; })();
+      if (window.TE && TE.state.position) App.flatten();
+      await new Promise((r) => setTimeout(r, 400));
+      chk.click();                                     // la desmarca
+      await new Promise((r) => setTimeout(r, 320));
+      if (g('orderCard').classList.contains('adv-cerrado')) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
+      const apagado = estado('apagado');
+      g('btnLong').click();
+      await new Promise((r) => setTimeout(r, 700));
+      const sinNiveles = (() => { const q = window.TE.state.position; return q ? { sl: q.sl, tp: q.tp } : null; })();
+      if (window.TE && TE.state.position) App.flatten();
+      // (el reposo se devuelve desde Node, justo despues: aqui `page` no existe)
+      return { reposo, marcado, escritos, conNiveles, apagado, sinNiveles };
+    });
+    // ...y el acoplamiento que ese estado obliga: en Riesgo fijo el stop NO es opcional.
+    const riesgo = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const antes = { marcada: g('chkTpSl').checked, pos: !!(window.TE && TE.state.position) };
+      document.querySelector('#segSize [data-mode="riesgo"]').click();
+      g('riesgoSlInput').value = '76000'; g('riesgoSlInput').dispatchEvent(new Event('input', { bubbles: true }));
+      g('riesgoMaxInput').value = '200'; g('riesgoMaxInput').dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 320));
+      const alEntrar = { marcada: g('chkTpSl').checked, cajas: !g('bfTpSlCajas').hidden,
+        sl: +g('slInput').value, hint: (g('riesgoHint').textContent || '').replace(/\s+/g, ' ').trim() };
+      g('chkTpSl').click();                                  // la persona la apaga A MANO
+      await new Promise((r) => setTimeout(r, 240));
+      g('btnLong').click();
+      await new Promise((r) => setTimeout(r, 600));
+      // se mira el CONJUNTO de avisos vivos, no el primero: apagar la casilla ya pone el suyo y
+      // cortar la cadena por tamano dejaba fuera el del guard, que es el que interesa.
+      const avisos = [...g('toasts').querySelectorAll('*')].map((e) => e.textContent.trim()).filter(Boolean);
+      const apagada = { pos: !!(window.TE && TE.state.position),
+        dicho: avisos.some((t) => /necesita el stop encendido/.test(t)),
+        toast: (avisos.find((t) => /necesita el stop encendido/.test(t)) || avisos[0] || '').slice(0, 120) };
+      return { antes, alEntrar, apagada };
+    });
+    ok(riesgo.antes.marcada === false && riesgo.alEntrar.marcada && riesgo.alEntrar.cajas,
+       `entrar en Riesgo fijo enciende la casilla TP/SL por si sola (${riesgo.antes.marcada ? 'ya estaba encendida' : 'apagada'} → ${riesgo.alEntrar.marcada ? 'encendida y con las cajas a la vista' : 'sigue apagada'}): aqui el stop es el que calcula el tamano y no puede ir apagado`);
+    ok(riesgo.alEntrar.sl === 76000 && /TP\/SL encendidos/.test(riesgo.alEntrar.hint),
+       `y el campo de SL pasa a ser la copia visible del stop deducido (${riesgo.alEntrar.sl}), dicho en el propio aviso: «${riesgo.alEntrar.hint.slice(-78)}»`);
+    ok(riesgo.apagada.pos === riesgo.antes.pos && riesgo.apagada.dicho,
+       `apagarla a mano en este modo no cuela una orden sin stop: ${riesgo.apagada.pos ? 'se abrio igual (defecto)' : 'no se abrio nada'} y lo dice asi -${riesgo.apagada.toast}-`);
+    await page.evaluate(() => {
+      const g = (id) => document.getElementById(id);
+      // el modo de tamano vuelve a `% equity`: es el reposo del formulario y el que leen las secciones B..E
+      document.querySelector('#segSize [data-mode="pct"]').click();
+      g('tpInput').value = ''; g('tpInput').dispatchEvent(new Event('input', { bubbles: true }));
+      g('slInput').value = ''; g('slInput').dispatchEvent(new Event('input', { bubbles: true }));
+      const c = g('chkTpSl'); if (c.checked) c.click();
+      const q = document.querySelector('#quickSize [data-pct="0"]'); if (q) q.click();
+      // el plegado automatico vuelve a mandar: quien abrio el bloque a mano fue esta prueba
+      const bt = g('btnOrderAvanzado'); if (bt && bt.dataset.explicit === '1') { delete bt.dataset.explicit; bt.dataset.motivo = ''; }
+      window.dispatchEvent(new Event('resize'));
+    });
+    await new Promise((r) => setTimeout(r, 520));
+    const T = leeTpSl;
+
+    ok(T.reposo.fila.h >= 18 && T.reposo.fila.h <= 24 && T.reposo.caja.w === 12 && T.reposo.caja.h === 12
+       && T.reposo.tipografia.fs === 12 && T.reposo.tipografia.fw === '400' && T.reposo.separacion === 4
+       && T.reposo.tipografia.color === 'rgb(255, 255, 255)',
+       `la fila TP/SL como medida: ${T.reposo.fila.h} px de alto (18 suyos + el estirado a la diana tactil), caja-svg de ${T.reposo.caja.w}x${T.reposo.caja.h}, «${'TP/SL'}» a ${T.reposo.tipografia.fs}/${T.reposo.tipografia.fw} en ${T.reposo.tipografia.color} y ${T.reposo.separacion} px despues del icono`);
+    ok(T.reposo.diana.h >= 20 && T.reposo.diana.w >= 40,
+       `la diana del toque es la fila entera, no los 12 px del garabato: ${T.reposo.diana.w}x${T.reposo.diana.h} px (el contrato tactico de esta app pide >=20 px a todo control visible; el suyo mide 18 y ahi se queda la estetica, no el area pulsable)`);
+    ok(!T.reposo.marcada && T.reposo.cajasOcultas && T.reposo.sinFlash && T.reposo.resumen === 'sin niveles'
+       && T.reposo.leido && T.reposo.leido.on === false && T.reposo.leido.sl === null,
+       `en reposo la casilla llega DESMARCADA y las dos cajas no estan en pantalla (${T.reposo.sinFlash ? 'ni un flash: ocultas desde el marcado' : 'parpadean al arrancar'}); el resumen dice «${T.reposo.resumen}» y el motor lee ${JSON.stringify(T.reposo.leido)}`);
+    ok(T.marcado.alturas.every((h) => h === 40) && T.marcado.paso === 48 && T.marcado.tpArriba
+       && T.marcado.fondo === 'rgb(34, 35, 36)' && /^4px$/.test(T.marcado.radio) && T.marcado.pad === '12px'
+       && T.marcado.anchos.every((w) => w >= 240) && T.marcado.placeholders.join('/') === 'TP/SL',
+       `marcarla saca las DOS CAJAS medidades: ${T.marcado.alturas.join(' y ')} px de alto, paso ${T.marcado.paso}, ${T.marcado.anchos[0]} px de ancho, fondo ${T.marcado.fondo}, radio ${T.marcado.radio}, padding ${T.marcado.pad}, TP arriba -placeholder «${T.marcado.placeholders.join('» / «')}»— como en su pagina`);
+    ok(T.marcado.unidades.length === 2 && T.marcado.unidades.every((u) => u.t === 'Precio (USDT)'
+       && u.fs === 14 && u.color === 'rgb(145, 148, 153)' && u.dentro),
+       `la unidad va DENTRO de la caja, a la derecha y en gris medido: ${T.marcado.unidades.length} × «${(T.marcado.unidades[0] || {}).t}» a ${(T.marcado.unidades[0] || {}).fs}/${(T.marcado.unidades[0] || {}).fw} en ${(T.marcado.unidades[0] || {}).color}`
+       + ` [caja ${(T.marcado.unidades[0] || {}).caja} · unidad ${(T.marcado.unidades[0] || {}).uni}]`);
+    ok(T.escritos.valores.join('/') === '70000/80000' && T.escritos.leido.sl === 70000 && T.escritos.leido.tp === 80000
+       && T.escritos.resumenVisible === false && T.escritos.visibles === true,
+       `escritos los dos niveles, el lector del formulario los devuelve (${T.escritos.leido.sl} / ${T.escritos.leido.tp}) y el resumen de la fila se guarda para cuando la casilla esta apagada (visible: ${T.escritos.resumenVisible})`);
+    ok(T.conNiveles && Number.isFinite(T.conNiveles.sl) && Number.isFinite(T.conNiveles.tp),
+       `con la casilla marcada la orden sale CON los dos niveles: ${JSON.stringify(T.conNiveles)} -el camino real, no un ` + 'App.tpSlLee() inventado—');
+    ok(T.apagado.visibles === false && T.apagado.valores.join('/') === '70000/80000'
+       && T.apagado.leido.sl === null && T.apagado.leido.tp === null,
+       `desmarcar APAGA pero NO BORRA: las cajas se ocultan, los campos siguen leyendo ${T.apagado.valores.join('/')} y el motor devuelve sl=${T.apagado.leido.sl} tp=${T.apagado.leido.tp}`);
+    ok(T.sinNiveles && T.sinNiveles.sl == null && T.sinNiveles.tp == null,
+       `y la orden colocada con la casilla apagada no lleva niveles (${JSON.stringify(T.sinNiveles)}) -lo que el usuario ve apagado no se envia—`);
+    ok(/SL 70,?000/.test(T.apagado.resumen) && /TP 80,?000/.test(T.apagado.resumen) && T.apagado.resumenVisible,
+       `el resumen de la fila avisa de lo que hay apagado: «${T.apagado.resumen}»`);
+  }
+  const rotulos = await page.evaluate(() => {
+    const sel = '#orderCard .field-label, #orderCard .bf-tpl-lab, #topbar .field-label, #bottomPanel .field-label';
+    const mal = [];
+    for (const e of document.querySelectorAll(sel)) {
+      const cs = getComputedStyle(e);
+      const espaciado = parseFloat(cs.letterSpacing);
+      if (cs.textTransform !== 'none' || (Number.isFinite(espaciado) && espaciado > 0.2)) {
+        mal.push((e.id || e.className.toString().split(' ')[0]) + ':' + cs.textTransform + '/' + cs.letterSpacing);
+      }
+    }
+    return { n: document.querySelectorAll(sel).length, mal };
+  });
+  ok(rotulos.n >= 16 && rotulos.mal.length === 0,
+     `los ${rotulos.n} rótulos de campo del terminal van en minúsculas y sin espaciado (lo medido en su página: 12 px #919499, sin \`uppercase\` ni \`letter-spacing\`)`
+     + (rotulos.mal.length ? ` → quedan ${rotulos.mal.length}: ${rotulos.mal.slice(0, 4).join(', ')}` : '')
+     + ` - la regla venía de css/main.css:99 y el doc la daba por aplicada desde el §1: se comprobó midiendo, no recordando`);
   ok(est.posicionEnPestañas && est.pendientesEnPestañas, 'posición y órdenes pendientes viven en la pestaña Posiciones');
   ok(est.cuentaEnPestañas && est.statsEnPestañas && est.curvaEnPestañas, 'cuenta, estadísticas y curva de capital, en sus pestañas');
   ok(est.tradesEnPestañas && est.logEnPestañas && est.dibujosEnPestañas, 'trades, log y dibujos siguen accesibles por pestaña');
@@ -1199,13 +1367,19 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const g = (id) => document.getElementById(id);
     const card = g('orderCard'), estabaCerrado = card.classList.contains('adv-cerrado');
     if (estabaCerrado) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
+    /* SL y TP viven detras de su casilla desde el item 5b (en el sitio llega desmarcada, medido),
+       asi que contarlos exige desplegarlos: es el gesto real, no un trampolilo geometrico. */
+    const chk = g('chkTpSl'), estabaApagada = !!chk && !chk.checked;
+    if (estabaApagada) { chk.click(); await new Promise((r) => setTimeout(r, 320)); }
+    if (g('orderCard').classList.contains('adv-cerrado')) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
     const vis = [...document.querySelectorAll('#orderCard input[type=number]')].filter((i) => i.offsetParent !== null);
     const r = { n: vis.length, hs: vis.map((i) => Math.round(i.getBoundingClientRect().height)), ids: vis.map((i) => i.id) };
+    if (estabaApagada) { chk.click(); await new Promise((r2) => setTimeout(r2, 320)); }
     if (estabaCerrado) { g('btnOrderAvanzado').click(); await new Promise((r2) => setTimeout(r2, 320)); }
     return r;
   });
   ok(advAbierto.n >= 4 && advAbierto.hs.every((h) => h >= 24),
-     `al abrir «Avanzado» entran SL, TP y la comisión con alto táctil (${advAbierto.hs.join(',')} en ${advAbierto.n} campos: ${advAbierto.ids.join('/')})`);
+     `abriendo «Avanzado» y marcando la casilla TP/SL entran SL, TP y la comisión con alto táctil (${advAbierto.hs.join(',')} en ${advAbierto.n} campos: ${advAbierto.ids.join('/')})`);
   ok(est2.totalOculto, 'a 390 px la columna «Total» del libro se oculta (menos ruido, como en la app)');
   ok(est2.controles.length === 0,
      est2.controles.length ? `controles del formulario demasiado bajos para el dedo: ${est2.controles.map((c) => `${c.id}=${c.h}px`).join(', ')}`
@@ -1235,6 +1409,155 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(!leyM.pisa && leyM.dentro, `en móvil el aviso («${leyM.aviso}») va en su línea de la leyenda, sin pisar el OHLC`);
   ok(leyM.alto <= leyM.chart * 0.55, `la caja de la leyenda deja ver el gráfico en móvil (${leyM.alto} px de ${leyM.chart} px)`);
   ok(leyM.holgura >= 24, `leyenda y crédito se quedan fuera del eje de precio (${leyM.holgura} px de holgura)`);
+
+  /* ─────────── H2) EL MOVIL DE DOS VISTAS (§5.6, medido con tools/medir-movil-bitunix.js) ───────────
+     Su movil a 390x844: en la cabecera hay un grupo `pill-tabs` de DOS cascos de 44x32 (radios 999,
+     #1a1b1c, el activo #272829 en blanco) que cambia la pantalla de operar por la de carta; y la de
+     operar son DOS COLUMNAS -formulario de 180 utiles en x=15..195 y libro en x=210..383, sin carta
+     visible-, con el rotulo de 12/400 #919499 ENCIMA de cada caja y `Abrir Largo`/`Abrir Corto`
+     APILADOS a 180x40 con paso de 55 (y=624 y y=679). Aqui las columnas salen de 170 y 175: mismo
+     hueco de 15 px entre las dos y 15 de margen de pagina, y el ancho que no se comen las tarjetas
+     es el que ellos dan al libro. La ALTURA de la pastilla es 26, no 32, y la cuenta esta hecha en
+     css/bitunix.css (BLOQUE 24): con 32 el cabecero media 94 y `#chartWrap` perdia 4 px de velas. */
+  const mov = await page.evaluate(() => {
+    const g = (id) => document.getElementById(id);
+    const B = (e) => { if (!e) return null; const r = e.getBoundingClientRect();
+      return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height),
+               r: Math.round(r.right) }; };
+    const pastilla = g('bfVistas'), cs = (e) => e ? getComputedStyle(e) : null;
+    const cascos = [...document.querySelectorAll('#bfVistas .bf-vista')].map((e) => ({
+      v: e.dataset.vista, caja: B(e), fondo: cs(e).backgroundColor, texto: cs(e).color,
+      radio: parseFloat(cs(e).borderTopLeftRadius) }));
+    const card = g('orderCard'), cuerpo = card.querySelector('.card-body'), libro = g('bookCard');
+    const lab = card.querySelector('.field .field-label');
+    const largo = g('btnLong'), corto = g('btnShort');
+    const visibles = [...card.querySelectorAll('button, input, select')].filter((e) => e.offsetParent !== null);
+    return {
+      vista: document.body.dataset.vista,
+      pastilla: B(pastilla), fondoPastilla: cs(pastilla).backgroundColor, radioPastilla: cs(pastilla).borderTopLeftRadius,
+      cascos,
+      cartaArea: B(g('chartArea')), sidebar: B(g('sidebar')),
+      cols: cs(g('sidebar')).gridTemplateColumns, orden: B(card), libro: B(libro),
+      cuerpoSobra: cuerpo.scrollHeight - cuerpo.clientHeight, tarjetaSobra: card.scrollHeight - card.clientHeight,
+      corteCard: Math.max(0, card.scrollWidth - card.clientWidth), corteSidebar: Math.max(0, g('sidebar').scrollWidth - g('sidebar').clientWidth),
+      altoBtn: Math.round(largo.getBoundingClientRect().height),
+      paso: Math.round(corto.getBoundingClientRect().y - largo.getBoundingClientRect().y),
+      anchoLargo: Math.round(largo.getBoundingClientRect().width), anchoCorto: Math.round(corto.getBoundingClientRect().width),
+      radioBtn: parseFloat(cs(largo).borderTopLeftRadius), pxBtn: parseFloat(cs(largo).fontSize),
+      rotulo: lab ? { px: parseFloat(cs(lab).fontSize), peso: cs(lab).fontWeight, color: cs(lab).color,
+                      arribaDeCaja: Math.round(lab.getBoundingClientRect().bottom) <= Math.round(lab.parentElement.querySelector('input,select').getBoundingClientRect().top) + 2 } : null,
+      libroCols: getComputedStyle(libro.querySelector('.bf-row')).gridTemplateColumns.split(' ').length,
+      ultimoLibro: (() => { const e = g('bookLast'); if (!e) return null; const c = getComputedStyle(e);
+        return { px: parseFloat(c.fontSize), peso: c.fontWeight }; })(),
+      controles: visibles.map((e) => Math.round(e.getBoundingClientRect().height)),
+      doc: document.documentElement.scrollHeight - window.innerHeight,
+      ox: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  ok(mov.pastilla && Math.abs(mov.pastilla.w - 88) <= 2 && mov.cascos.length === 2
+     && mov.cascos.every((c) => Math.abs(c.caja.w - 44) <= 1 && c.caja.h >= 24)
+     && mov.cascos.every((c) => c.radio >= 12),
+     `el conmutador es un grupo de 88x26 con dos cascos de 44 y radio de pastilla (${mov.pastilla.w}×${mov.pastilla.h}, ${mov.cascos.map((c) => c.caja.w + '×' + c.caja.h).join('/')})`);
+  ok(mov.fondoPastilla.replace(/\s/g,'') === 'rgb(26,27,28)'
+     && mov.cascos.some((c) => c.v === mov.vista && c.fondo.replace(/\s/g,'') === 'rgb(39,40,41)')
+     && mov.cascos.some((c) => c.v === mov.vista && c.texto.replace(/\s/g,'') === 'rgb(255,255,255)'),
+     `la pastilla y su casilla activa, con sus colores medidos (${mov.fondoPastilla} / ${mov.cascos.map((c) => c.fondo).join(' · ')})`);
+  ok(mov.vista === 'carta', `de arranque el telefono abre en CARTA, no en operar (${mov.vista}) -desvio escrito en el registro: el de ellos es un terminal de trading y el nuestro uno de replay-`);
+  ok(mov.cartaArea.h > 100 && mov.sidebar.h <= 290, `en Carta el grafico ocupa y la franja del terminal es la fila de siempre (${mov.cartaArea.h} y ${mov.sidebar.h} px)`);
+
+  /* Y ahora el gesto: pasar a Operar. Se comprueba contra los numeros de la suya. */
+  await page.evaluate(() => { document.querySelector('#bfVistas [data-vista="operar"]').click(); });
+  await espera(600);
+  const ope = await page.evaluate(() => {
+    const g = (id) => document.getElementById(id);
+    const B = (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), r: Math.round(r.right) }; };
+    const card = g('orderCard'), libro = g('bookCard'), sb = g('sidebar'), cuerpo = card.querySelector('.card-body');
+    const cs = (e) => getComputedStyle(e);
+    const lab = card.querySelector('.field .field-label');
+    const caja = lab && lab.parentElement.querySelector('input, select');
+    const largo = g('btnLong'), corto = g('btnShort');
+    const fila = libro.querySelector('.bf-row');
+    return { vista: document.body.dataset.vista,
+      chart: B(g('chartArea')), sidebar: B(sb), cols: cs(sb).gridTemplateColumns,
+      orden: B(card), libro: B(libro), cuerpo: B(cuerpo),
+      sinCorteVertical: cuerpo.scrollHeight - cuerpo.clientHeight, sinCorteTarjeta: card.scrollHeight - card.clientHeight,
+      sinDesbordes: [sb, card, libro, cuerpo].map((e) => Math.max(0, e.scrollWidth - e.clientWidth)),
+      botones: [B(largo), B(corto)], paso: Math.round(corto.getBoundingClientRect().y - largo.getBoundingClientRect().y),
+      radio: parseFloat(cs(largo).borderTopLeftRadius), px: parseFloat(cs(largo).fontSize),
+      rotulo: lab ? { px: parseFloat(cs(lab).fontSize), peso: cs(lab).fontWeight, color: cs(lab).color,
+                      encima: Math.round(lab.getBoundingClientRect().bottom) <= Math.round((caja || lab).getBoundingClientRect().top) + 2 } : null,
+      libroCols: fila ? cs(fila).gridTemplateColumns.split(' ').length : 0,
+      totalOculto: fila ? cs(fila.querySelector('.t')).display === 'none' : null,
+      dianas: [...card.querySelectorAll('button, input, select')].filter((e) => e.offsetParent !== null).map((e) => Math.round(e.getBoundingClientRect().height)),
+      /* Los dos defectos que la pantalla delataba y la geometria no: `text-overflow: ellipsis` en
+         los segmentados del tier de 640 (salia `Cruz...`) y el `Libr0,5` de la cabecera del libro,
+         dos nodos cuyo rect se solapa. Se mide, no se mira. */
+      puntos: [...card.querySelectorAll('.seg-btn, .bf-lev-chips *, .bf-cost *')]
+        .filter((e) => e.children.length === 0 && e.scrollWidth - e.clientWidth > 1
+          && /hidden|ellipsis/.test(getComputedStyle(e).textOverflow)).map((e) => (e.innerText || '').trim().slice(0, 12)),
+      pisados: (() => { const hs = document.querySelector('#bookCard > .card-head'); if (!hs) return 0;
+        const ks = [...hs.children].map((e) => e.getBoundingClientRect()); let n = 0;
+        for (let x = 0; x < ks.length; x++) for (let y = x + 1; y < ks.length; y++) {
+          const A = ks[x], C = ks[y];
+          if (A.right > C.left + 1 && C.right > A.left + 1 && A.bottom > C.top + 1 && C.bottom > A.top + 1) n++; }
+        return n; })(),
+      /* Y el mismo defecto, medido en geometria: una cabecera con el alto fijo que envuelve pinta su
+         segunda fila fuera de su caja. `salta` es lo que desborda de su propio rect. */
+      cabeceras: ['#bookCard', '#orderCard'].map((sel) => { const h = document.querySelector(sel + ' > .card-head');
+        if (!h) return null; const r = h.getBoundingClientRect();
+        /* Solo lo que se PINTA: el menu de agregacion vive dentro de la cabecera con
+           `visibility: hidden` y caja de 9 px en el pie de la tarjeta, y contarlo como «por encima de
+           su caja» era un falso positivo de la propia ancla (lo confirmé midiendo el rect de ese
+           descendiente: y=418 en una cabecera que termina en 139). */
+        const fuera = [...h.querySelectorAll('*')].filter((e) => { const c = getComputedStyle(e);
+          return e.offsetParent !== null && c.visibility !== 'hidden' && c.opacity !== '0'
+            && e.getBoundingClientRect().bottom > r.bottom + 1; }).length;
+        const cuerpo = document.querySelector(sel + ' > .card-body, ' + sel + ' .card-body');
+        const primera = cuerpo && cuerpo.querySelector('.bf-row, .seg, .field');
+        return { sel, alto: Math.round(r.height), fuera,
+          pisaCuerpo: primera ? Math.max(0, Math.round(r.bottom - primera.getBoundingClientRect().top)) : 0 }; }).filter(Boolean),
+      cerrarTodo: (() => { const e = card.querySelector('.bf-cost .bf-flat'); if (!e) return null;
+        const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; })(),
+      doc: document.documentElement.scrollHeight - window.innerHeight,
+      ox: document.documentElement.scrollWidth - window.innerWidth,
+      guardado: (window.ST && ST.get) ? ST.get('vistaMovil', null) : null };
+  });
+  ok(ope.vista === 'operar' && ope.chart.h === 0, `al pasar a Operar la carta se va de la pantalla (alto ${ope.chart.h})`);
+  ok(ope.orden.x < ope.libro.x && ope.orden.r <= ope.libro.x + 1 && ope.sidebar.h > 300,
+     `dos columnas, formulario · libro, sin pisarse (orden x=${ope.orden.x}..${ope.orden.r}, libro x=${ope.libro.x}, franja ${ope.sidebar.h} px)`);
+  ok(/170px 175px/.test(ope.cols), `el reparto medido: 170 del formulario y 175 del libro (salio «${ope.cols}», el suyo es 180 y 175)`);
+  ok(ope.paso === 55 && ope.botones[0].h === 40 && ope.botones[1].h === 40
+     && ope.botones[0].w === ope.botones[1].w && ope.radio >= 40 && ope.px === 14,
+     `los dos botones, apilados a paso 55 y 40 px de alto, en pastilla de 14 px (salto ${ope.paso}px, ${ope.botones[0].w}×${ope.botones[0].h}, radio ${ope.radio})`);
+  ok(ope.rotulo && ope.rotulo.px === 12 && ope.rotulo.peso === '400' && ope.rotulo.encima
+     && ope.rotulo.color.replace(/\s/g,'') === 'rgb(145,148,153)',
+     `el rotulo va ENCIMA de su caja, a 12/400 en #919499 (${ope.rotulo && ope.rotulo.px}/${ope.rotulo && ope.rotulo.peso})`);
+  ok(ope.sinCorteVertical === 0 && ope.sinCorteTarjeta === 0 && ope.sinDesbordes.every((n) => n === 0),
+     `nada queda recortado en las dos columnas (vertical ${ope.sinCorteVertical}/${ope.sinCorteTarjeta}, horizontal ${ope.sinDesbordes.join('/')})`);
+  ok(ope.doc <= 0 && ope.ox === 0, `la vista de operar entra en 844 px sin deslizar la pagina (documento ${844 + ope.doc}, scroll horizontal ${ope.ox})`);
+  ok(ope.dianas.length >= 6 && ope.dianas.every((h) => h >= 20), `todo control visible del formulario sigue siendo diana (${ope.dianas.join('/')})`);
+  ok(ope.puntos.length === 0 && ope.pisados === 0,
+     `en la columna de 170 no hay ni un rotulo cortado con puntos ni un par de nodos que se pisen` +
+     `${ope.puntos.length ? ' (los puntos: ' + ope.puntos.join(', ') + ')' : ''}${ope.pisados ? ' (pisados: ' + ope.pisados + ')' : ''}`);
+  ok(ope.cabeceras.every((c2) => c2.fuera === 0 && c2.pisaCuerpo <= 0),
+     `ninguna cabecera pinta por encima de su caja (salta ${ope.cabeceras.map((x) => x.fuera).join('/')} y pisa el cuerpo ${ope.cabeceras.map((x) => x.pisaCuerpo).join('/')} px)`);
+  ok(ope.cerrarTodo && ope.cerrarTodo.h <= 26 && ope.cerrarTodo.w >= 70,
+     `«Cerrar todo» en su fila de la rejilla, sin partirse en dos (${ope.cerrarTodo && ope.cerrarTodo.w}×${ope.cerrarTodo && ope.cerrarTodo.h})`);
+  ok(ope.libroCols === 2 && ope.totalOculto === true, `el libro, en su columna de 175, con dos columnas de datos (${ope.libroCols})`);
+  ok(ope.guardado === 'operar', `la eleccion queda recordada (ST: «${ope.guardado}») -en el suyo tambien es memoria de usuario-`);
+
+  /* Y vuelta: el conmutador tiene que devolver el terminal exacto que midio `test:layout`. Se deja
+     en Carta a proposito, porque el resto del fichero (y las capturas) parten de ese reposo. */
+  await page.evaluate(() => { document.querySelector('#bfVistas [data-vista="carta"]').click(); });
+  await espera(600);
+  const vta = await page.evaluate(() => {
+    const g = (id) => document.getElementById(id);
+    return { vista: document.body.dataset.vista, chart: Math.round(g('chartArea').getBoundingClientRect().height),
+      franja: Math.round(g('sidebar').getBoundingClientRect().height), scrollea: g('sidebar').scrollWidth > g('sidebar').clientWidth + 2,
+      doc: document.documentElement.scrollHeight - window.innerHeight, ox: document.documentElement.scrollWidth - window.innerWidth };
+  });
+  ok(vta.vista === 'carta' && vta.chart > 100 && vta.franja <= 290 && vta.scrollea && vta.ox === 0,
+     `y al volver a Carta el terminal es el de antes (grafico ${vta.chart}, franja ${vta.franja} que desliza: ${vta.scrollea ? 'si' : 'no'}, scroll ${vta.ox})`);
 
   // Evidencia visual: la misma página queda capturada en docs/ para el README.
   await page.setViewport({ width: 1440, height: 900 });

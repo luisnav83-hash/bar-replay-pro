@@ -2427,3 +2427,216 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #orderCard .bf-lev-chip { min-width: 18px; font-size: 10.5px; }
   #orderCard .bf-lev-chips { gap: 5px; }
 }
+
+/* ═══ BLOQUE 22 · TP/SL como casilla que despliega las dos cajas (ítem 5.5b de
+   `docs/brecha-visual-bitunix.md`). TODO medido en su pagina el 11-oct, 1600x900, es-ES,
+   sin sesion: fila 272x18 con casilla-svg de 12x12 + `TP/SL` a 12/400 en blanco a 4 px;
+   dos cajas de 272x40 con paso 48 (hueco 8), #222324, radio 4 y `padding: 0 12px`; input
+   de 146x38 a 14/400 en blanco con `placeholder` TP (arriba) y SL (abajo); sufijo de
+   100x38 con `Precio (USDT)` a 14/400 en #919499; la fila a 12 px por encima y 16 px por
+   debajo de los botones. Va al final del archivo porque los `.field` heredados del tema
+   (css/main.css:97 `display:flex; flex-direction:column`) ganan por orden si no. ═══ */
+#orderCard .bf-tpsl { margin: 2px 0 0; }
+#orderCard .bf-tpsl-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px;
+}
+#orderCard .bf-check {
+  position: relative; display: flex; align-items: center; gap: 4px; cursor: pointer;
+  -webkit-user-select: none; user-select: none; min-width: 0; min-height: 22px;
+}
+/* La casilla NO es un cuadrado con borde pintado por nosotros: en el sitio es un svg de 12x12
+   que lleva dentro la caja y la palomita. Aqui se dibuja igual. El `input` real se estira sobre
+   toda la etiqueta (medida: 50x18 en su pagina) y queda invisible: es la via normal del teclado
+   y de las pruebas, y de paso la DIANA tactil pasa a ser la fila entera -22 px como minimo— en
+   vez de los 12 del garabato, que es el mismo criterio con el que los `10X` de la barra de modo
+   estiran a lo alto de la pilora (Bloque 21): se copia la TIPOGRAFIA y la caja medidas, no se
+   encoje el area pulsable por parecerse. */
+#orderCard .bf-check input {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; pointer-events: none;
+}
+#orderCard .bf-check-caja { flex: 0 0 auto; display: block; width: 12px; height: 12px; overflow: visible; }
+#orderCard .bf-check-caja rect { fill: transparent; stroke: var(--line); stroke-width: 1; }
+#orderCard .bf-check-tick { fill: none; stroke: var(--tx-1); stroke-width: 1.6; stroke-linecap: round; opacity: 0; }
+#orderCard .bf-check:has(input:checked) .bf-check-caja rect { fill: var(--up); stroke: var(--up); }
+#orderCard .bf-check:has(input:checked) .bf-check-tick { opacity: 1; }
+#orderCard .bf-check:has(input:focus-visible) .bf-check-caja { outline: 2px solid var(--tx-1); outline-offset: 2px; border-radius: 3px; }
+#orderCard .bf-check-txt { font-size: 12px; font-weight: 400; color: var(--tx-1); white-space: nowrap; }
+#orderCard .bf-tpsl-sum {
+  font-size: 12px; font-weight: 400; color: var(--tx-3);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#orderCard .bf-tpsl-cajas { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+/* `hidden` sobre un elemento al que una regla nuestra le pone `display: flex` no hace nada si
+   la regla gana por orden: se repite el selector con el atributo, que pesa mas. */
+#orderCard .bf-tpsl-cajas[hidden] { display: none; }
+#orderCard .bf-in {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  height: 40px; margin: 0; padding: 0 12px; background: var(--bg-3); border-radius: var(--r);
+}
+#orderCard .bf-in input {
+  flex: 1 1 auto; min-width: 0; height: 100%; border: 0; background: transparent;
+  color: var(--tx-1); font-size: 14px; font-weight: 400; padding: 0;
+}
+#orderCard .bf-in input::placeholder { color: var(--tx-3); opacity: 1; }
+#orderCard .bf-in input::-webkit-outer-spin-button, #orderCard .bf-in input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#orderCard .bf-in input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+#orderCard .bf-in-unidad { flex: 0 0 auto; font-size: 14px; font-weight: 400; color: var(--tx-3); }
+#orderCard .bf-in:focus-within { box-shadow: inset 0 0 0 1px var(--tx-3); }
+/* En el telefono las cajas no se encogen de alto: no hay medicion suya a ese ancho y el
+   presupuesto vertical de la tarjeta lo pone la escalera (ver el tier de BLOQUE 21). Lo que
+   cede es la unidad, que si no se come el hueco del numero. */
+@media (max-width: 640px) {
+  #orderCard .bf-in { padding: 0 10px; gap: 6px; }
+  #orderCard .bf-in-unidad { font-size: 12px; }
+  #orderCard .bf-tpsl-cajas { gap: 6px; margin-top: 10px; }
+  #orderCard .bf-tpsl-cajas .quick-row { margin: 2px 0 0; }
+}
+
+/* ═══ BLOQUE 23 · SOBRANTE DEL §1, CAZADO AL VESTIR TP/SL · LOS RÓTULOS DE CAMPO ═══
+   `css/main.css:99` (.field-label) sigue llegando del tema anterior con `text-transform:
+   uppercase` + `letter-spacing: .7px`. El §1 de `docs/brecha-visual-bitunix.md` dice lo
+   contrario, y medido en la suya vuelve a decirlo: sus rótulos secundarios son 12 px #919499
+   SIN mayusculas y SIN espaciado (filas 2 y 4 de la tabla). Es decir: el doc lo daba por
+   aplicado y no lo estaba en las 16 etiquetas del panel de ordenes.
+   Como anécdota de método, que vale más que el arreglo: el barrido que iba a contarlo se hizo
+   sobre `#app *` -y la carta de ordenes cuelga de `main#workspace`, no de `#app`—, asi que
+   devolvia «0 rótulos en mayusculas» con toda la cara. Despues, el barrido desde `body`
+   tampoco los veia porque el clic de rigor en «Avanzado» lo ENCONTRO abierto y lo cerro. Dos
+   veces el mismo error: medir sin comprobar que se esta mirando lo que se cree mirar. */
+body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-spacing: 0; }
+
+/* ═════════════════ BLOQUE 24 · el MOVIL de dos vistas, medido en su página (§5.6) ═════════
+   Medición: `tools/medir-movil-bitunix.js`, 11-oct, 390×844 a dpr 3 con `isMobile`+`hasTouch`,
+   es-ES y sin sesión. Lo que dice la suya:
+     · la cabecera lleva un grupo `pill-tabs` de DOS ítems de 44×32 con radio 999 sobre #1a1b1c,
+       sin texto (los dos dan `t:""`); con él se pasa de la pantalla de operar a la de carta;
+     · la pantalla de operar son DOS COLUMNAS: formulario `x=15..195` (180 px útiles) y libro
+       `x=210..383` (~175), con la carta FUERA de esa vista. El formulario mide lo que mide -de
+       y=276 (segmentado) a y=776 (Coste/Máximo)- y no cabe en una franja de 250 px: por eso
+       hasta hoy no lo habíamos copiado, y por eso va atado a su propia vista;
+     · dentro: rótulo de 12/400 #919499 ENCIMA de la caja (no en línea), cajas de 40 px, y la
+       pareja de botones APILADA a 180×40 con paso de 55 px (`Abrir Largo` arriba, radio 9999);
+     · la fila de temporalidades de la vista de carta: chips de 30×22 a 12/400 #919499 con radio 4
+       y la activa en CAJA #272829 blanca -en el móvil se pinta, no se subraya, al revés que las
+       pestañas del panel inferior (§5.4)-.
+   LO QUE NO SE COPIA de su móvil, y por escrito para no retomarlo por despiste: el banner
+   `Bitunix App … Descargar` y su `Registrarse` lima; la navegación inferior flotante
+   (`Página prin… | Mercados | Negociar | Activos`, ítems 71×60) porque no tenemos esas secciones;
+   el medidor de financiación dibujado (no lo calculamos); el segmento `Abierto | Cerrado` de
+   88×26 con la activa verde rellena, que es un filtro suyo que aquí no existe -inventarle un
+   equivalente sería decorar con datos ajenos-; y la banda superior (24/700 el último precio,
+   12/400 las estadísticas en dos columnas, fondo #0f0f0f), que se hace junto con la de escritorio:
+   es el capítulo abierto del §5 y reestructurar `#topbar` en estrecho pisa el presupuesto vertical
+   que defienden las 200 anclas de `tests/responsive.test.js`.
+   ARRANQUE del conmutador: en `carta`. El suyo abre en operar porque es una pantalla para operar;
+   la nuestra es una para replay y abriría en un formulario vacío. La elección queda en `ST`. */
+#bfVistas { display: none; }
+
+@media (max-width: 640px) {
+  /* El grupo `pill-tabs` suyo mide 88 px de ancho total, dos cascos de 44, radio 9999, sobre
+     #1a1b1c, y la casilla activa pintada #272829 con el glifo blanco (medido a 390x844 dpr3).
+     LA ALTURA no es la suya: ponemos 26 en vez de los 32 medidos, y la cuenta esta hecha, no
+     adivinada -con 32 la fila del cabecero pasaba de 32 a 36 y `#chartWrap` perdia 4 px (medido:
+     velas 194 -> 190 con la pastilla y sin ella, en el mismo montaje); es la misma cuenta que ya
+     se saco con «Avanzado» en el §5.5a, y aqui el grafico no tiene 4 px que prestar. La forma
+     (88 de ancho, 44 por casco, radio 9999, los dos colores) si es la medida—. */
+  #bfVistas { display: inline-flex; align-items: center; height: 26px; padding: 0;
+              background: #1a1b1c; border-radius: 9999px; }
+  #bfVistas .bf-vista { width: 44px; height: 26px; padding: 0; border: 0; border-radius: 9999px;
+    background: transparent; color: var(--tx-3); font-size: 15px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center; }
+  #bfVistas .bf-vista.active { background: #272829; color: #fff; }
+  #bfVistas .bf-vista:active { filter: brightness(.9); }
+
+  /* ── Vista OPERAR: las dos columnas suyas ──
+     Se levanta el tope de 250 px de la franja y el de 221 px del cuerpo del formulario, que
+     existían para no robarle altura al gráfico: en esta vista no hay gráfico que proteger. El
+     libro se queda con sus 175 px medidos y con las dos columnas que ya tiene en estrecho
+     (`#bookCol` oculta), que son justo las suyas: `Precio (USDT)` y `Cant. (USDT)`. */
+  body[data-vista="operar"] #chartArea { display: none; }
+  body[data-vista="operar"] #sidebar { display: grid; max-height: none; align-items: start;
+    grid-template-columns: minmax(0, 1fr) 175px; gap: 15px; padding: 6px 15px 12px;
+    overflow: visible; }
+  body[data-vista="operar"] #sidebar > .card { max-height: none; }
+  body[data-vista="operar"] #sidebar > #orderCard > .card-body { max-height: none; overflow: visible;
+    padding: 6px 8px 8px; gap: 6px; }
+  /* Y `height: auto`: el cuerpo del telefono vive de la variable `--cuerpo` (216 px) mas que de su
+     `max-height`, asi que quitar solo el tope dejaba la caja en 418 px con 445 de contenido -medido:
+     27 px de cuerpo y 65 de tarjeta desbordados, o sea la fila de botones recortada—. */
+  body[data-vista="operar"] #sidebar > .card { height: auto; }
+  body[data-vista="operar"] #sidebar > .card > .card-body { height: auto; --cuerpo: auto; }
+  /* ANCHOS, medidos tras montar las columnas: la tarjeta de orden se quedaba en 146 px utiles
+     contra los 180 del suyo, y eso recortaba su cabecera (210 de contenido en 145) y dejaba los
+     botones del segmentado a 1-3 px de su palabra. Se quita el margen de las tarjetas -el hueco
+     entre columnas ya lo pone el `gap` de 15, que es el suyo—, la cabecera puede hacer dos filas,
+     y el segmentado DESLIZA en vez de cortar: es el mismo recurso que usa el cabecero del telefono
+     con los chips de temporalidad, y un control que se alcanza deslizando no esconde datos. */
+  body[data-vista="operar"] #sidebar > .card { margin-left: 0; margin-right: 0; }
+  /* `.card` arrastra de la epoca de la fila deslizante `min/max-width: calc(100% - 24px)` -para
+     que asomara la vecina—, y en la rejilla de dos columnas eso son 24 px perdidos de golpe (146
+     utiles en vez de 170). Aqui cada tarjeta vale su columna. */
+  body[data-vista="operar"] #sidebar > .card { width: auto; min-width: 0; max-width: none; }
+  body[data-vista="operar"] #orderCard > .card-head { flex-wrap: wrap; row-gap: 2px; min-height: 24px; }
+  body[data-vista="operar"] #orderCard > .card-head > * { min-width: 0; }
+  body[data-vista="operar"] #sidebar > #orderCard > .card-body { padding-left: 4px; padding-right: 4px; }
+  /* Todo segmentado de la carta, en la columna de 170: DESLIZA en vez de cortar. No era solo
+     `#segOrderType` -la pantalla de nuestra vista de operar (docs/movil-nuestro-operar.png) enseba
+     `Cruz...` en la pildora del margen y `Libr0,5` en la cabecera del libro, las dos cosas por el
+     mismo `text-overflow: ellipsis` del tier de 640—, asi que la regla va por `.seg` y la cabecera
+     puede hacer dos filas. */
+  body[data-vista="operar"] #orderCard .seg { overflow-x: auto; scrollbar-width: none; }
+  body[data-vista="operar"] #orderCard .seg > .seg-btn { min-width: max-content; text-overflow: clip; }
+  body[data-vista="operar"] #bookCard > .card-head { flex-wrap: wrap; row-gap: 2px; min-height: 24px; }
+  /* `height: auto`, y no solo `min-height`: la cabecera del libro tiene el alto FIJO en 28 px
+     (regla del tier de 640, del §5.3) y al envolver a dos filas la segunda se pintaba ENCIMA de la
+     primera fila del libro -medido: `#bookSrc` y `#btnBookLive` en y=129/126 con la cabecera
+     terminando en 125, y se veia el `78,508.00` tachado—. O se le deja crecer, o se corta; aqui
+     crece, que es lo que no esconde nada. */
+  body[data-vista="operar"] #bookCard > .card-head { height: auto; padding-top: 2px; }
+  /* Lo mismo para la de 6rdenes: el `min-height` no basta si otra regla pone el alto fijo, y las
+     dos envuelven en 170 px. Una sola frase para las dos tarjetas. */
+  body[data-vista="operar"] #sidebar > .card > .card-head { height: auto; }
+  /* El caret `▾` del agregador esta en absolute y buscaba su caja en otro sitio: al envolver la
+     cabecera se quedaba solo, 280 px mas abajo (medido: `I` en y=418..427 dentro de `label
+     .bf-agreg`, con la cabecera terminando en 139). Se le da su propia caja de referencia. */
+  body[data-vista="operar"] #bookCard .bf-agreg { position: relative; }
+
+  /* LA BANDA DE RATIO, en el telefono entero (no solo en Operar): a 175 px -y tambien en la franja
+     de 374 de hoy- las dos etiquetas salian PEGADAS (`B74.64 %S25.36 %`) porque la fila vive dentro
+     de una `.bf-book-frac` puesta en `display:flex` por el propio tier de 640 y se ajustaba a su
+     texto: `justify-content: space-between` no tenia donde repartir. Se le da el ancho de la fila,
+     que es lo que hace que el verde quede a la izquierda y el rojo a la derecha, como en la suya. */
+  #sidebar > #bookCard > .card-body > .bf-book-frac > .bf-frac-lab { width: 100%; }
+  body[data-vista="operar"] #bookCard > .card-head > * { min-width: 0; }
+  /* `Cerrar todo` pide 80 px y en la rejilla de dos le quedaban 74: partido en dos lineas. Pasa a
+     ocupar su propia fila dentro de la rejilla, a la izquierda, sin partirse (el suyo mide 80x22). */
+  body[data-vista="operar"] #orderCard .bf-cost .bf-flat { grid-column: 1 / -1; justify-self: start;
+    white-space: nowrap; }
+  /* Rótulo encima de la caja, a 12/400 en #919499 -en línea y a 9 px era una economía de la
+     franja de 250, aquí no hace falta-. */
+  body[data-vista="operar"] #orderCard .field { flex-direction: column; align-items: stretch; gap: 2px; }
+  body[data-vista="operar"] #orderCard .field .field-label { font-size: 12px; white-space: normal; }  /* peso 400, no el 600 heredado: medido en el suyo, `Precio`/`Cantidad` son 12/400 en #919499. */
+  body[data-vista="operar"] #orderCard .field .field-label { font-weight: 400; }
+  body[data-vista="operar"] #orderCard .ord-segs { display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 6px; }
+  /* Botones de operar: 180×40 apilados con paso de 55 px (medido: y=624 y y=679), radio 9999 y
+     14/500 blanco. `Abrir Largo` primero, como en su columna izquierda. */
+  body[data-vista="operar"] #orderCard .order-actions { display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 15px; }
+  body[data-vista="operar"] #orderCard .order-actions .btn { height: 40px; font-size: 14px;
+    border-radius: 9999px; }
+  /* Coste / Máximo: rejilla de dos casillas con rótulo 12/400 y valor 12/600 (medido y=734..776).
+     El botón «Cerrar todo» se queda de 24 px: es la diana táctil mínima que nos exige el contrato
+     táctil del panel, y el suyo mide 22 px porque su gesto tiene además la tecla. */
+  body[data-vista="operar"] #orderCard .bf-cost { display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px 8px   /* 12 de hueco pedian 3 px de recorte en la columna de 170 (medido: 164 de contenido en 161) */; font-size: 12px; min-height: 0; align-items: center; }
+  body[data-vista="operar"] #orderCard .bf-cost .bf-flat { height: 24px; font-size: 12px; }
+
+  /* ── Los chips de temporalidad, en las DOS vistas: 30×22, 12/400 en #919499, radio 4 y la
+     activa en caja #272829 blanca. No cambian de alto respecto a lo de hoy, así que van fuera
+     del [data-vista] y no tocan el presupuesto vertical. */
+  #topbar #tfQuick { gap: 4px; }
+  #topbar #tfQuick .tf-btn { height: 22px; min-width: 30px; padding: 0 5px; font-size: 12px;
+    border: 0; border-radius: 4px; background: transparent; color: var(--tx-3); }
+  #topbar #tfQuick .tf-btn.active { background: #272829; color: #fff; }
+}

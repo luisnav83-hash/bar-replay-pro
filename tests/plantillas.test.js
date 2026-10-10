@@ -177,6 +177,17 @@ const LECTURA = `(() => {
   await page.click('#segMarginMode [data-mm="isolated"]');
   await page.evaluate(() => { const r = document.getElementById('levRange'); r.value = '20'; r.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.click('#quickSize [data-pct="50"]');
+  /* Los atajos de % escriben en las dos cajas de TP/SL, y ésas viven detras de su casilla desde el
+     item 5b de la piel (asi en el sitio: en reposo llega desmarcada, medido). Marcarla aqui es
+     parte del gesto real, no un apano -sin casilla no hay cajas donde escribir—. */
+  await page.evaluate(() => { const c = document.getElementById('chkTpSl'); if (c && !c.checked) c.click(); });
+  await espera(260);
+  /* Marcar la casilla hace crecer el bloque ~115 px y el plegado automatico lo cierra -que es su
+     trabajo: los botones no pueden quedar bajo el borde de la columna—. Este test necesita los
+     controles de dentro, asi que abre a mano; el clic deja `explicit` y el automatico se aparta. */
+  await page.evaluate(() => { const c = document.getElementById('orderCard');
+    if (c.classList.contains('adv-cerrado')) document.getElementById('btnOrderAvanzado').click(); });
+  await espera(380);
   await page.click('#quickSlTp [data-slpct="1"]');
   await page.click('#quickSlTp [data-tppct="2"]');
   await espera(400);

@@ -127,6 +127,24 @@
         <option value="1w">1 semana</option>
       </select>
     </label>
+    <!-- El conmutador va AQUI, dentro de la fila del par, y no como hijo directo de `#topbar`:
+         el cabecero movil es una rejilla de dos columnas y tres filas de alto fijo (medido:
+         `28px 32px 24px` / `186px 188px`), y meter un quinto hijo la auto-colocacion lo sentaba
+         ENCIMA de la fila del par -`#bfVistas` y `.topbar-group` salian los dos en x=8 y=30 de 374x32,
+         y `elementFromPoint` devolvia la pildora en el centro del boton del simbolo: el boton del par
+         y el chip activo dejaban de ser alcanzables (lo canto `test:layout`)-. Aqui ademas queda a la
+         vista sin deslizar la fila, que para un boton de cambiar de vista es obligatorio. -->
+  <!-- Conmutador de vista del telefono (piel §5.6). En su pagina es un grupo `pill-tabs` de DOS
+       items de 44x32 con radio 999 sobre #1a1b1c, SIN texto (medido: los dos dan `t:""`) -es lo que
+       da acceso a la carta cuando el formulario y el libro se quedan toda la pantalla—. En nuestro
+       movil hace el mismo servicio: `Carta` deja el terminal como estaba y `Operar` monta sus dos
+       columnas. Solo existe en la franja estrecha (css/bitunix.css, BLOQUE 24). -->
+    <div class="bf-vistas" id="bfVistas" role="group" aria-label="Vista del teléfono">
+    <button class="bf-vista active" type="button" data-vista="carta" aria-label="Vista de carta"
+            title="Carta: el terminal ocupa la pantalla">▦</button>
+    <button class="bf-vista" type="button" data-vista="operar" aria-label="Vista de operar"
+            title="Operar: formulario y libro, como en su aplicación">⇄</button>
+    </div>
 
     <label class="field" title="Fecha y hora en la que empieza el replay (las velas anteriores sirven de contexto)">
       <span class="field-label">Inicio replay</span>
@@ -755,25 +773,61 @@
           </label>
         </div>
 
-        <div class="grid-2">
-          <label class="field">
-            <span class="field-label" id="lbSl">Stop Loss (precio)</span>
-            <input type="number" id="slInput" step="any" placeholder="opcional">
-          </label>
-          <label class="field">
-            <span class="field-label" id="lbTp">Take Profit (precio)</span>
-            <input type="number" id="tpInput" step="any" placeholder="opcional">
-          </label>
-        </div>
+        <!-- ══ TP/SL, MEDIDO EN SU PÁGINA (11-oct, 1600x900, es-ES, sin sesión) ══
+             La fila es de 272x18: una CASILLA de 12x12 (svg, no una caja con borde de 16) +
+             `TP/SL` a 12 px / peso 400 en #ffffff a 4 px del icono, y `space-between` con un
+             `Avanzado` de 55x14 + caret de 12 en el extremo derecho. Al marcarla salen DOS CAJAS
+             de 272x40 con paso de 48 (8 de hueco), fondo #222324, radio 4 px y `padding: 0 12px`;
+             DENTRO, el input de 146x38 a 14 px en blanco con `placeholder="TP"` la de arriba y
+             `placeholder="SL"` la de abajo -ASI distinguen ellas: no hay rótulo fuera ni prefijo,
+             el prefijo mide 0 px-, y a la derecha un sufijo de 100x38 con `Precio (USDT)` a 14 px
+             en #919499 y su caret de 12. La fila de arriba queda a 12 px y los botones a 16; los
+             botones bajan 100 px. Todo eso está copiado.
+             LO QUE NO SE COPIA, dicho: (1) el `Avanzado` de ESA fila abre sus opciones avanzadas
+             de TP/SL (tipo de disparo, ratio, etc.), que aquí no existen -inventar un botón que no
+             abre nada sería decoración-; en su sitio va la RESUMEN de lo escrito cuando la casilla
+             está desmarcada, que sí es dato; (2) el `Precio (USDT) ▾` suyo es un selector de unidad
+             (precio / % / margen) que sin sesión no se pudo abrir, así que lo pintamos como texto
+             de unidad -que es exactamente lo que dice- y sin caret: nuestros campos son niveles de
+             precio y no hay segunda unidad que elegir; (3) el `▾`/`▸` y el orden TP-antes-de-SL sí
+             se copian: el nuestro estaba al revés y eso era una diferencia de verdad. -->
+        <div class="bf-tpsl" id="bfTpSl">
+          <div class="bf-tpsl-row">
+            <label class="bf-check" for="chkTpSl" title="Take profit / stop loss: desmarcar APAGA los dos niveles (lo escrito se guarda, no se envía)">
+              <input type="checkbox" id="chkTpSl">
+              <svg class="bf-check-caja" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="11" height="11" rx="2"></rect>
+                <path class="bf-check-tick" d="M2.7 6.2 4.9 8.4 9.3 3.7"></path>
+              </svg>
+              <span class="bf-check-txt">TP/SL</span>
+            </label>
+            <span class="bf-tpsl-sum" id="bfTpSlSum" hidden></span>
+          </div>
+          <div class="bf-tpsl-cajas" id="bfTpSlCajas" hidden>
+            <label class="field bf-in">
+              <span class="field-label visually-hidden" id="lbTp">Take Profit (precio)</span>
+              <input type="number" id="tpInput" step="any" placeholder="TP" title="Precio de take profit (nivel de precio, no distancia)">
+              <span class="bf-in-unidad">Precio (USDT)</span>
+            </label>
+            <label class="field bf-in">
+              <span class="field-label visually-hidden" id="lbSl">Stop Loss (precio)</span>
+              <input type="number" id="slInput" step="any" placeholder="SL" title="Precio de stop loss (nivel de precio, no distancia)">
+              <span class="bf-in-unidad">Precio (USDT)</span>
+            </label>
 
-        <div class="quick-row" id="quickSlTp">
-          <button class="chip" data-slpct="0.5">SL 0.5%</button>
-          <button class="chip" data-slpct="1">SL 1%</button>
-          <button class="chip" data-slpct="2">SL 2%</button>
-          <button class="chip" data-tppct="1">TP 1%</button>
-          <button class="chip" data-tppct="2">TP 2%</button>
-          <button class="chip" data-tppct="4">TP 4%</button>
-        </div>
+          <!-- Los atajos viven dentro del grupo porque lo que hacen es ESCRIBIR en esas dos
+               cajas: con la casilla apagada no tendrían destino. Medido: en su fila de 272 no hay
+               atajos, así que estos seis chips son nuestros y se quedan con su tipografía. -->
+            <div class="quick-row" id="quickSlTp">
+              <button class="chip" data-slpct="0.5">SL 0.5%</button>
+              <button class="chip" data-slpct="1">SL 1%</button>
+              <button class="chip" data-slpct="2">SL 2%</button>
+              <button class="chip" data-tppct="1">TP 1%</button>
+              <button class="chip" data-tppct="2">TP 2%</button>
+              <button class="chip" data-tppct="4">TP 4%</button>
+            </div>
+          </div><!-- /bf-tpsl-cajas -->
+        </div><!-- /bf-tpsl -->
 
         <!-- PLANTILLAS DE ORDEN (js/orderTemplates.js) — la fila de «custom trading templates»
              del panel de órdenes de Bitunix. Vive DENTRO de «Avanzado» a propósito: en el

@@ -288,16 +288,219 @@ financiación · Activos · Bots(0)`; a la derecha `☐ Sólo actual · Cerrar t
      de sobra), lo que hay que hacer es INVALIDAR la caché cuando cambia el contenido del bloque,
      que es lo que hace ahora `UI.syncLevLados`.
 
-   · 5b — **PENDIENTE: `TP/SL` como casilla que despliega el bloque.** Ya está medido (misma
-     sonda): la fila mide **272×18** a 14 px/400 con una **casilla de ~16 px** y el rótulo
-     `TP/SL` a 12 px en `#ffffff`, y en el MISMO extremo derecho lleva un `Avanzado ▸` (55×14 a
-     12 px). Al marcarla aparecen **dos cajas de 272×40** (fondo `#222324`, radio 4 px, paso de
-     48 px) con la etiqueta `TP` / `SL` DENTRO a la izquierda y `Precio (USDT) ▾` a la derecha;
-     los botones `Abrir Largo/Corto` bajan 100 px. Nota para cuando se vista: el `Avanzado ▸` suyo
-     de ESA fila no es el nuestro del encabezado -el nuestro pliega el bloque entero (comisión,
-     plantillas, modo de posición), no las opciones de TP/SL—, así que no se fusionan.
+   · 5b — **`TP/SL` COMO CASILLA QUE DESPLIEGA EL BLOQUE: HECHA el 11-oct.** Medido en su
+     página pinchando la propia casilla (sonda Chromium 1600×900, es-ES, sin sesión), que es lo
+     que faltó el día del 5a: la fila es de **272×18** y la «caja» **no es un cuadrado de 16 con
+     borde**: es un **svg de 12×12** (`span.check-icon-group`), y `TP/SL` es un `span` de 34×12 a
+     **12 px / peso 400 en `#ffffff`** separado del icono **4 px**; todo en un `flex` de
+     `justify-content: space-between` con un `Avanzado` de 55×14 + caret de 12 en el extremo
+     derecho (medido en la primera pasada; en la segunda, con la fila ya marcada, ese `Avanzado`
+     mide **0×2 sin texto**: solo aparece en el estado que nosotros no reproducimos, así que NO lo
+     copiamos y en su sitio va el resumen de lo escrito, que sí es dato). Al marcar salen **DOS
+     CAJAS de 272×40 con paso de 48** (hueco 8), fondo `#222324`, radio 4 px y `padding: 0 12px`;
+     **el rótulo `TP` / `SL` es el `placeholder` del input** (el prefijo mide 0 px: no hay etiqueta
+     fuera ni dentro, así distinguen ellas) a 14 px/400 en blanco, y **`Precio (USDT)`** vive en el
+     sufijo de 100×38 a **14 px/400 en `#919499`** con su caret de 12. La fila queda a 12 px de las
+     cajas y a 16 px de los botones, que **bajan 100 px** (569 → 669, medido). Y el orden es
+     **TP arriba, SL abajo** -el nuestro estaba al revés—, copiado.
+   · 5b · Dos decisiones que valen más que el parecido. **(1) El reposo es DESMARCADO, como en el
+     sitio** (su `☐ TP/SL` llega sin marcar y por eso su panel no pasa nunca de 347 px): con la
+     casilla marcada por defecto el bloque mide 315 px en una columna de 556 y `autoAprieta` -que
+     vigila que los botones no queden bajo el borde— **plegaría «Avanzado» solo a 1440×900**,
+     tapando la comisión, el modo de posición y las plantillas por una apariencia. Costó tres suites
+     enteras descubrirlo y quedó escrito en el cableado. **(2) Desmarcar APAGA y no BORRA**: los
+     niveles dejan de viajar a la orden (que es lo que «apagar» significa allí) pero lo tecleado se
+     queda en los campos, con un resumen en la fila -`SL 70.000 · TP 80.000`— para que lo apagado no
+     se confunda con lo vacío; la casilla se recuerda en `ST` (`tpslOn`). El punto único de lectura es
+     `App.tpSlLee()`, que usan los **tres** caminos de colocación (`placeOrder`, `placeTriggerOrder`,
+     `placeLimitOrder`) y el aviso de abajo: no hay un «silenciar datos» por detrás, hay un estado.
+   · 5b · Lo que NO se copia, dicho: el `Precio (USDT) ▾` suyo es un **selector de unidad**
+     (precio / % / margen) que sin sesión no se pudo abrir, así que aquí la unidad se pinta como
+     texto -que es exactamente lo que dice— y sin caret: nuestros campos son niveles de precio y
+     no existe segunda unidad que elegir. La fila de atajos de % (`#quickSlTp`) es nuestra, no
+     suya; se metió DENTRO del grupo porque lo que hace es escribir en esas dos cajas, y con la
+     casilla apagada no tendrían destino.
+   · 5b · Y la diana **táctil**. Su fila mide 18 px, que es menos de los 20 px que
+     esta app exige a todo control visible; se copia la tipografía, el icono de 12 y los 4 px, pero
+     el área pulsable (la etiqueta entera, con el `input` real estirado encima e invisible) sube a
+     **22 px**, el mismo criterio con el que los `10X` de la barra de modo estiran a lo alto de la
+     píldora. Doce comprobaciones anclan el bloque: fila e icono medidos, diana ≥20 px, reposo
+     desmarcado sin parpadeo (`hidden` ya en el marcado, no puesto por JS), las dos cajas con su
+     alto/paso/fondo/radio/padding y TP arriba, los placeholders, la unidad dentro de la caja en su
+     gris, que el lector devuelva lo escrito, que la orden colocada LLEVE los niveles, que al
+     apagarlos la orden NO los lleve y los campos los sigan guardando, y que el resumen los nombre.
+   · 5b · El precio de copiar el estado (y no solo la pinta): con la casilla naciendo apagada,
+     **Riesgo fijo se quedaba sin stop** -`test:riesgo-fijo` lo cazó: posición colocada con `sl:
+     null`—, porque ese modo calcula el tamaño SOBRE la distancia al stop y luego adjunta el stop,
+     así que apagar TP/SL allí no es estética: es una orden dimensionada sobre una condición que no
+     existe. Queda resuelto en el producto, no en la prueba: entrar en Riesgo fijo **enciende la
+     casilla** (`App.enciendeTpSl`, dicho en el propio `#riesgoHint` y en el log), y apagarla a mano
+     en ese modo **para la orden** con el motivo (`App.riesgoGuardia`, que los cuatro caminos de
+     colocación ya acataban). Tres anclas nuevas lo vigilan, incluida una que lee el aviso en el
+     conjunto de toasts vivos y no en el primero -cortar la cadena por tamaño dejaba fuera el del
+     guard, y el ancla mentiría al fallar—.
+   · Verificado con §5.5b en disco: `test:bitunix` **220 ✓ / 0 ✗** (antes 206: +10 del bloque y +3
+     del acoplamiento con Riesgo fijo), `test:riesgo-fijo` 59 ✓, `test:layout` 200 ✓,
+     `test:plantillas` 33 ✓ (marcar la casilla hace crecer el bloque y el plegado automático lo
+     cierra -correcto—, así que el test abre a mano como haría quien lo usa), `test:hedge` 74 ✓,
+     `test:trailing-orden` 77 ✓. Y un barrido que salió FALSO dos veces y vale como método: para
+     contar los rótulos en mayúsculas se barrió `#app *` -la carta de órdenes cuelga de
+     `main#workspace`, no de `#app`— y luego desde `body` con «Avanzado» CERRADO por el clic de
+     rigor; las 16 etiquetas del panel seguían en `uppercase` + `.7px` contra el §1. Arreglado en
+     la piel (BLOQUE 23) y anclado sobre los 26 rótulos de campo. `build-single` **1149 KB**.
+     Queda del §5 la banda superior, el `replay` dentro de la carta y -añadido hoy— **la versión
+     móvil entera**, que también se hará midiendo la suya.
 6. Seguir con `tools/barrido-graficos.js` como verificador: los contrastes `.hint` a 3,01:1
    y el `#overlayCanvas` a 1× en pantallas 2× siguen abiertos.
+
+
+### 5.6 · móvil: la medición (hecha) y lo que vamos a copiar
+
+La medición es del 11-oct, con la herramienta nueva del repo, `tools/medir-movil-bitunix.js`:
+Chromium con `isMobile` y `hasTouch`, **390×844 a dpr 3**, UA de iPhone, `es-ES`, sin sesión, sobre
+`https://www.bitunix.com/es-es/contract-trade/BTCUSDT`. Vuelca `/tmp/movil-bitunix.json` y cuatro PNG
+`docs/movil-*.png`.
+
+**Dos avisos de método.** El primero: **pulsar un botón de operar sin sesión redirige a `/login`**.
+Las dos primeras veces que se barrió el móvil, los pasos «tras pulsar Abrir Largo» y «desplazado»
+salieron llenos de su formulario de acceso (correo, `Verificar`, Google/Apple), y si uno se fía de
+eso copia una página que no es la de trade. Lo que hay bajo el pliegue se lee **del DOM**, sin
+desplazar. El segundo: la altura del documento salió **844 px** en una pasada y **1468 px** en otra
+seis segundos más tarde; gana la segunda -la primera fue a media hidratación—. Lo que importa para
+implementar no es esa cifra sino la otra: **el formulario entero cabe por encima del pliegue** (su
+último botón acaba en `y=719` de 844).
+
+Lo medido en la **vista de operar**, que es la que trae de entrada:
+
+| qué | su número (medido en 390 px CSS) |
+|---|---|
+| **dos columnas: formulario `x=15..195` y libro `x=210..383`** | ~180 px útiles cada una, sin carta visible |
+| `BTCUSDT` | 89×23, 18/700, en `x=15 y=142` |
+| a la derecha: `Tasa de financiación/cuenta actual` | 12/400 `#919499`, valor `-0.0002` en `#f14b3f`, `02:58:06` en blanco, en `x=231 y=146` |
+| píldora `Cruzada` | 48×16, 12/500 blanco, con `10X` verde y `10X` rojo pegados (`x=117`, `x=146`): metidos en la columna, no estirados |
+| `Abierto` \| `Cerrado` | 88×26; la pestaña activa **rellena** `#24c18d` con el texto blanco 12/500 — en el móvil el segmento se pinta, no se subraya |
+| `Mercado` | 137×16, 14/400, dentro de su caja con borde |
+| `Disponible` + valor + `USDT` | rótulo 12/500 `#919499` **con subrayado de puntos**; valor 12/600 blanco |
+| `Precio` / su caja | rótulo 180×16 12/400 `#919499` sobre la caja; dentro: **punto verde**, `83011.7` 14/500 `#66686b`, unidad `USDT` 12/400 |
+| `Cantidad` / su caja | igual, y la unidad es un selector `USDT ▾`; el placeholder avisa del mínimo (`Orden mínim`) |
+| deslizador | 180 px con **cuatro puntos** |
+| `☐ TP/SL` | rótulo 34×16 12/400 blanco en `y=591` |
+| **`Abrir Largo` y `Abrir Corto`** | **apilados**, 180×40, `y=624` y `y=679` (paso 55 px), radio 9999, `#24c18d` y `#f14b3f`, 14/500 blanco |
+| `Coste (USDT)` y `Máximo (USDT)` | rejilla 2×2, rótulo 12/400 `#919499`, valor 12/600 blanco, en `y=734..776` |
+| libro: cabeceras | `Precio (USDT)` / `Cant. (USDT)` 81×14, 12/400 `#919499`, en `x=218` |
+| libro: precio de cada nivel | 12/400 en `#f14b3f` (asks) y `#24c18d` (bids), 23 px de paso, cantidad blanca sobre la barra |
+| libro: último precio | `83,011.7` **17/700** `#24c18d` en el centro del libro (`y=486`), repetido abajo a 12/400 con puntos y un icono `[M]` de 18×18 |
+| libro: barra de ratio | `B 51.34%` 12/500 verde · `48.66% S` 12/500 rojo, en `y≈750` |
+| **bajo el pliegue** | la tira `Posiciones (0)` 92×39 · `Órdenes abiertas (0)` 135×39 · … seis pestañas que **desbordan y se deslizan en horizontal**, 14/400 (activa blanca, inactiva `#919499`), y la fila `Sólo actual` \| `Cerrar todo` 384×58 con `Cerrar todo` 80×22 `#222324` radio 9999 12/400 — lo del §5.4, sin cambios |
+| el botón que cambia de vista | un grupo `pill-tabs` en la cabecera: caja `x=285..373 y=137..169`, dos ítems de **44×32** con radio 999 sobre `#1a1b1c` |
+
+En la **vista de carta** (a la que lleva ese `pill-tabs`), medida ya con el paso `carta` de la misma
+herramienta: la franja de cabecera es un bloque de **390×64 con fondo `#0f0f0f`** -un gris por encima
+del negro del resto-, `BTCUSDT` a **18/700** blanco y el funding `0.00%` a 14/400; debajo, el último
+precio a **24/700** en `#24c18d` (el color sigue el signo de la vela, no es un adorno), `≈ $83,016.60`
+y `0,57%` a 12/400, y `Precio Marcado` con su valor a 12/400. A la derecha, cuatro estadísticas en dos
+columnas: rótulo 12/400 `#919499`, valor 12/400 blanco, **paso de 18 px** entre filas. Las pestañas
+`Cuadro | Resumen | Datos` son **12/500** (en escritorio 14/500: la misma piel, un punto más pequeña,
+activa blanca, inactiva `#919499`, y SÍ subrayada). Y la fila de temporalidades: chips de **30×22 a
+12/400 `#919499` con radio 4**, la activa en **caja `#272829`** con el texto blanco -en el móvil se
+pinta, no se subraya, al revés que en el panel inferior (§5.4)-. El `canvas` mide **390×618**. Flota
+sobre la carta la pareja `Abrir Corto` (rojo) | `Abrir Largo` (verde) -en el móvil el rojo va
+primero-; esa pareja no llegó a los filtros de la sonda (va fija al pie del viewport, fuera del límite
+de 900 px que usa el barrido), así que de ella copiamos la idea y el orden, no el número.
+
+**Lo que se copia**:
+
+1. **las dos columnas** formulario · libro en la franja estrecha, con el formulario de ~180 px útiles
+   y sus alturas: fila de 40 px, rótulo de 12/400 encima de la caja, unidad dentro de la caja;
+2. **la fila de temporalidades como en su móvil**: chips de 30×22, 12/400, radio 4 y la activa en caja
+   `#272829` -el mismo control nuestro, con la piel de 390 px puesta;
+3. **el `pill-tabs` de la cabecera** (44×32, radio 999) y con él el gesto **carta ⇄ operar**: en 844
+   px de alto es la única forma decente de tener las dos cosas;
+4. **la pareja de botones apilada a 180×40 con paso 55** en la vista de operar, y flotante sobre la
+   carta en la vista de carta;
+5. el **último precio a 17/700 en el centro del libro** y la barra de ratio, que en escritorio ya
+   están copiados (§5.3) y en móvil faltaban.
+
+**Lo que NO se copia y por qué**: el banner `Bitunix App … Descargar` y su `Registrarse` lima
+(camuflaje de cuenta); la **navegación inferior flotante** `Página prin… | Mercados | Negociar |
+Activos` (ítems 71×60 con botón redondo de búsqueda) -no tenemos esas secciones, y una nav vacía al
+pie de un teléfono es la peor decoración posible-; el medidor de financiación dibujado (no lo
+calculamos); el segmento `Abierto | Cerrado` de 88×26 con la
+casilla activa verde rellena: es un filtro de su lista de órdenes y **aquí ese control no existe**, así
+que ponerlo sería decorar con datos ajenos (lo que sí copiamos de ese detalle es *pintar* en vez de
+*subrayar* la casilla activa de los chips de temporalidad); y el orden de los botones flotantes de la carta, que en nuestro caso respeta el de
+`#orderActions` de escritorio porque allí manda el teclado físico.
+
+**Contrato con `tests/responsive.test.js`**: ese fichero fija 200 anclas del teléfono (la franja del
+gráfico, cero desbordes, `|Δfila| ≤ 2`, el reposo que entra entero). Al pasar el formulario al lado del
+libro cambian las alturas de esa franja, así que sus números se **re-miden contra el sitio**, no contra
+lo que salió la primera vez, y en el propio test queda dicho qué ancla es de piel -cambiable con
+medición- y cuál es de uso y no se toca (diana táctil ≥20 px, cero desbordes, ninguna fila bajo 24 px).
+Sigue anotado y sin tocar lo que el usuario dejó pendiente: `sizeInput:24` en teléfono y la ventana
+320×240 del barrido.
+
+**Hecho en esta pasada** (BLOQUE 24 de `css/bitunix.css`, `UI.vistasMoviles` en `js/uiController.js` y
+`#bfVistas` en `index.html`):
+
+· **El conmutador.** Dos cascos de 44 con radio 9999 sobre `#1a1b1c`, el activo `#272829` en blanco;
+  el estado vive en `body[data-vista]` y se recuerda en `ST.vistaMovil`. **No es hijo de `#topbar`**:
+  el cabecero del teléfono es una rejilla de dos columnas y tres filas de alto fijo (medido:
+  `28px 32px 24px` / `186px 188px`), y meter un quinto hijo sentaba la pastilla ENCIMA de la fila del
+  par -`#bfVistas` y `.topbar-group` salían los dos en `x=8 y=30` de 374×32, y `elementFromPoint`
+  devolvía la pastilla en el centro del botón del símbolo: el botón del par y el chip activo dejaban
+  de ser alcanzables, que fue exactamente lo que cantó `test:layout`—. Vive dentro de la fila del par,
+  después de `#tfQuick`, y de regalo queda a la vista sin deslizar la fila.
+· **La altura es 26, no los 32 medidos**, y la cuenta está hecha, no adivinada: con 32 el cabecero
+  pasaba de 90 a 94 y `#chartWrap` de 194 a 190 -cuatro px de velas, la misma contabilidad del
+  §5.5a-. La forma (88 de ancho, 44 por casco, los dos colores, el radio) sí es la medida.
+· **La vista Operar**: columnas **170 · 175** con `#chartArea` fuera de pantalla, rótulos de 12/400
+  `#919499` ENCIMA de cada caja, botones apilados de 161×40 con paso de 55 y radio 9999, y
+  `Coste`/`Máximo` en rejilla de dos. Tres cosas que no salían a la primera:
+  ‑ `.card` arrastraba `min/max-width: calc(100% - 24px)` de la época de la fila deslizante (era para
+    que asomara la tarjeta vecina), y en una rejilla eso son 24 px perdidos de golpe: 146 útiles en
+    vez de 170.
+  ‑ quitar solo el `max-height` del cuerpo no bastaba: `--cuerpo: 216px` y el `flex: 1 1 0` dejaban la
+    caja en 418 px con 445 de contenido (27 recortados). Hay que poner `height: auto`.
+  ‑ en 170 px el segmentado no da para `Mercado | Límite | Activador` sin cortar (49 de contenido en
+    42): ahora **desliza** en vez de truncar, igual que los chips del cabecero -un control que se
+    alcanza deslizando no esconde datos; un `text-overflow: ellipsis` sí—.
+· **Y es reversible sin tocar el reposo**: al volver a Carta el terminal es el que miden las 200 anclas
+  de `tests/responsive.test.js` (franja de 249 que desliza, gráfico de 194, cero scroll horizontal) y
+  la pastilla no añade ni un píxel de alto.
+· **Medido en nuestro build a 390×844**: `#sidebar` 390×624 en `y=90`, formulario 170×432 en `x=15`,
+  libro 175×275 en `x=200`, botones 161×40 con paso 55, recortes verticales 0, desbordes horizontales
+  0 en las cuatro cajas, documento 844 = ventana, y los 21 controles visibles todos ≥ 20 px.
+· **Dos defectos que solo se ven mirando la pantalla** (y los caz6 una ancla nueva, no una
+  captura): las cabeceras de las dos tarjetas traen el alto FIJO del tier de 640 (28 y 24 px), asi que
+  al envolver a dos filas pintaban su segunda linea POR ENCIMA del cuerpo -medido: `#bookSrc` en
+  `y=129` con la cabecera cerrando en `125`, y el `78,508.00` del libro quedaba tachado-; y el caret
+  `▾` del agregador, que esta en `position: absolute` sin caja de referencia, se quedaba solo 280 px
+  mas abajo (`I` en `y=418..427` dentro de `label.bf-agreg`). Arreglados en el BLOQUE 24
+  (`height: auto` en las cabeceras de la vista de operar, `position: relative` en `.bf-agreg`) y
+  anclados como «ninguna cabecera pinta por encima de su caja»; el caret estaba descolocado TAMBIEN
+  antes de este cambio, a 390 px en la vista de Carta: la ancla no es decorado del movil.
+· **La banda de ratio del libro** sacaba `B74.64 %S25.36 %` pegados: la fila de etiquetas vive dentro
+  de una `.bf-book-frac` que el tier de 640 pone en `display:flex` y se ajustaba a su propio texto, con
+  lo que el `space-between` no tenia donde repartir. Ancho de fila y listo -en la suya el verde queda
+  a la izquierda y el rojo a la derecha-.
+
+· **Verificacion**: `node tools/run-all.js` en limpio da **31 suites · 1818 comprobaciones contadas ·
+  0 fallidas** y `tools/barrido-graficos.js` **70 · 0 NO CUADRA · 1 a decidir** (la de siempre).
+  Leccion apuntada, porque me hizo perder una ronda: en la corrida anterior `test:bitunix` saco 4
+  anclas rojas (la liquidacion a `null` y la pagina servida por HTTP) estando YO corriendo una sonda
+  Chromium en paralelo -solas pasaban, y en la siguiente corrida limpia tambien—; mientras la bateria
+  corre, no se monte nada al lado, y si una suite falla en bateria y pasa sola, re-correrla **sola**
+  antes de tocar nada.
+· **Anclado** en el bloque H2 de `tests/bitunix.test.js`: 17 comprobaciones (la pastilla y sus colores,
+  el arranque en Carta, el cambio de vista, las dos columnas sin pisarse, el reparto 170/175, el paso
+  55, el rótulo encima de la caja, cero recortes, cero scrolls, dianas ≥ 20, el libro a dos columnas,
+  la memoria en `ST` y el regreso a Carta). **`bitunix` 235 ✓ · 0 ✗.**
+
+**Queda del móvil**, anotado para no perderlo: la **banda superior** (último precio a 24/700, fondo
+`#0f0f0f`, las cuatro estadísticas a dos columnas con paso de 18 px) -que es el mismo capítulo abierto
+que en escritorio, y reestructurar `#topbar` en estrecho pisa el presupuesto vertical de `test:layout`-;
+la **pareja flotante sobre la carta** en la vista de carta; y las dos cosas que dejó el usuario
+(`sizeInput:24` y la ventana 320×240 del barrido).
 
 ---
 

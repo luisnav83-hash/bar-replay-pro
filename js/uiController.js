@@ -278,12 +278,46 @@
       U.log(`💱 Comisión configurada: ${e.target.value}% por lado`, 'sys');
     });
 
+    document.getElementById('slInput').addEventListener('input', UI.vigilaTpSl);
+    document.getElementById('tpInput').addEventListener('input', UI.vigilaTpSl);
     document.getElementById('slInput').addEventListener('input', UI.updateOrderHint);
     document.getElementById('tpInput').addEventListener('input', UI.updateOrderHint);
+    // La casilla de TP/SL (ítem 5b de la piel): desplegada por defecto y recordada.
+    {
+      const chk = document.getElementById('chkTpSl');
+      if (chk) {
+        /* El reposo es DESMARCADO, que es como viene en el sitio (medido: su `☐ TP/SL` llega sin
+           marcar y por eso su panel no pasa nunca de 347 px). No es un capricho de parecido: con
+           la casilla marcada por defecto el bloque mide 315 px, la columna del panel derecho tiene
+           556 y `autoAprieta` -que vigila que los botones no queden bajo el borde- pliega
+           «Avanzado» solo a 1440x900, que es el viewport de once suites. */
+        try { chk.checked = !!(window.ST && ST.get('tpslOn', false)); } catch (e) {}
+        chk.addEventListener('change', () => {
+          try { if (window.ST && ST.set) ST.set('tpslOn', !!chk.checked); } catch (e) {}
+          /* Marcando, el bloque crece ~115 px y a 1440x900 (y a 1600x900, medido) `autoAprieta`
+             lo PLEGABA: la casilla tapaba justo las dos cajas que acaba de pedir, que es el peor
+             modo de perder una interaccion. Desde aqui manda la intencion de la persona -la misma
+             via que deja el clic en el boton de «Avanzado»— y el automatico se aparta; si ya no
+             cabe, la columna desliza y el pie avisa del recorte (`marcaDesborde`), que es lo que
+             hace el sitio con su panel de 347 px dentro de una columna mas alta. */
+          if (chk.checked) { const bt = document.getElementById('btnOrderAvanzado'); if (bt) bt.dataset.explicit = '1'; }
+          UI.syncTpSl(); UI.updateOrderHint();
+          if (!chk.checked && (document.getElementById('slInput').value || document.getElementById('tpInput').value)) {
+            // Se apaga con niveles escritos: se guardan, no se envian, y se dice. La razon por la que
+            // esto es un aviso y no un bloqueo es la misma de arriba -la persona mando—, por eso el
+            // aviso va primero y `UI.vigilaTpSl` no lo desanda.
+
+            U.toast('TP/SL apagados: los precios siguen escritos y volverán al marcar la casilla', 'info');
+          }
+        });
+        UI.syncTpSl();
+      }
+    }
     U.$$('#quickSlTp .chip').forEach((c) => c.addEventListener('click', () => {
       const price = App.currentPrice();
       if (!price) { U.toast('No hay datos cargados', 'warn'); return; }
       if (c.dataset.slpct) document.getElementById('slInput').value = U.round(price * (1 - +c.dataset.slpct / 100), 6);
+      if (c.dataset.slpct || c.dataset.tppct) { UI.vigilaTpSl(); UI.syncTpSl(); }   // el resumen de la fila va detras
       if (c.dataset.tppct) document.getElementById('tpInput').value = U.round(price * (1 + +c.dataset.tppct / 100), 6);
       UI.updateOrderHint();
     }));
@@ -504,6 +538,7 @@
     };
     UI._sincronizaOrden = sincroniza;
     sincroniza();
+    UI.vistasMoviles();
     pinta();
     autoAprieta();
     // `#limitRow` lo muestra y lo oculta OTRO módulo (escribe `style.display` y no avisa):
@@ -2153,15 +2188,17 @@
     const hint = document.getElementById('orderHint');
     if (!hint) return;
     if (!price) { hint.textContent = 'Carga datos para operar.'; return; }
-    const sl = parseFloat(val('slInput'));
-    const tp = parseFloat(val('tpInput'));
+    const tsl = App.tpSlLee();
     const parts = [];
-    if (Number.isFinite(sl)) parts.push(`SL a ${U.fmtPct(((price - sl) / price) * 100, 2)} del precio`);
-    if (Number.isFinite(tp)) parts.push(`TP a ${U.fmtPct(((tp - price) / price) * 100, 2)}`);
+    if (tsl.sl !== null) parts.push(`SL a ${U.fmtPct(((price - tsl.sl) / price) * 100, 2)} del precio`);
+    if (tsl.tp !== null) parts.push(`TP a ${U.fmtPct(((tsl.tp - price) / price) * 100, 2)}`);
+    /* Con la casilla apagada el aviso lo dice, no se calla: callar equivaldría a que los campos
+       escritos no existen, y existen -lo que no viajan es a la orden—. */
+    if (!tsl.on && (val('slInput') || val('tpInput'))) parts.push('TP/SL apagados (guardados, sin enviar)');
     // Riesgo estimado
     const { notional } = App.estimateSize(price);
-    if (Number.isFinite(sl) && notional > 0) {
-      const risk = Math.abs(price - sl) / price * notional;
+    if (tsl.sl !== null && notional > 0) {
+      const risk = Math.abs(price - tsl.sl) / price * notional;
       const eq = TE.state.balance;
       parts.push(`riesgo ≈ ${U.fmtMoney(risk)} (${U.fmtPct(risk / eq * 100, 2)} del capital)`);
     }
@@ -2239,6 +2276,72 @@
       const abierto = !!(ed && !ed.hidden);
       caret.setAttribute('aria-expanded', String(abierto));
       caret.classList.toggle('abierto', abierto);
+    }
+  };
+
+  /* LA CASILLA TP/SL (ítem 5b). No es un adorno del encabezado: apagarla saca las dos cajas y los
+     atajos de %, deja un resumen con lo escrito (para que lo apagado no se confunda con lo vacío)
+     e invalida la caché del alto de «Avanzado», que es justo lo que decide el plegado automático.
+     Nace MARCADA y se recuerda: `test:layout` exige que SL/TP estén visibles y escribibles con
+     «Avanzado» abierto, y el sitio también los muestra marcados al abrir la página. */
+  UI.syncTpSl = function () {
+    const c = document.getElementById('chkTpSl');
+    if (!c) return;
+    const on = !!c.checked;
+    const cajas = document.getElementById('bfTpSlCajas');
+    if (cajas) cajas.hidden = !on;
+    const sum = document.getElementById('bfTpSlSum');
+    if (sum) {
+      const trozos = [];
+      const lee = (id, nombre) => {
+        const e = document.getElementById(id);
+        const n = e ? parseFloat(e.value) : NaN;
+        if (Number.isFinite(n) && n > 0) trozos.push(nombre + ' ' + U.fmtPrice(n));
+      };
+      lee('slInput', 'SL'); lee('tpInput', 'TP');
+      sum.textContent = trozos.length ? trozos.join(' · ') : 'sin niveles';
+      sum.hidden = on;
+    }
+    { const ab = document.getElementById('btnOrderAvanzado'); if (ab) delete ab.dataset.altoAdv; }
+  };
+
+  /* REGLA: escribir un nivel ENCINEDE la casilla. La casilla contesta a «¿van estos niveles en la
+     orden?», así que un SL/TP puesto -por Riesgo fijo, por una plantilla, por los atajos de % o por
+     lo que sea que sepa mandar el evento `input`- y dejado apagado es un dato en el limbo: escrito,
+     visible en el campo, y no enviado. Lo que NO hace esta regla es contradecir a la persona: apagar
+     la casilla a mano no dispara `input` en los campos, asi que no se reenciende sola; lo escrito se
+     queda donde esta y el resumen de la fila lo nombra (item 5b del registro). */
+  /* Dos vistas en el telefono, porque en 844 px de alto no caben la carta Y el formulario con el
+     libro al lado; su movil hace exactamente lo mismo con su `pill-tabs` (§5.6 del registro). Se
+     recuerda en `ST` y se propaga como `#app[data-vista]`, que es lo que lee la piel: el comportamiento
+     esta aqui y la anatomia, en el CSS. ARRANQUE: en `carta`, no en `operar` como el -el de ellos es
+     una pantalla para operar y la nuestra es una para replay, y abrir sin datos en el formulario
+     seria abrir en vacio—. Quien cambie una vez, se queda con su eleccion. */
+  UI.vistasMoviles = function () {
+    /* La marca va en `body`, no en un `#app`: este documento NO tiene un contenedor con ese id
+       (fallo medido: `getElementById('app')` da null y la piel entera se quedaba sin aplicar). */
+    const raiz = document.body;
+    if (!raiz) return;
+    const botones = [...document.querySelectorAll('#bfVistas .bf-vista')];
+    const pon = (v) => {
+      if (!v) return;
+      raiz.dataset.vista = v;
+      for (const b of botones) b.classList.toggle('active', b.dataset.vista === v);
+      if (window.ST && ST.set) ST.set('vistaMovil', v);
+      /* La escalera mide su contenedor: al volver a Carta, el lienzo cambia de alto y hay que
+         avisar al repartidor (no lo hace nadie mas, porque el cambio no pasa por el). */
+      if (window.PC && PC.ajustaEscalera) requestAnimationFrame(() => { try { PC.ajustaEscalera(); } catch (e) {} });
+    };
+    for (const b of botones) b.addEventListener('click', () => pon(b.dataset.vista));
+    const guardado = (window.ST && ST.get) ? ST.get('vistaMovil', 'carta') : 'carta';
+    pon(guardado === 'operar' ? 'operar' : 'carta');
+  };
+
+  UI.vigilaTpSl = function () {
+    const c = document.getElementById('chkTpSl');
+    if (!c || c.checked) return;
+    if ((document.getElementById('slInput') || {}).value || (document.getElementById('tpInput') || {}).value) {
+      App.enciendeTpSl('un nivel escrito en el formulario');
     }
   };
 

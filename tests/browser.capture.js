@@ -134,8 +134,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.evaluate(() => {
     const p = App.currentPrice();
     document.getElementById('sizeInput').value = '60';
-    document.getElementById('slInput').value = String(+(p * 0.97).toFixed(2));
-    document.getElementById('tpInput').value = String(+(p * 1.06).toFixed(2));
+    // se escribe y se avisa: desde el item 5b de la piel la casilla TP/SL manda sobre lo que
+    // viaja a la orden, y es el evento `input` el que la enciende (UI.vigilaTpSl)
+    for (const [id, v] of [['slInput', +(p * 0.97).toFixed(2)], ['tpInput', +(p * 1.06).toFixed(2)]]) {
+      const e = document.getElementById(id);
+      e.value = String(v);
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   });
   await page.keyboard.press('b');
   await wait(350);
