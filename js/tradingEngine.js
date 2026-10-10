@@ -62,6 +62,14 @@
     position: null,          // acceso a la posición «principal» (se redefine más abajo)
     posiciones: { long: null, short: null },   // modo HEDGE: una posición por dirección
     modoPosicion: 'ONE_WAY',                   // 'ONE_WAY' | 'HEDGE' (change_position_mode)
+    /* TP/SL DE CUENTA —el cuarto método de F4 (Position · Partial · Trailing · **Account**)—. No es
+       un nivel de una posición: es un umbral sobre el PnL TOTAL de la cuenta de futuros y, al
+       tocarse, cierra TODAS las posiciones del ámbito. `modo` dice cómo está expresado (`pct` sobre
+       la `base`, o `usdt` a pelo, que es como la guía lo plantea: «por importe o por %») y `base`
+       sobre qué se mide: `invertido` (suma de márgenes) o `neto` (margen + PnL no realizado, el
+       «net liquidation value» del panel, que se recalcula en cada vela y por eso el tope se mueve
+       con la posición). */
+    tpslCuenta: { activo: false, modo: 'pct', base: 'invertido', ambito: 'ambos', ganancia: null, perdida: null },
     pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
@@ -118,6 +126,115 @@
     return { ok: true, modo: m };
   };
 
+  /* ----------------------- TP/SL de cuenta (F4, Account) ----------------------- */
+
+  /** Las posiciones vivas sobre las que mide el umbral de cuenta (el ámbito cruzado/aislado). */
+  TE.posicionesEnAmbito = function () {
+    const c = TE.state.tpslCuenta, vivas = TE.posiciones();
+    if (!c || c.ambito === 'ambos') return vivas;
+    // Cada posición recuerda el modo de margen con el que se abrió: si no, cambiar la cuenta de
+    // cruzado a aislado re-interpretaría una posición aislada abierta hace una hora.
+    return vivas.filter((p) => (p.marginMode || TE.state.marginMode || 'cross') === c.ambito);
+  };
+
+  /** La base sobre la que se expresa el porcentaje: margen invertido, o margen + PnL abierto. */
+  TE.baseCuenta = function (price) {
+    const c = TE.state.tpslCuenta;
+    const vivas = TE.posicionesEnAmbito();
+    let m = 0;
+    for (const p of vivas) m += p.notional / p.leverage;
+    if (c.base !== 'neto') return m;
+    const pr = Number.isFinite(+price) ? +price : TE.state.lastPrice;
+    for (const p of vivas) m += (pr - p.entryPrice) * p.qty * (p.side === 'long' ? 1 : -1);
+    return m;
+  };
+
+  /** Activa o reconfigura el umbral de cuenta.Rechaza la configuración vacía o sin sentido. */
+  TE.setTpslCuenta = function (cfg) {
+    const c = TE.state.tpslCuenta;
+    const pr = cfg || {};
+    // El signo no significa nada aquí: «pérdida del 10 %» se escribe 10, no −10. Se trabaja con
+    // valores absolutos para que el campo no dependa de si el usuario piensa en positivo o negativo.
+    const lee = (x) => (x === null || x === undefined || x === '' || !Number.isFinite(+x)) ? null : Math.abs(+x);
+    const g = lee(pr.ganancia), p = lee(pr.perdida);
+    if (g === null && p === null) {
+      return { ok: false, msg: 'Sin umbral no hay nada que activar: indica ganancia o pérdida (o apaga el TP/SL de cuenta).' };
+    }
+    if ((g !== null && g <= 0) || (p !== null && p <= 0)) {
+      return { ok: false, msg: 'El umbral tiene que ser mayor que 0 (en % de la base o en USDT).' };
+    }
+    c.modo = pr.modo === 'usdt' ? 'usdt' : 'pct';
+    c.base = pr.base === 'neto' ? 'neto' : 'invertido';
+    c.ambito = (pr.ambito === 'cross' || pr.ambito === 'isolated') ? pr.ambito : 'ambos';
+    c.ganancia = g; c.perdida = p; c.activo = true;
+    U.log('🛡️ TP/SL de cuenta: ' +
+      (g !== null ? `cierra todo con +${g}${c.modo === 'usdt' ? ' USDT' : ' % de la base'} · ` : '') +
+      (p !== null ? `o con −${p}${c.modo === 'usdt' ? ' USDT' : ' % de la base'} · ` : '') +
+      `base ${c.modo === 'pct' ? (c.base === 'neto' ? 'valor neto (recalculado cada vela)' : 'margen invertido') : 'importe'} · ` +
+      `ámbito ${c.ambito === 'ambos' ? 'toda la cuenta' : c.ambito === 'cross' ? 'cruzado' : 'aislado'}`, 'info');
+    TE._emit();
+    return { ok: true, cfg: { modo: c.modo, base: c.base, ambito: c.ambito, ganancia: g, perdida: p } };
+  };
+
+  TE.offTpslCuenta = function () {
+    const c = TE.state.tpslCuenta;
+    if (!c.activo) return false;
+    c.activo = false;
+    U.log('🛡️ TP/SL de cuenta apagado: las posiciones vuelven a gestionarse por sus propios niveles', 'warn');
+    TE._emit();
+    return true;
+  };
+
+  /** Todo lo que la interfaz necesita para describir el umbral (y si está a punto de tocar). */
+  TE.tpslCuentaInfo = function (price) {
+    const st = TE.state, c = st.tpslCuenta;
+    const pr = Number.isFinite(+price) ? +price : st.lastPrice;
+    const vivas = TE.posicionesEnAmbito();
+    let pnl = 0;
+    for (const p of vivas) pnl += (pr - p.entryPrice) * p.qty * (p.side === 'long' ? 1 : -1);
+    const base = TE.baseCuenta(pr);
+    const umbral = (v) => (v === null || !c.activo) ? null : (c.modo === 'usdt' ? v : base * v / 100);
+    const g = umbral(c.ganancia), p = umbral(c.perdida);
+    let texto;
+    if (!c.activo) {
+      texto = 'Sin umbral de cuenta: cada posición se gestiona con sus propios niveles (Position/Partial/Trailing).';
+    } else if (!Number.isFinite(pr)) {
+      texto = 'Carga datos para poder medir el PnL de la cuenta.';
+    } else if (!vivas.length) {
+      texto = `Nada abierto que medir. Umbral en ${c.modo === 'usdt' ? 'USDT' : '% sobre ' + (c.base === 'neto' ? 'valor neto' : 'margen invertido')}`
+        + `${g !== null ? ` · gana +${g}` : ''}${p !== null ? ` · pierde −${p}` : ''}.`;
+    } else {
+      const trozos = [];
+      if (g !== null) trozos.push(`+${U.fmtMoney(g)} → ${pnl >= g ? 'TOCADO' : `faltan ${U.fmtMoney(g - pnl)}`}`);
+      if (p !== null) trozos.push(`−${U.fmtMoney(p)} → ${pnl <= -p ? 'TOCADO' : `faltan ${U.fmtMoney(-p - pnl)}`}`);
+      texto = `PnL total ${U.fmtMoney(pnl, true)} en ${vivas.length} posición(es) · base ${U.fmtMoney(base)} · ${trozos.join(' · ')}`;
+    }
+    return { activo: !!c.activo, modo: c.modo, base: c.base, ambito: c.ambito, ganancia: c.ganancia,
+      perdida: c.perdida, pnl, baseUsdt: base, umbralG: g, umbralP: p, vivas: vivas.length, texto };
+  };
+
+  /**
+   * Comprueba el umbral de cuenta al cerrar la vela. Devuelve cuántas posiciones ha cerrado.
+   * El OHLC no permite saber CUÁNDO cruzó la suma de las patas (con dos posiciones hay varios
+   * caminos posibles entre la apertura y el cierre), así que se sale al precio de cierre de la
+   * vela, que es el único precio de esa vela que podemos afirmar —no se inventa un relleno mejor—.
+   */
+  TE._revisaCuenta = function (candle) {
+    const c = TE.state.tpslCuenta;
+    if (!c || !c.activo) return 0;
+    const info = TE.tpslCuentaInfo(candle.close);
+    if (!info.vivas) return 0;
+    const tocaG = info.umbralG !== null && info.pnl >= info.umbralG;
+    const tocaP = info.umbralP !== null && info.pnl <= -info.umbralP;
+    if (!tocaG && !tocaP) return 0;
+    U.log('🛡️ Umbral de cuenta (' + (tocaG ? 'ganancia' : 'pérdida') + ') tocado: PnL total '
+      + `${U.fmtMoney(info.pnl, true)} frente a ${U.fmtMoney(tocaG ? info.umbralG : -info.umbralP)}`
+      + ` · se cierran las ${info.vivas} posiciones del ámbito`, tocaP ? 'bad' : 'ok');
+    const antes = TE.posicionesEnAmbito();
+    for (const p of antes) TE.closePosition(candle.close, 'cuenta', candle.time, p);
+    return antes.length;
+  };
+
   /* ---------------------------- Configuración ---------------------------- */
 
   TE.configure = function (opts) {
@@ -142,6 +259,9 @@
     s.balance = s.initialCapital;
     s.equity = s.initialCapital;
     s.position = null;
+    // El umbral de cuenta es un ajuste de la cuenta, pero un reset sin posiciones con el
+    // cortocircuitos armado cerraría posiciones de la partida siguiente: se apaga (y se avisa).
+    if (s.tpslCuenta && s.tpslCuenta.activo) { s.tpslCuenta.activo = false; U.log('🛡️ TP/SL de cuenta apagado por el reinicio de la cuenta', 'warn'); }
     s.pending = [];
     s.trades = [];
     s.equitySeries = [];
@@ -263,6 +383,10 @@
     const side = p.side === 'long' ? 1 : -1;
     if (!p.qty) return p.entryPrice * (1 - side / p.leverage);
     const margen = TE.marginOf(p);
+    // El modo de margen manda AQUÍ es el de la CUENTA (no el congelado en la posición, que se usa
+    // solo para el ámbito del umbral de cuenta): `margenDisponible` y esta fórmula tienen que decir
+    // lo mismo, y cambiar el modo de la cuenta con una posición abierta es algo que la API real ya
+    // rechaza —aquí se permite y la posición sigue la cuenta, que es lo que hacían las pruebas—.
     const libre = (TE.state.marginMode || 'cross') === 'cross'
       ? Math.max(0, TE.freeMargin()) : 0;
     const liq = p.entryPrice - side * (margen + libre - TE.margenMantenimiento(p)) / p.qty;
@@ -447,6 +571,7 @@
       mfe: 0, mae: 0,      // excursión favorable/adversa máxima
       bars: 0,
       initialSl: sl, initialTp: tp,
+      marginMode: s.marginMode || 'cross',   // solo para el ÁMBITO del umbral de cuenta (`posicionesEnAmbito`)
       origin: params.origin || 'market',   // 'market' (a mercado) | 'limite'
       limitPrice: params.limitPrice !== undefined ? params.limitPrice : null,
       // --- Gestión de posición (estilo Bitunix) ---
@@ -456,6 +581,9 @@
       tpLevels: [],                        // TP escalonado (Partial TP/SL)
       realizedParcial: 0,                  // PnL ya realizado en cierres parciales
       trail: null,                         // trailing stop { pct, activation, peak, armed, frac }
+      // El modo de margen CON EL QUE SE ABRIÓ: el ámbito del TP/SL de cuenta y la propia
+      // liquidación tienen que juzgar la posición por su modo, no por el que tenga la cuenta ahora.
+      marginMode: s.marginMode || 'cross',
     };
     s.position = position;
     s.trades.push(position);
@@ -539,6 +667,7 @@
       cambio: 'cambio de serie',
       inversion: 'inversión',
       parcial: 'cierre parcial',
+      cuenta: 'UMBRAL DE CUENTA (Account TP/SL)',
       trail: 'TRAILING STOP',
     })[r] || r;
   };
@@ -1558,6 +1687,10 @@
       const r = TE._revisaPosicion(candle, p);
       if (r !== null && r !== undefined && accion === null) accion = r;
     }
+    // El umbral de cuenta se comprueba DESPUÉS de los niveles por posición: si una pata ya cerró
+    // por su TP, el PnL total que ve la cuenta es el que queda, no el de antes de la vela.
+    TE._revisaCuenta(candle);
+
     // Como antes: si hubo cierre/nivel, ESO es lo que devuelve `onCandle` (el propio cierre ya
     // refresca la interfaz; meter aquí un updateEquity extra duplicaría un punto de la curva de
     // capital y descolocaría las pruebas que la cuentan vela a vela).
@@ -1768,6 +1901,7 @@
         // restaurar una partida en hedge la segunda dirección se caía (y el modo volvía a
         // ONE-WAY con dos posiciones colgando).
         modoPosicion: TE.state.modoPosicion,
+        tpslCuenta: Object.assign({}, TE.state.tpslCuenta),   // el umbral de cuenta sobrevive al guardar/cargar
         feesPaid: TE.state.feesPaid,
         lastPrice: TE.state.lastPrice,
         lastTime: TE.state.lastTime,

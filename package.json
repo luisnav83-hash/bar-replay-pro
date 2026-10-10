@@ -15,6 +15,7 @@
     "test:futuros": "node tests/futuros.test.js",
     "test:formulario": "node tests/formulario.test.js",
     "test:hedge": "node tests/hedge.test.js",
+    "test:cuenta-tpsl": "node tests/cuenta-tpsl.test.js",
     "test:dom": "node tests/dom.smoke.js",
     "test:iframe": "node tests/iframe.test.js",
     "test:all": "node tools/run-all.js",

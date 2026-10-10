@@ -1344,6 +1344,60 @@
     DT.setTradeHandles(p);
   };
 
+  /** Refleja el umbral de cuenta en la tarjeta: estado en una línea y campos rellenos. */
+  UI.syncAcctTpsl = function () {
+    const c = TE.state.tpslCuenta;
+    const info = TE.tpslCuentaInfo(App.currentPrice());
+    const est = document.getElementById('acctTpEstado');
+    if (est) {
+      est.textContent = !c.activo ? 'apagado'
+        : `activado · ${c.ganancia !== null ? '+' + c.ganancia + (c.modo === 'usdt' ? ' USDT' : ' %') : '—'}`
+        + ` / ${c.perdida !== null ? '−' + c.perdida + (c.modo === 'usdt' ? ' USDT' : ' %') : '—'}`
+        + ` · ${c.ambito === 'ambos' ? 'toda la cuenta' : c.ambito === 'cross' ? 'cruzado' : 'aislado'}`;
+      est.style.color = info.activo && info.vivas && (info.umbralG !== null && info.pnl >= info.umbralG
+        || info.umbralP !== null && info.pnl <= -info.umbralP) ? 'var(--down)' : '';
+    }
+    const chip = document.getElementById('btnAcctOn');
+    if (chip) chip.classList.toggle('active', !!c.activo);
+    const hint = document.getElementById('acctTpHint');
+    if (hint) hint.textContent = info.texto;
+  };
+
+  (function () {
+    const edit = document.getElementById('btnAcctEdit'), cfg = document.getElementById('acctTpCfg');
+    const CAMPOS = { modo: 'acctModo', base: 'acctBase', ambito: 'acctAmbito', ganancia: 'acctGanancia', perdida: 'acctPerdida' };
+    if (edit && cfg) edit.addEventListener('click', () => {
+      const abierto = cfg.style.display !== 'none';
+      if (!abierto) {   // al abrir, los campos se rellenan con lo que hay: un formulario vacío
+        const c = TE.state.tpslCuenta;                // que parece decir «sin umbral» cuando sí lo hay
+        Object.keys(CAMPOS).forEach((k) => {
+          const el = document.getElementById(CAMPOS[k]);
+          if (el) el.value = c[k] === null || c[k] === undefined ? '' : c[k];
+        });
+      }
+      cfg.style.display = abierto ? 'none' : '';
+      UI.syncAcctTpsl();
+    });
+    Object.keys(CAMPOS).forEach((k) => {
+      const el = document.getElementById(CAMPOS[k]);
+      if (el) el.addEventListener('input', UI.syncAcctTpsl);
+    });
+    const on = document.getElementById('btnAcctOn');
+    if (on) on.addEventListener('click', () => {
+      const val = (id) => (document.getElementById(id) || {}).value;
+      const r = TE.setTpslCuenta({ modo: val('acctModo'), base: val('acctBase'), ambito: val('acctAmbito'),
+        ganancia: val('acctGanancia'), perdida: val('acctPerdida') });
+      if (!r.ok) { U.toast(r.msg, 'warn', 4600); return; }
+      UI.refreshAll();
+      U.toast('TP/SL de cuenta activado: cerrará TODAS las posiciones del ámbito al tocar el umbral', 'info', 4200);
+    });
+    const off = document.getElementById('btnAcctOff');
+    if (off) off.addEventListener('click', () => {
+      if (!TE.offTpslCuenta()) { U.toast('El TP/SL de cuenta ya estaba apagado', 'info', 2200); return; }
+      UI.refreshAll();
+    });
+  })();
+
   UI.refreshPosition = function () {
     const vivas = TE.posiciones();
     // En HEDGE puede haber dos direcciones vivas y la tarjeta enseña una. Si la elegada ya no
@@ -1356,6 +1410,7 @@
     if (global.PC && PC.place) PC.place();   // la etiqueta va pegada al precio actual
     setText('tabPosCount', String(vivas.length));   // aviso en la pestaña «Posiciones»: 0, 1 o 2
     UI.syncPosModo();
+    UI.syncAcctTpsl();
     const segLado = document.getElementById('segPosLado');
     if (segLado) {
       segLado.style.display = vivas.length > 1 ? '' : 'none';

@@ -688,6 +688,34 @@
           <div class="card-body">
             <div class="kv small" id="posOtroLado" style="display:none"></div>
             <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
+            <!-- TP/SL DE CUENTA (F4, «Account TP/SL»): un umbral sobre el PnL TOTAL de la cuenta que
+                 cierra TODAS las posiciones del ámbito —no es el nivel de una posición, que ya tiene
+                 los suyos arriba—. Vive aquí porque lo que mide es el PnL de esta tarjeta, y viene
+                 PLEGADO: en el teléfono el hueco vertical lo vigila tests/responsive.test.js. -->
+            <div class="kv small" id="acctTpRow">
+              <span>TP/SL de cuenta</span>
+              <b><span id="acctTpEstado">apagado</span> <button class="chip" id="btnAcctEdit"
+                title="Umbral de ganancia o pérdida sobre el PnL total de la cuenta">ajustar</button></b>
+            </div>
+            <div id="acctTpCfg" style="display:none">
+              <div class="grid-2-min">
+                <label class="field"><span class="field-label">Umbral en</span>
+                  <select id="acctModo"><option value="pct" selected>% de la base</option><option value="usdt">USDT</option></select></label>
+                <label class="field"><span class="field-label">Base del %</span>
+                  <select id="acctBase"><option value="invertido" selected>Margen invertido</option><option value="neto">Valor neto (se recalcula)</option></select></label>
+              </div>
+              <div class="grid-2-min">
+                <label class="field"><span class="field-label">Ganancia</span><input type="number" id="acctGanancia" step="any" min="0" placeholder="p. ej. 20"></label>
+                <label class="field"><span class="field-label">Pérdida</span><input type="number" id="acctPerdida" step="any" min="0" placeholder="p. ej. 10"></label>
+              </div>
+              <div class="grid-2-min">
+                <label class="field"><span class="field-label">Ámbito</span>
+                  <select id="acctAmbito"><option value="ambos" selected>Toda la cuenta</option><option value="cross">Solo cruzado</option><option value="isolated">Solo aislado</option></select></label>
+                <div class="field"><span class="field-label">Acción</span>
+                  <span class="quick-row"><button class="chip" id="btnAcctOn">Activar</button><button class="chip" id="btnAcctOff">Quitar</button></span></div>
+              </div>
+              <div class="hint" id="acctTpHint"></div>
+            </div>
             <!-- Mini-PnL: el mismo recorrido que enseña el panel del gráfico, en 26 px,
                  para no tener que levantar la vista. Lo dibuja PC.paintMini(). -->
             <div class="kv kv-mini" id="posPnlMini"><span>PnL vela a vela</span>

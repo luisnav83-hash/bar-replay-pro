@@ -189,7 +189,7 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
 | `reduceOnly` | no existe | **implantar** en la orden y en el cierre |
 | `Close` por % y **`Close All`** a mercado en la fila de posición | atajo `C` (50 %) y «Cerrar todo» en la carta | **ajustar** nombres y que `Close All` sea a mercado explícito |
 | **Trailing** con precio de activación y retroceso **Ratio o Interval** | trailing por % con activación por beneficio | **ampliar** al modo intervalo |
-| **Account TP/SL** (toda la cuenta, por importe o %) | no existe | **capa 3** |
+| **Account TP/SL** (toda la cuenta, por importe o %) | **hecho** (§16): `TE.state.tpslCuenta` + `_revisaCuenta` en `onCandle`, ajuste en la tarjeta de posición | — |
 | **Partial TP/SL** con % por nivel | TP escalonado (`addTpLevel(price, pct)`) ✓ | ya está; falta el **deslizador de retorno** del panel de posición |
 | Modo **hedge** (`ONE_WAY`/`HEDGE`, `tradeSide`, `positionId`) | ~~una sola posición~~ **hecho en la capa 4** (§15): `state.posiciones` por dirección, `setPosicionModo` con la regla 200014 y `tradeSide` OPEN\|CLOSE en el formulario | — |
 | Apalancamiento **por dirección** | un solo valor | **capa 3** |
@@ -211,7 +211,9 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
   navegador sobre el archivo único, manejando solo la UI (como las demás). **✅ Capa 2 implementada y verde: 33 comprobaciones en `tests/formulario.test.js**, que pulsa el
  formulario y lee el estado resultante —sin llamar al motor para «ayudar» a pasar—.
 3. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
-  o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección.
+  o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección. **✅ Hecho el Account
+  TP/SL** (`tests/cuenta-tpsl.test.js`, 66 comprobaciones; ver §16). Queda el *sizing* por riesgo
+  (F223/225), que es otra pieza: el formulario hoy deriva el tamaño del capital, no del riesgo.
 4. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
   cambiar el modelo de «una posición» a «posiciones por lado» en motor, cartas, historial y PnL.
   **✅ Implementada: `tests/hedge.test.js`, 74 comprobaciones de motor y de navegador. Ver §15.**
@@ -342,3 +344,42 @@ provoca un recargo que con la interceptor de red de las suites cuelga el navegad
 de tamaño—. En `serialize` el modo tiene que viajar **dentro de `state`**: puesto al lado de
 `position` hacía que `restore` lo ignorara y la partida volviera a one-way con dos posiciones
 colgando (así lo pilló el bloque G de la suite).
+
+## 16 · Capa 3: Account TP/SL (el cuarto método de F4)
+
+**Lo que es, según la guía (F4):** el umbral de cuenta **no** es un nivel de una posición —es un
+tope sobre el **PnL total de la cuenta de futuros**, expresado **por importe o por porcentaje**, que
+al tocarse **cierra todas las posiciones** (Position/Partial/Trailing siguen siendo por posición y
+ya estaban). Implementado así, sin inventar:
+
+* `TE.state.tpslCuenta = { activo, modo: 'pct'|'usdt', base: 'invertido'|'neto', ambito:
+  'ambos'|'cross'|'isolated', ganancia, perdida }`. `setTpslCuenta` valida (sin tope no se arma; 0
+  no vale, porque cerraría al abrir; el signo se ignora: «−10 %» se escribe 10) y
+  `offTpslCuenta` lo retira. `resetAccount` **lo apaga**: una partida nueva no hereda el
+  cortocircuitos de la anterior, que cerraría posiciones que el usuario no ve venir.
+* **Base del porcentaje**: `invertido` = suma de los márgenes de las posiciones del ámbito; `neto` =
+  margen + PnL no realizado (el «valor neto de liquidación» del panel), **recalculado en cada vela**
+  —por eso el mismo 5 % da topes distintos según cómo vaya la posición: en ganancia el neto crece y
+  exige más, en pérdida se contrae y dispara antes. Los dos efectos están medidos en la suite con
+  números exactos (a +500 de PnL sobre 10 000 de margen, el 5 % neto son 525 y no 500).
+* **Mide la suma, no la primera posición**: dos patas que se compensan no tocan el umbral, y una
+  pata que supera su propio número tampoco lo toca si la suma no llega ✓ (así está probado con
+  tamaños asimétricos, que es el único caso que discrimina).
+* **Ámbito**: con `cross`/`isolated` solo se cierran las posiciones de ese modo de margen. Cada
+  posición guarda el `marginMode` **con el que se abrió** —solo para esto: la matemática de
+  liquidación sigue obedeciendo al modo actual de la cuenta, que es como se comportaba y como lo
+  esperan `logic`/`futuros` (y en el exchange real cambiar el modo con posición abierta se rechaza,
+  como el del §15)—.
+* **El precio de salida es el cierre de la vela.** El OHLC no permite saber *cuándo* cruzó la suma
+  (con dos posiciones hay varios caminos entre la apertura y el cierre), así que no se inventa un
+  relleno mejor ni peor: se cierra al único precio de esa vela que podemos afirmar, y se registra
+  con el motivo nuevo `cuenta` → «UMBRAL DE CUENTA (Account TP/SL)».
+* **Interfaz**: un bloque en la tarjeta de posición (es el PnL de esa tarjeta lo que mide), plegado
+  por defecto —la línea de estado siempre visible dice `activado · +7 % / −3 % · toda la cuenta` para
+  que no haya que abrirlo para saber si estás protegido—, y al reabrirlo los campos se rellenan con
+  lo armado. El umbral **sigue armado después de disparar**: es un ajuste de la cuenta, no una orden
+  de un uso.
+
+Nota del arnés: para provocar el disparo en el navegador la suite **elige el lado mirando la vela que
+sigue en la serie cargada y avanza el replay con ▶▶**; así lo produce el mercado simulado, no una
+llamada al motor desde el test.
