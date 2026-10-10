@@ -70,7 +70,8 @@
   App.focusTs = null;
   App.warmup = 150;              // velas de contexto antes del inicio del replay
   App.autoReveal = true;         // mantener visible la última vela al avanzar
-  App.sizeMode = 'pct';          // pct | notional | qty
+  App.sizeMode = 'pct';          // pct | notional | qty | riesgo
+  App.levLado = 'long';          // en HEDGE, a qué lado escribe el deslizador de apalancamiento
   App.candles = [];              // velas cargadas (todas, incluidas las ocultas)
   App.checkpoints = [];          // estado de la cuenta en cada índice del replay
   App.indicators = null;         // configuración de indicadores activos
@@ -781,12 +782,18 @@
 
   /** El triángulo completo: tamaño deducido + TP derivado por el ratio elegido (1:1…1:4). */
   App.riesgoCalcula = function () {
-    const r = TE.sizePorRiesgo({
+    const args = {
       entryPrice: App.riesgoEntrada(),
       slPrice: parseFloat((document.getElementById('riesgoSlInput') || {}).value),
       maxLoss: parseFloat((document.getElementById('riesgoMaxInput') || {}).value),
-      leverage: TE.state.leverage,
-    });
+    };
+    // El lado se deduce del stop y el margen que cabe depende del APALANCAMIENTO de ese lado, así
+    // que se calcula dos veces: la primera para saber a qué lado va, la segunda con su valor real.
+    let r = TE.sizePorRiesgo(Object.assign({ leverage: TE.state.leverage }, args));
+    if (r.ok && TE.state.modoPosicion === 'HEDGE') {
+      const lado = TE.leverageDe(r.side);
+      if (lado !== TE.state.leverage) r = TE.sizePorRiesgo(Object.assign({ leverage: lado }, args));
+    }
     r.rr = App.riesgoRr();
     if (r.ok) {
       r.tp = r.rr > 0 ? r.entry + r.dir * r.dist * r.rr : null;
@@ -917,7 +924,7 @@
       size: sp.size,
       entryPrice: price,
       sl, tp,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       time: App.currentTime(),
     });
@@ -970,7 +977,7 @@
       activation: act, callbackPct: pct,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
       mode: sp.mode, size: sp.size,
-      leverage: TE.state.leverage, feePct: TE.state.feePct,
+      leverage: TE.leverageDe(side), feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       time: App.currentTime(),
     });
@@ -1024,7 +1031,7 @@
       size: sp.size,
       sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
       tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       efecto: (ef && ef.value) || 'GTC',
@@ -1075,7 +1082,7 @@
       mode: sp.mode,
       size: sp.size,
       sl, tp,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       refPrice: ref,
       efecto: (document.getElementById('ordEffect') || {}).value || undefined,
@@ -1232,7 +1239,9 @@
       entryPrice: App.currentPrice(),
       sl: o.sl !== undefined ? o.sl : null,
       tp: o.tp !== undefined ? o.tp : null,
-      leverage: TE.state.leverage,
+      // Añadir a una posición existing usa el apalancamiento de ESE lado (puede no ser el de la
+      // cuenta si el usuario los separó en hedge): si no, promediar cambiaría la liquidación.
+      leverage: TE.leverageDe(p.side),
       feePct: TE.state.feePct,
       time: App.currentTime(),
       reaim: o.reaim ? 'medio' : null,

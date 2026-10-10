@@ -1291,6 +1291,9 @@
       lado.style.display = modo === 'HEDGE' ? '' : 'none';
       [...lado.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.tside === (App.tradeSide || 'open')));
     }
+    // El apalancamiento por lado solo existe en hedge; en one-way la fila se oculta (no se deja un
+    // control que no cambia nada).
+    UI.syncLevLados();
   };
 
   (function () {
@@ -1898,6 +1901,26 @@
   /** Sincroniza chip + deslizador + <select> del apalancamiento. */
   UI.syncLeverage = function (v) {
     const lev = Math.max(1, Math.min(100, Math.round(+v || 1)));
+    /* En HEDGE con el lado elegido, el deslizador NO es el apalancamiento de la cuenta: escribe en
+       ese lado (la API lo hace con `holdSide`). Se salta la sincronización del <select> heredado a
+       propósito —ese control llama a `TE.configure` y reescribiría el valor de cuenta con el de un
+       lado—, pero el chip y la lectura de los dos lados sí se pintan, que es lo que el usuario
+       necesita ver para saber a dónde está arrastrando. */
+    if (TE.state.modoPosicion === 'HEDGE' && App.levLado && App.levLado !== 'reset') {
+      const res = TE.setLeverageLado(App.levLado, lev);
+      UI.syncLevLados();
+      if (res.ok) {
+        const r = document.getElementById('levRange');
+        const leido = TE.leverageDe(App.levLado);
+        if (r && +r.value !== leido) r.value = String(leido);
+      } else {
+        const r = document.getElementById('levRange');
+        if (r) r.value = String(TE.leverageDe(App.levLado));   // el deslizador vuelve a la realidad
+      }
+      UI.refreshPosition();
+      UI.refreshAccount();
+      return;
+    }
     const sel = document.getElementById('leverageSelect');
     if (sel) {
       if (!Array.prototype.some.call(sel.options, (o) => +o.value === lev)) {
@@ -1910,6 +1933,28 @@
     setText('bfLevVal', lev + 'x');
     const r = document.getElementById('levRange');
     if (r && +r.value !== lev) r.value = String(lev);
+    UI.syncLevLados();
+  };
+
+  /** Lectura de los dos lados en la propia fila del deslizador (solo en hedge). */
+  UI.syncLevLados = function () {
+    const el = document.getElementById('levLados');
+    const row = document.getElementById('segLevLado');
+    const info = TE.leverageLadoInfo();
+    const esHedge = info.modo === 'HEDGE';
+    if (el) {
+      el.hidden = !esHedge;
+      if (esHedge) {
+        el.textContent = `▲ ${info.long}× · ▼ ${info.short}×` + (info.separado ? '' : ' · (unificados)');
+        el.className = 'lev-lados' + (info.long !== info.short ? ' dif' : '');
+        el.title = info.separado
+          ? `Los lados van separados (cuenta ${info.cuenta}×): ▲ ${info.long}× y ▼ ${info.short}×. «⤺ Ambos» los unifica.`
+          : `Los dos lados siguen el apalancamiento de la cuenta (${info.cuenta}×). Elige un lado y el deslizador lo separará.`;
+      }
+    }
+    if (row) row.style.display = esHedge ? '' : 'none';
+    const seg = document.getElementById('segLevLado');
+    if (seg) [...seg.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.levlado === (App.levLado || 'long')));
   };
 
   /** Controles nuevos de la fila superior del panel de órdenes. */
@@ -1929,6 +1974,23 @@
     });
     const r = document.getElementById('levRange');
     if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
+    /* Qué lado edita el deslizador. «⤺ Ambos» no es un lado: deshace la separación (un control que
+       quitara el override desapareciendo sería invisible, y aquí lo que hace falta es poder VOLVER). */
+    const segLado = document.getElementById('segLevLado');
+    if (segLado) segLado.addEventListener('click', (e) => {
+      const b = e.target.closest ? e.target.closest('[data-levlado]') : null;
+      if (!b) return;
+      if (b.dataset.levlado === 'reset') {
+        TE.offLeverageLado();
+        App.levLado = 'long';
+      } else App.levLado = b.dataset.levlado;
+      UI.syncLeverage(TE.leverageDe(App.levLado));
+      UI.syncLevLados();
+      App.refreshOrderLines();
+      UI.refreshAccount();
+      U.toast(App.levLado === 'long' ? 'El deslizador fija ahora el apalancamiento LARGO ▲'
+                                     : 'El deslizador fija ahora el apalancamiento CORTO ▼', 'sys', 2600);
+    });
     const sel = document.getElementById('leverageSelect');
     if (sel) UI.syncLeverage(+sel.value);     // estado inicial coherente
 
@@ -1943,7 +2005,9 @@
     const price = App.currentPrice();
     const est = price ? (App.estimateSize(price) || {}) : {};
     const notional = +est.notional || 0;
-    const lev = Math.max(1, TE.state.leverage);
+    // La línea de coste es lo que costará EL BOTÓN QUE TOQUES: en hedge con los lados separados eso
+    // es el apalancamiento del lado que manda el deslizador, no el de la cuenta.
+    const lev = Math.max(1, TE.state.modoPosicion === 'HEDGE' ? TE.leverageDe(App.levLado || 'long') : TE.state.leverage);
     setText('bfCostVal', notional > 0 ? U.fmtMoney(notional) : '—');
     setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}x)` : '—');
     const cero = notional <= 0;

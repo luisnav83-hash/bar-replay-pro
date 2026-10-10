@@ -217,9 +217,10 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
 4. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
   o %) y sizing por riesgo admitido (F10: artículos 223 y 225), apalancamiento por dirección.
   **✅ Hechas las dos piezas de tamaño**: Account TP/SL (`tests/cuenta-tpsl.test.js`, 66
-  comprobaciones; §16) y **riesgo fijo** (`tests/riesgo-fijo.test.js`, 59; §18). Falta solo el
-  apalancamiento **por dirección** (long y short con niveles distintos en la misma carta), que en la
-  API es un campo de la orden y aquí es un solo valor de cuenta.
+  comprobaciones; §16) y **riesgo fijo** (`tests/riesgo-fijo.test.js`, 59; §18). Y el apalancamiento
+  **por dirección** también (`tests/apalancamiento-lado.test.js`, 73; §19). **El plan por capas está
+  cerrado**: lo único que queda abierto en este doc son las quejas de los gráficos del usuario, que
+  siguen sin lista (§20).
 5. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
   cambiar el modelo de «una posición» a «posiciones por lado» en motor, cartas, historial y PnL.
   **✅ Implementada: `tests/hedge.test.js`, 74 comprobaciones de motor y de navegador. Ver §15.**
@@ -513,3 +514,69 @@ tiene su propio menú de dibujos.
 Arnés: `tests/riesgo-fijo.test.js` — 28 comprobaciones de motor (vm, sin navegador) y 31 de interfaz
 sobre el archivo único. Batería tras este bloque: **30 suites · 1658 comprobaciones · 0 fallidas ·
 0 omitidas** (sin contador propio solo `test:single`, por diseño).
+
+## 19 · Apalancamiento por dirección (el `holdSide` de la API)
+
+En ONE-WAY no existe la pregunta: hay UNA posición y, con ella, UN apalancamiento. En HEDGE cada
+dirección tiene el suyo —la API lo expone con `set_leverage` + `holdSide`, y el panel del intercambio
+lo enseña así—, y la consecuencia no es cosmética: el apalancamiento de un lado decide **cuánto margen
+consume ese lado** y, según el modo de margen, **dónde se liquida**.
+
+**Motor.** `state.leverageLado = { long: null, short: null }` (`null` = «sigue al de la cuenta») con
+`TE.leverageDe(side)`, `TE.setLeverageLado(side, lev)`, `TE.offLeverageLado()` y
+`TE.leverageLadoInfo()`. Cuatro reglas que la suite fija con números:
+
+* **ONE-WAY no guarda un lado que no existe**: se aplica a la cuenta y el registro lo dice
+  («PARA TODA LA cuenta… en ONE-WAY no hay apalancamiento por lado»), para que el deslizador no
+  parezca roto.
+* **El tope lo pone el tramo del nocional de ESE lado** (F8), no el deseo: pedir 500× con el primer
+  tramo a 125× se recorta a 125× y se avisa; con una posición de 160 000 USD puesta el tope pasa a
+  100× —comprobado con la tabla inyectada, porque con `niveles: null` no hay tope que recortar y el
+  aserto sería un verde falso—.
+* **El lado se hereda del lado, no de la cuenta**: `openPosition` toma `TE.leverageDe(side)` si la
+  orden no trae apalancamiento explícito, y con el mismo nocional en los dos lados el corto a 4× ocupa
+  2 500 de margen mientras el largo a 30× ocupa 333 (10 000 USD de exposición en los dos).
+* **Cambiarlo con posición abierta puede fallar**: bajar el apalancamiento exige más margen; si no
+  está libre se rechaza con `20015` y **la posición conserva el suyo** (nada de estado a medias).
+
+**Y aquí está el matiz que vale la pena del bloque.** En **CRUZADO** cambiar el apalancamiento de un
+lado **no mueve su liquidación**, porque lo que respalda es `margen de la posición + margen libre de la
+cuenta` y la suma no cambia: el margen extra sale de la cuenta (libre 9 840 → 9 040, medido) y vuelve a
+entrar en la posición. En **AISLADO** la misma operación **sí mueve** la liquidación, porque solo
+respalda el margen de esa posición. La suite comprueba las dos caras; la UI las distingue en el
+registro (`CRUZADO: el resto de la cuenta absorbe la diferencia` / `AISLADO: solo cambia el de esta
+posición`). Traducción práctica: en cruzado, separar apalancamientos es una cuestión de **capital
+asignado**, no de riesgo; en aislado es de riesgo.
+
+**Formulario.** `#segLevLado` (▲ Long · ▼ Short · ⤺ Ambos) vive junto al selector de modo de posición,
+en «Avanzado», y **solo aparece en HEDGE**; la fila del deslizador gana una lectura `▲ 24× · ▼ 1×`, en
+ámbar cuando los lados van separados. El deslizador de `#levRange` **escribe en el lado elegido** y
+puentea a propósito el `<select>` heredado de Ajustes (que llama a `TE.configure` y reescribiría el
+valor de cuenta con el de un lado); si el cambio se rechaza, el deslizador **vuelve al valor real** en
+lugar de quedarse en el número imposible. `#leverageSelect` sigue siendo el valor de cuenta, y un lado
+sin override lo sigue.
+
+Rutas tocadas: las cuatro aperturas del formulario (mercado, límite, trigger, trailing) pasan
+`TE.leverageDe(side)`, el promediado usa `TE.leverageDe(p.side)`, la línea de coste del panel
+(`bfMarginVal`) refleja el lado que manda el deslizador, y el **riesgo fijo** se calcula dos veces
+cuando hace falta —primero para deducir el lado del stop, después con el apalancamiento de ese lado,
+porque el tope de margen depende de él—. El ajuste viaja en `serialize()` dentro de `state` y
+`resetAccount` lo limpia (sin posiciones, separar lados no tiene a quién aplicar).
+
+**No replicado, dicho claro.** Las plantillas de orden (`orderTemplates`) guardan el apalancamiento de
+cuenta, no los dos lados: una plantilla con lados separados se cargaría con el valor unificado. Es una
+omisión consciente —añadir dos campos a un formato ya publicado habría requerido migrar las
+plantillas guardadas por el usuario— y se arregla eligiendo el lado y arrastrando el deslizador después
+de cargar.
+
+Arnés: `tests/apalancamiento-lado.test.js` — 48 de motor (vm, sin navegador) y 25 de interfaz sobre el
+archivo único, abriendo las dos posiciones por los botones de la carta y no por llamadas al motor.
+Batería tras este bloque: **31 suites · 1731 comprobaciones · 0 fallidas · 0 omitidas**.
+
+## 20 · Lo que queda: las quejas de los gráficos
+
+El resto del encargo («arreglar los errores en la parte de gráficos que están bien y no cambiarlos si
+no arreglan nada») necesita la lista: se pidió cuatro veces y no llegó. Sin lista no hay nada que
+medir, y «mejorar los gráficos» a ciegas es exactamente el tipo de cambio que este proyecto ya rechazó
+una vez (19 px de desborde en `.grid-2` de `#orderCard` siguen **reportados, no arreglados**, porque se
+pidió un barrido y un diagnóstico, no un parche).

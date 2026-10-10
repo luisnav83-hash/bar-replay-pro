@@ -44,6 +44,7 @@
     "test:trailing": "node tests/trailing.test.js",
     "test:trailing-orden": "node tests/trailing-orden.test.js",
     "test:riesgo-fijo": "node tests/riesgo-fijo.test.js",
+    "test:apalancamiento-lado": "node tests/apalancamiento-lado.test.js",
     "test:bitunix": "node tests/bitunix.test.js",
     "test:pnl": "node tests/pnl-chart.test.js"
   },

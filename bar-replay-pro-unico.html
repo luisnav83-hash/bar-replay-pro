@@ -966,6 +966,8 @@ body {
   border-radius: var(--r);
 }
 .bf-lev b { min-width: 26px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.lev-lados { font-size: 10.5px; color: var(--mut, #8b93a7); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lev-lados.dif { color: #e0a33e; font-weight: 600; }
 .bf-lev input[type="range"] {
   width: 86px; height: 22px; margin: 0; padding: 0; cursor: ew-resize;
   -webkit-appearance: none; appearance: none;
@@ -1590,6 +1592,7 @@ kbd {
   #orderCard #segOrderType .ic { display: none; }
   #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
   #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard .lev-lados { font-size: 9.5px; }   // en el teléfono, solo más pequeño: no hay sitio
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
   #orderCard .field { min-height: 26px; }
   #orderCard .field input { height: 24px; }
@@ -2106,6 +2109,9 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           <div class="bf-lev" title="Apalancamiento actual">
             <b id="bfLevVal">1x</b>
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
+            <!-- En HEDGE el deslizador escribe en UN lado, así que hay que decir cuáles son los dos
+                 (en ONE-WAY esta línea no aparece: solo hay un apalancamiento, el de la cuenta). -->
+            <span class="lev-lados" id="levLados" hidden>—</span>
           </div>
         </div>
         <!-- Las dos filas de segmentados (tipo de orden y unidad del tamaño) van en la
@@ -2275,6 +2281,11 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           <div class="seg seg-order" id="segPosMode" role="group" aria-label="Modo de posición">
             <button class="seg-btn active" data-pmode="ONE_WAY" title="Una sola posición: una orden al otro lado la reduce">ONE-WAY</button>
             <button class="seg-btn" data-pmode="HEDGE" title="LONG y SHORT a la vez, cada una con su margen, su SL/TP y su liquidación">HEDGE</button>
+          </div>
+          <div class="seg seg-sm" id="segLevLado" role="group" aria-label="Lado al que se le aplica el deslizador de apalancamiento" style="display:none">
+            <button class="seg-btn active" data-levlado="long" title="El deslizador de arriba fija el apalancamiento de las posiciones LARGAS">▲ Long</button>
+            <button class="seg-btn" data-levlado="short" title="El deslizador de arriba fija el apalancamiento de las posiciones CORTAS">▼ Short</button>
+            <button class="seg-btn" data-levlado="reset" title="Deja de separar los lados: los dos vuelven al apalancamiento de la cuenta">⤺ Ambos</button>
           </div>
           <div class="seg" id="segTradeSide" role="group" aria-label="Papel de la orden" style="display:none">
             <button class="seg-btn active" data-tside="open" title="Abre posición en su propio lado">Abrir</button>
@@ -4415,6 +4426,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     balance: 10000,          // capital realizado (sin PnL abierto)
     equity: 10000,           // balance + PnL no realizado
     leverage: 1,
+    /* APALANCAMIENTO POR DIRECCIÓN. En ONE-WAY no existe: hay UN solo apalancamiento para la
+       posición y `state.leverage` es ese valor. En HEDGE cada lado tiene el suyo —así lo expone la
+       API, con `holdSide` en `set_leverage`, y así lo enseña el panel—, así que aquí se guarda el
+       lado que el usuario separó y `null` significa «sigue al de la cuenta». No es un adorno: con
+       los dos lados abiertos, cambiar el de uno reliquidiza solo ese margen. */
+    leverageLado: { long: null, short: null },
     marginMode: 'cross',     // 'cross' (toda la cuenta) | 'isolated' (solo el margen)
     feePct: 0.1,             // % por lado (apertura y cierre)
     /* FUNDING, como lo liquida Bitunix (docs/estudio-futuros-bitunix.md §3): un % sobre el NOTIONAL,
@@ -4650,6 +4667,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // El umbral de cuenta es un ajuste de la cuenta, pero un reset sin posiciones con el
     // cortocircuitos armado cerraría posiciones de la partida siguiente: se apaga (y se avisa).
     if (s.tpslCuenta && s.tpslCuenta.activo) { s.tpslCuenta.activo = false; U.log('🛡️ TP/SL de cuenta apagado por el reinicio de la cuenta', 'warn'); }
+    // Un reinicio de cuenta deja de separar los lados: el apalancamiento por dirección es un ajuste
+    // de las posiciones, y sin posiciones no tiene a quién aplicar.
+    s.leverageLado = { long: null, short: null };
     s.pending = [];
     s.trades = [];
     s.equitySeries = [];
@@ -4747,6 +4767,92 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   /** El apalancamiento pedido es un TECHO, no un derecho: el nivel lo recorta (F8). */
+  TE.leverageDe = function (side) {
+    const o = TE.state.leverageLado || { long: null, short: null };
+    const v = side === 'short' ? o.short : o.long;
+    return Math.max(1, +v || +TE.state.leverage || 1);
+  };
+
+  /** Qué apalancamiento tiene cada lado ahora mismo, y si alguien lo separó. */
+  TE.leverageLadoInfo = function () {
+    const o = TE.state.leverageLado || { long: null, short: null };
+    return {
+      long: TE.leverageDe('long'), short: TE.leverageDe('short'),
+      cuenta: Math.max(1, +TE.state.leverage || 1),
+      separado: !!(o.long || o.short),
+      modo: TE.state.modoPosicion || 'ONE_WAY',
+    };
+  };
+
+  /**
+   * Fija el apalancamiento de UN lado (hedge). Devuelve `{ ok, aplicado, leverage, max, recortado }`.
+   * Reglas replicadas:
+   *  · en ONE-WAY no hay lados que separar: se aplica a la cuenta y se dice por qué (un deslizador
+   *    que no hace nada parece roto);
+   *  · el máximo lo da el TRAMO del nocional de ese lado, no el tamaño deseado (F8);
+   *  · si el lado tiene posición abierta, su margen se recalcula con el nuevo apalancamiento y el
+   *    resto de la cuenta LO PAGA: si no hay margen libre, se rechaza en vez de dejar la posición
+   *    sobre-apalancada en silencio.
+   */
+  TE.setLeverageLado = function (side, lev) {
+    const s = TE.state;
+    if (!s.leverageLado) s.leverageLado = { long: null, short: null };
+    if (side !== 'long' && side !== 'short') {
+      return { ok: false, code: 0, msg: 'el apalancamiento por lado necesita un lado (long|short)' };
+    }
+    const pedido = Math.max(1, Math.round(+lev || 1));
+    if (s.modoPosicion !== 'HEDGE') {
+      TE.configure({ leverage: pedido });
+      s.leverageLado.long = null; s.leverageLado.short = null;
+      U.log(`⚖️ Apalancamiento ${s.leverage}× PARA TODA LA cuenta: en ONE-WAY no hay apalancamiento por `
+        + `lado (los dos comparten posición) · ${s.leverage}×`, 'sys');
+      TE._emit();
+      return { ok: true, aplicado: 'cuenta', leverage: s.leverage, max: s.leverage, recortado: false,
+        msg: 'en ONE-WAY el apalancamiento es de la cuenta, no por lado' };
+    }
+    const p = TE.posicionDe(side);
+    const cap = TE.apalancamientoPermitido(p ? p.notional : 0, pedido);
+    const antes = p ? p.leverage : TE.leverageDe(side);
+    if (p) {
+      const margenAntes = p.notional / p.leverage, margenDespues = p.notional / cap.leverage;
+      const libres = s.balance - (TE.marginUsed() - margenAntes);
+      if (margenDespues > libres + 1e-9) {
+        U.toast(`El lado ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'} no aguanta ${cap.leverage}×: bajar el `
+          + `apalancamiento pide ${U.fmtMoney(margenDespues - margenAntes)} de margen más y solo quedan `
+          + `${U.fmtMoney(Math.max(0, libres))} libres`, 'err', 5600);
+        return { ok: false, code: 20015, msg: 'margen insuficiente para ese apalancamiento en ese lado',
+          necesario: margenDespues, libres };
+      }
+      p.leverage = cap.leverage;
+      U.log(`⚖️ Apalancamiento ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'}: ${antes}× → ${cap.leverage}× · `
+        + `margen de la posición ${U.fmtMoney(margenAntes)} → ${U.fmtMoney(margenDespues)} · `
+        + `liquidación ${U.fmtPrice(TE.liquidationPrice(p))} · `
+          + (s.marginMode === 'isolated' ? 'margen AISLADO: solo cambia el de esta posición'
+                                         : 'margen CRUZADO: el resto de la cuenta absorbe la diferencia'), 'ok');
+    } else {
+      U.log(`⚖️ Apalancamiento ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'} fijado en ${cap.leverage}× `
+        + `(la cuenta va a ${s.leverage}×): las órdenes de ese lado se abrirán con este valor`, 'sys');
+    }
+    s.leverageLado[side] = cap.leverage;
+    if (cap.recortado) {
+      U.toast(`Ese lado no puede ir a ${pedido}×: el tramo de ${U.fmtMoney(p ? p.notional : 0)} deja `
+        + `máximo ${cap.max}× y se ha recortado a ${cap.leverage}×`, 'warn', 5200);
+    }
+    TE._emit();
+    return { ok: true, aplicado: 'lado', leverage: cap.leverage, max: cap.max, recortado: cap.recortado, antes };
+  };
+
+  /** Deja de separar los lados: ambos vuelven a seguir el apalancamiento de la cuenta. */
+  TE.offLeverageLado = function () {
+    const s = TE.state;
+    s.leverageLado = { long: null, short: null };
+    for (const p of TE.posiciones()) p.leverage = Math.max(1, +s.leverage || 1);
+    U.log(`⚖️ Apalancamiento unificado a ${s.leverage}× para los dos lados (se quita la separación por `
+        + `dirección) · ${TE.posiciones().length} posición(es) recalculada(s)`, 'sys');
+    TE._emit();
+    return { ok: true, leverage: s.leverage };
+  };
+
   TE.apalancamientoPermitido = function (notional, pedido) {
     const t = TE.nivel(notional);
     const max = t ? +t.leverage : Math.max(1, +pedido || 1);
@@ -4886,7 +4992,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const entryPrice = +params.entryPrice;
     if (!Number.isFinite(entryPrice) || entryPrice <= 0) { U.toast('Precio de entrada no válido', 'err'); return null; }
 
-    const leverage = Math.max(1, +(params.leverage || s.leverage || 1));
+    // El apalancamiento que manda es el del LADO (en ONE-WAY `leverageDe` devuelve el de la
+    // cuenta, así que el comportamiento de siempre no cambia); `params.leverage` sigue ganando.
+    const leverage = Math.max(1, +(params.leverage || TE.leverageDe(side) || 1));
     const feePct = params.feePct !== undefined ? +params.feePct : s.feePct;
 
     // --- Cálculo del tamaño de la posición ---
@@ -5616,7 +5724,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       limitPrice,
       mode: params.mode || 'pct',
       size: +params.size || 0,
-      leverage: Math.max(1, +(params.leverage || s.leverage || 1)),
+      // Sin apalancamiento explícito en la orden, el que manda es el del LADO (en ONE-WAY
+      // `leverageDe` devuelve el de la cuenta, así que el comportamiento de siempre no cambia).
+      leverage: Math.max(1, +(params.leverage || TE.leverageDe(side) || 1)),
       feePct: params.feePct !== undefined ? +params.feePct
         : (s.makerFeePct === null || s.makerFeePct === undefined ? s.feePct : +s.makerFeePct),
       sl: Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null,
@@ -6476,6 +6586,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         // ONE-WAY con dos posiciones colgando).
         modoPosicion: TE.state.modoPosicion,
         tpslCuenta: Object.assign({}, TE.state.tpslCuenta),   // el umbral de cuenta sobrevive al guardar/cargar
+        // El apalancamiento por lado también: si se perdiera al restaurar, una posición corta
+        // volvería a la vida con el apalancamiento del largo y su liquidación sería otra.
+        leverageLado: Object.assign({ long: null, short: null }, TE.state.leverageLado || {}),
         feesPaid: TE.state.feesPaid,
         lastPrice: TE.state.lastPrice,
         lastTime: TE.state.lastTime,
@@ -11533,6 +11646,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       lado.style.display = modo === 'HEDGE' ? '' : 'none';
       [...lado.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.tside === (App.tradeSide || 'open')));
     }
+    // El apalancamiento por lado solo existe en hedge; en one-way la fila se oculta (no se deja un
+    // control que no cambia nada).
+    UI.syncLevLados();
   };
 
   (function () {
@@ -12140,6 +12256,26 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   /** Sincroniza chip + deslizador + <select> del apalancamiento. */
   UI.syncLeverage = function (v) {
     const lev = Math.max(1, Math.min(100, Math.round(+v || 1)));
+    /* En HEDGE con el lado elegido, el deslizador NO es el apalancamiento de la cuenta: escribe en
+       ese lado (la API lo hace con `holdSide`). Se salta la sincronización del <select> heredado a
+       propósito —ese control llama a `TE.configure` y reescribiría el valor de cuenta con el de un
+       lado—, pero el chip y la lectura de los dos lados sí se pintan, que es lo que el usuario
+       necesita ver para saber a dónde está arrastrando. */
+    if (TE.state.modoPosicion === 'HEDGE' && App.levLado && App.levLado !== 'reset') {
+      const res = TE.setLeverageLado(App.levLado, lev);
+      UI.syncLevLados();
+      if (res.ok) {
+        const r = document.getElementById('levRange');
+        const leido = TE.leverageDe(App.levLado);
+        if (r && +r.value !== leido) r.value = String(leido);
+      } else {
+        const r = document.getElementById('levRange');
+        if (r) r.value = String(TE.leverageDe(App.levLado));   // el deslizador vuelve a la realidad
+      }
+      UI.refreshPosition();
+      UI.refreshAccount();
+      return;
+    }
     const sel = document.getElementById('leverageSelect');
     if (sel) {
       if (!Array.prototype.some.call(sel.options, (o) => +o.value === lev)) {
@@ -12152,6 +12288,28 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('bfLevVal', lev + 'x');
     const r = document.getElementById('levRange');
     if (r && +r.value !== lev) r.value = String(lev);
+    UI.syncLevLados();
+  };
+
+  /** Lectura de los dos lados en la propia fila del deslizador (solo en hedge). */
+  UI.syncLevLados = function () {
+    const el = document.getElementById('levLados');
+    const row = document.getElementById('segLevLado');
+    const info = TE.leverageLadoInfo();
+    const esHedge = info.modo === 'HEDGE';
+    if (el) {
+      el.hidden = !esHedge;
+      if (esHedge) {
+        el.textContent = `▲ ${info.long}× · ▼ ${info.short}×` + (info.separado ? '' : ' · (unificados)');
+        el.className = 'lev-lados' + (info.long !== info.short ? ' dif' : '');
+        el.title = info.separado
+          ? `Los lados van separados (cuenta ${info.cuenta}×): ▲ ${info.long}× y ▼ ${info.short}×. «⤺ Ambos» los unifica.`
+          : `Los dos lados siguen el apalancamiento de la cuenta (${info.cuenta}×). Elige un lado y el deslizador lo separará.`;
+      }
+    }
+    if (row) row.style.display = esHedge ? '' : 'none';
+    const seg = document.getElementById('segLevLado');
+    if (seg) [...seg.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.levlado === (App.levLado || 'long')));
   };
 
   /** Controles nuevos de la fila superior del panel de órdenes. */
@@ -12171,6 +12329,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     });
     const r = document.getElementById('levRange');
     if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
+    /* Qué lado edita el deslizador. «⤺ Ambos» no es un lado: deshace la separación (un control que
+       quitara el override desapareciendo sería invisible, y aquí lo que hace falta es poder VOLVER). */
+    const segLado = document.getElementById('segLevLado');
+    if (segLado) segLado.addEventListener('click', (e) => {
+      const b = e.target.closest ? e.target.closest('[data-levlado]') : null;
+      if (!b) return;
+      if (b.dataset.levlado === 'reset') {
+        TE.offLeverageLado();
+        App.levLado = 'long';
+      } else App.levLado = b.dataset.levlado;
+      UI.syncLeverage(TE.leverageDe(App.levLado));
+      UI.syncLevLados();
+      App.refreshOrderLines();
+      UI.refreshAccount();
+      U.toast(App.levLado === 'long' ? 'El deslizador fija ahora el apalancamiento LARGO ▲'
+                                     : 'El deslizador fija ahora el apalancamiento CORTO ▼', 'sys', 2600);
+    });
     const sel = document.getElementById('leverageSelect');
     if (sel) UI.syncLeverage(+sel.value);     // estado inicial coherente
 
@@ -12185,7 +12360,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const price = App.currentPrice();
     const est = price ? (App.estimateSize(price) || {}) : {};
     const notional = +est.notional || 0;
-    const lev = Math.max(1, TE.state.leverage);
+    // La línea de coste es lo que costará EL BOTÓN QUE TOQUES: en hedge con los lados separados eso
+    // es el apalancamiento del lado que manda el deslizador, no el de la cuenta.
+    const lev = Math.max(1, TE.state.modoPosicion === 'HEDGE' ? TE.leverageDe(App.levLado || 'long') : TE.state.leverage);
     setText('bfCostVal', notional > 0 ? U.fmtMoney(notional) : '—');
     setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}x)` : '—');
     const cero = notional <= 0;
@@ -12657,7 +12834,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   App.focusTs = null;
   App.warmup = 150;              // velas de contexto antes del inicio del replay
   App.autoReveal = true;         // mantener visible la última vela al avanzar
-  App.sizeMode = 'pct';          // pct | notional | qty
+  App.sizeMode = 'pct';          // pct | notional | qty | riesgo
+  App.levLado = 'long';          // en HEDGE, a qué lado escribe el deslizador de apalancamiento
   App.candles = [];              // velas cargadas (todas, incluidas las ocultas)
   App.checkpoints = [];          // estado de la cuenta en cada índice del replay
   App.indicators = null;         // configuración de indicadores activos
@@ -13368,12 +13546,18 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /** El triángulo completo: tamaño deducido + TP derivado por el ratio elegido (1:1…1:4). */
   App.riesgoCalcula = function () {
-    const r = TE.sizePorRiesgo({
+    const args = {
       entryPrice: App.riesgoEntrada(),
       slPrice: parseFloat((document.getElementById('riesgoSlInput') || {}).value),
       maxLoss: parseFloat((document.getElementById('riesgoMaxInput') || {}).value),
-      leverage: TE.state.leverage,
-    });
+    };
+    // El lado se deduce del stop y el margen que cabe depende del APALANCAMIENTO de ese lado, así
+    // que se calcula dos veces: la primera para saber a qué lado va, la segunda con su valor real.
+    let r = TE.sizePorRiesgo(Object.assign({ leverage: TE.state.leverage }, args));
+    if (r.ok && TE.state.modoPosicion === 'HEDGE') {
+      const lado = TE.leverageDe(r.side);
+      if (lado !== TE.state.leverage) r = TE.sizePorRiesgo(Object.assign({ leverage: lado }, args));
+    }
     r.rr = App.riesgoRr();
     if (r.ok) {
       r.tp = r.rr > 0 ? r.entry + r.dir * r.dist * r.rr : null;
@@ -13504,7 +13688,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       size: sp.size,
       entryPrice: price,
       sl, tp,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       time: App.currentTime(),
     });
@@ -13557,7 +13741,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       activation: act, callbackPct: pct,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
       mode: sp.mode, size: sp.size,
-      leverage: TE.state.leverage, feePct: TE.state.feePct,
+      leverage: TE.leverageDe(side), feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       time: App.currentTime(),
     });
@@ -13611,7 +13795,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       size: sp.size,
       sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
       tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       efecto: (ef && ef.value) || 'GTC',
@@ -13662,7 +13846,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       mode: sp.mode,
       size: sp.size,
       sl, tp,
-      leverage: TE.state.leverage,
+      leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
       refPrice: ref,
       efecto: (document.getElementById('ordEffect') || {}).value || undefined,
@@ -13819,7 +14003,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       entryPrice: App.currentPrice(),
       sl: o.sl !== undefined ? o.sl : null,
       tp: o.tp !== undefined ? o.tp : null,
-      leverage: TE.state.leverage,
+      // Añadir a una posición existing usa el apalancamiento de ESE lado (puede no ser el de la
+      // cuenta si el usuario los separó en hedge): si no, promediar cambiaría la liquidación.
+      leverage: TE.leverageDe(p.side),
       feePct: TE.state.feePct,
       time: App.currentTime(),
       reaim: o.reaim ? 'medio' : null,

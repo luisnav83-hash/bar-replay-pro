@@ -342,6 +342,11 @@ body {
   border-radius: var(--r);
 }
 .bf-lev b { min-width: 26px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+/* Lectura de los DOS lados en la propia fila del deslizador. Solo aparece en HEDGE (en one-way no
+   hay dos lados que leer). El `.dif` pinta en ámbar cuando ▲ y ▼ van separados: es el estado que hay
+   que poder ver de reojo, porque cambia el margen y la liquidación de una de las dos posiciones. */
+.lev-lados { font-size: 10.5px; color: var(--mut, #8b93a7); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lev-lados.dif { color: #e0a33e; font-weight: 600; }
 /* El deslizador de apalancamiento: la BARRA se ve de 3px (look Bitunix) pero la
    CAJA del control mide 22px, que es lo que pilla el dedo. Con height:3px en el
    elemento, en móvil era imposible agarrarlo. */
@@ -1400,6 +1405,7 @@ kbd {
   /* Lo mismo con el CUARTO modo de tamaño («Riesgo», 223/225): cuatro unidades en la misma línea
      compartida con el segmentado de tipos desbordaban 21 px más. */
   #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard .lev-lados { font-size: 9.5px; }   // en el teléfono, solo más pequeño: no hay sitio
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
   #orderCard .field { min-height: 26px; }
   #orderCard .field input { height: 24px; }

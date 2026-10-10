@@ -426,6 +426,9 @@
           <div class="bf-lev" title="Apalancamiento actual">
             <b id="bfLevVal">1x</b>
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
+            <!-- En HEDGE el deslizador escribe en UN lado, así que hay que decir cuáles son los dos
+                 (en ONE-WAY esta línea no aparece: solo hay un apalancamiento, el de la cuenta). -->
+            <span class="lev-lados" id="levLados" hidden>—</span>
           </div>
         </div>
         <!-- Las dos filas de segmentados (tipo de orden y unidad del tamaño) van en la
@@ -595,6 +598,11 @@
           <div class="seg seg-order" id="segPosMode" role="group" aria-label="Modo de posición">
             <button class="seg-btn active" data-pmode="ONE_WAY" title="Una sola posición: una orden al otro lado la reduce">ONE-WAY</button>
             <button class="seg-btn" data-pmode="HEDGE" title="LONG y SHORT a la vez, cada una con su margen, su SL/TP y su liquidación">HEDGE</button>
+          </div>
+          <div class="seg seg-sm" id="segLevLado" role="group" aria-label="Lado al que se le aplica el deslizador de apalancamiento" style="display:none">
+            <button class="seg-btn active" data-levlado="long" title="El deslizador de arriba fija el apalancamiento de las posiciones LARGAS">▲ Long</button>
+            <button class="seg-btn" data-levlado="short" title="El deslizador de arriba fija el apalancamiento de las posiciones CORTAS">▼ Short</button>
+            <button class="seg-btn" data-levlado="reset" title="Deja de separar los lados: los dos vuelven al apalancamiento de la cuenta">⤺ Ambos</button>
           </div>
           <div class="seg" id="segTradeSide" role="group" aria-label="Papel de la orden" style="display:none">
             <button class="seg-btn active" data-tside="open" title="Abre posición en su propio lado">Abrir</button>

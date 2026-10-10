@@ -27,6 +27,12 @@
     balance: 10000,          // capital realizado (sin PnL abierto)
     equity: 10000,           // balance + PnL no realizado
     leverage: 1,
+    /* APALANCAMIENTO POR DIRECCIÓN. En ONE-WAY no existe: hay UN solo apalancamiento para la
+       posición y `state.leverage` es ese valor. En HEDGE cada lado tiene el suyo —así lo expone la
+       API, con `holdSide` en `set_leverage`, y así lo enseña el panel—, así que aquí se guarda el
+       lado que el usuario separó y `null` significa «sigue al de la cuenta». No es un adorno: con
+       los dos lados abiertos, cambiar el de uno reliquidiza solo ese margen. */
+    leverageLado: { long: null, short: null },
     marginMode: 'cross',     // 'cross' (toda la cuenta) | 'isolated' (solo el margen)
     feePct: 0.1,             // % por lado (apertura y cierre)
     /* FUNDING, como lo liquida Bitunix (docs/estudio-futuros-bitunix.md §3): un % sobre el NOTIONAL,
@@ -262,6 +268,9 @@
     // El umbral de cuenta es un ajuste de la cuenta, pero un reset sin posiciones con el
     // cortocircuitos armado cerraría posiciones de la partida siguiente: se apaga (y se avisa).
     if (s.tpslCuenta && s.tpslCuenta.activo) { s.tpslCuenta.activo = false; U.log('🛡️ TP/SL de cuenta apagado por el reinicio de la cuenta', 'warn'); }
+    // Un reinicio de cuenta deja de separar los lados: el apalancamiento por dirección es un ajuste
+    // de las posiciones, y sin posiciones no tiene a quién aplicar.
+    s.leverageLado = { long: null, short: null };
     s.pending = [];
     s.trades = [];
     s.equitySeries = [];
@@ -359,6 +368,92 @@
   };
 
   /** El apalancamiento pedido es un TECHO, no un derecho: el nivel lo recorta (F8). */
+  TE.leverageDe = function (side) {
+    const o = TE.state.leverageLado || { long: null, short: null };
+    const v = side === 'short' ? o.short : o.long;
+    return Math.max(1, +v || +TE.state.leverage || 1);
+  };
+
+  /** Qué apalancamiento tiene cada lado ahora mismo, y si alguien lo separó. */
+  TE.leverageLadoInfo = function () {
+    const o = TE.state.leverageLado || { long: null, short: null };
+    return {
+      long: TE.leverageDe('long'), short: TE.leverageDe('short'),
+      cuenta: Math.max(1, +TE.state.leverage || 1),
+      separado: !!(o.long || o.short),
+      modo: TE.state.modoPosicion || 'ONE_WAY',
+    };
+  };
+
+  /**
+   * Fija el apalancamiento de UN lado (hedge). Devuelve `{ ok, aplicado, leverage, max, recortado }`.
+   * Reglas replicadas:
+   *  · en ONE-WAY no hay lados que separar: se aplica a la cuenta y se dice por qué (un deslizador
+   *    que no hace nada parece roto);
+   *  · el máximo lo da el TRAMO del nocional de ese lado, no el tamaño deseado (F8);
+   *  · si el lado tiene posición abierta, su margen se recalcula con el nuevo apalancamiento y el
+   *    resto de la cuenta LO PAGA: si no hay margen libre, se rechaza en vez de dejar la posición
+   *    sobre-apalancada en silencio.
+   */
+  TE.setLeverageLado = function (side, lev) {
+    const s = TE.state;
+    if (!s.leverageLado) s.leverageLado = { long: null, short: null };
+    if (side !== 'long' && side !== 'short') {
+      return { ok: false, code: 0, msg: 'el apalancamiento por lado necesita un lado (long|short)' };
+    }
+    const pedido = Math.max(1, Math.round(+lev || 1));
+    if (s.modoPosicion !== 'HEDGE') {
+      TE.configure({ leverage: pedido });
+      s.leverageLado.long = null; s.leverageLado.short = null;
+      U.log(`⚖️ Apalancamiento ${s.leverage}× PARA TODA LA cuenta: en ONE-WAY no hay apalancamiento por `
+        + `lado (los dos comparten posición) · ${s.leverage}×`, 'sys');
+      TE._emit();
+      return { ok: true, aplicado: 'cuenta', leverage: s.leverage, max: s.leverage, recortado: false,
+        msg: 'en ONE-WAY el apalancamiento es de la cuenta, no por lado' };
+    }
+    const p = TE.posicionDe(side);
+    const cap = TE.apalancamientoPermitido(p ? p.notional : 0, pedido);
+    const antes = p ? p.leverage : TE.leverageDe(side);
+    if (p) {
+      const margenAntes = p.notional / p.leverage, margenDespues = p.notional / cap.leverage;
+      const libres = s.balance - (TE.marginUsed() - margenAntes);
+      if (margenDespues > libres + 1e-9) {
+        U.toast(`El lado ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'} no aguanta ${cap.leverage}×: bajar el `
+          + `apalancamiento pide ${U.fmtMoney(margenDespues - margenAntes)} de margen más y solo quedan `
+          + `${U.fmtMoney(Math.max(0, libres))} libres`, 'err', 5600);
+        return { ok: false, code: 20015, msg: 'margen insuficiente para ese apalancamiento en ese lado',
+          necesario: margenDespues, libres };
+      }
+      p.leverage = cap.leverage;
+      U.log(`⚖️ Apalancamiento ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'}: ${antes}× → ${cap.leverage}× · `
+        + `margen de la posición ${U.fmtMoney(margenAntes)} → ${U.fmtMoney(margenDespues)} · `
+        + `liquidación ${U.fmtPrice(TE.liquidationPrice(p))} · `
+          + (s.marginMode === 'isolated' ? 'margen AISLADO: solo cambia el de esta posición'
+                                         : 'margen CRUZADO: el resto de la cuenta absorbe la diferencia'), 'ok');
+    } else {
+      U.log(`⚖️ Apalancamiento ${side === 'long' ? 'LARGO ▲' : 'CORTO ▼'} fijado en ${cap.leverage}× `
+        + `(la cuenta va a ${s.leverage}×): las órdenes de ese lado se abrirán con este valor`, 'sys');
+    }
+    s.leverageLado[side] = cap.leverage;
+    if (cap.recortado) {
+      U.toast(`Ese lado no puede ir a ${pedido}×: el tramo de ${U.fmtMoney(p ? p.notional : 0)} deja `
+        + `máximo ${cap.max}× y se ha recortado a ${cap.leverage}×`, 'warn', 5200);
+    }
+    TE._emit();
+    return { ok: true, aplicado: 'lado', leverage: cap.leverage, max: cap.max, recortado: cap.recortado, antes };
+  };
+
+  /** Deja de separar los lados: ambos vuelven a seguir el apalancamiento de la cuenta. */
+  TE.offLeverageLado = function () {
+    const s = TE.state;
+    s.leverageLado = { long: null, short: null };
+    for (const p of TE.posiciones()) p.leverage = Math.max(1, +s.leverage || 1);
+    U.log(`⚖️ Apalancamiento unificado a ${s.leverage}× para los dos lados (se quita la separación por `
+        + `dirección) · ${TE.posiciones().length} posición(es) recalculada(s)`, 'sys');
+    TE._emit();
+    return { ok: true, leverage: s.leverage };
+  };
+
   TE.apalancamientoPermitido = function (notional, pedido) {
     const t = TE.nivel(notional);
     const max = t ? +t.leverage : Math.max(1, +pedido || 1);
@@ -498,7 +593,9 @@
     const entryPrice = +params.entryPrice;
     if (!Number.isFinite(entryPrice) || entryPrice <= 0) { U.toast('Precio de entrada no válido', 'err'); return null; }
 
-    const leverage = Math.max(1, +(params.leverage || s.leverage || 1));
+    // El apalancamiento que manda es el del LADO (en ONE-WAY `leverageDe` devuelve el de la
+    // cuenta, así que el comportamiento de siempre no cambia); `params.leverage` sigue ganando.
+    const leverage = Math.max(1, +(params.leverage || TE.leverageDe(side) || 1));
     const feePct = params.feePct !== undefined ? +params.feePct : s.feePct;
 
     // --- Cálculo del tamaño de la posición ---
@@ -1228,7 +1325,9 @@
       limitPrice,
       mode: params.mode || 'pct',
       size: +params.size || 0,
-      leverage: Math.max(1, +(params.leverage || s.leverage || 1)),
+      // Sin apalancamiento explícito en la orden, el que manda es el del LADO (en ONE-WAY
+      // `leverageDe` devuelve el de la cuenta, así que el comportamiento de siempre no cambia).
+      leverage: Math.max(1, +(params.leverage || TE.leverageDe(side) || 1)),
       feePct: params.feePct !== undefined ? +params.feePct
         : (s.makerFeePct === null || s.makerFeePct === undefined ? s.feePct : +s.makerFeePct),
       sl: Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null,
@@ -2088,6 +2187,9 @@
         // ONE-WAY con dos posiciones colgando).
         modoPosicion: TE.state.modoPosicion,
         tpslCuenta: Object.assign({}, TE.state.tpslCuenta),   // el umbral de cuenta sobrevive al guardar/cargar
+        // El apalancamiento por lado también: si se perdiera al restaurar, una posición corta
+        // volvería a la vida con el apalancamiento del largo y su liquidación sería otra.
+        leverageLado: Object.assign({ long: null, short: null }, TE.state.leverageLado || {}),
         feesPaid: TE.state.feesPaid,
         lastPrice: TE.state.lastPrice,
         lastTime: TE.state.lastTime,
