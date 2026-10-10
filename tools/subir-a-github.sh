@@ -80,6 +80,22 @@ if git push -u origin main --quiet 2>/tmp/gh_push.log; then
 else
   say "  ✗ El push falló:"
   sed 's/x-access-token:[^@]*@/x-access-token:***@/g' /tmp/gh_push.log | sed 's/^/     /'
+  # Historia reescrita localmente (p. ej. al sacar docs/ del peso del repo) = non-fast-forward.
+  # No se fuerza NUNCA por defecto: con FUERZA=1 se reintenta con --force-with-lease, que rechaza
+  # si en GitHub entró un commit que aquí no conocemos (la red de seguridad que un -f no tiene).
+  if grep -qiE "non-fast-forward|fetch first" /tmp/gh_push.log; then
+    if [ "${FUERZA:-0}" = "1" ]; then
+      say "  · Reintentando con --force-with-lease (FUERZA=1)…"
+      if git push -u origin main --force-with-lease --quiet 2>/tmp/gh_push2.log; then
+        say "  ✓ Subido forzando: https://github.com/$USUARIO/$REPO"
+              else
+        say "  ✗ También falló:"; sed 's/^/     /' /tmp/gh_push2.log; exit 1
+      fi
+    else
+      say "  · Es un rechazo por historia reescrita. Si lo que quieres es que lo publicado sea"
+      say "    exactamente este árbol, vuelve a lanzar con FUERZA=1 (usa --force-with-lease, no -f)."
+    fi
+  fi
   exit 1
 fi
 

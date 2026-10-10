@@ -801,9 +801,16 @@ El total local no es fijo al último dígito: `test:promediar` cuenta **82, 83 u
 según los casos que la serie del día omita por no dar el escenario (estaba en 82 cuando se midió
 el párrafo anterior de este README); todo lo demás es determinista.
 
-**Lo servido en GitHub Pages todavía no es esto.** Hay cuatro commits locales sin subir
-(`origin/main` sigue en `8bb1c63`; los tres de la escalera del teléfono —`fefcfee`, `dfeaccd`,
-`39d9b8b`— más `HEAD`, que trae las plantillas de orden) y la comprobación que importa —que lo publicado ES lo
+**Lo servido en GitHub Pages todavía no es esto.** Cuatro commits locales sin subir: los tres de
+la escalera del teléfono, el de las plantillas (`HEAD`) y el de las capturas que está justo debajo.
+Dos cosas cambiaron al limpiar el peso del repo (109,8 MB de `docs/` en la historia ⇒ 11 MB): **la
+historia está reescrita** (`git filter-branch` sacó `docs/` de los 23 commits anteriores, así que
+todos los hashes viejos ya no valen, `8bb1c63` incluido, y `origin/main` ya no existe como puntero
+local porque lo borré para que `git gc` pudiera liberar los objetos —volverá al hacer el push—) y
+por eso la primera subida necesita **fuerza con red**: `FUERZA=1 ./tools/subir-a-github.sh
+bar-replay-pro`, que reintenta con `--force-with-lease` (rechaza si en GitHub entró algo que aquí
+no conocemos; `-f` a secas no lo comprueba). Los ficheros, en cambio, no cambiaron ni un byte: los
+`md5` de abajo son los mismos antes y después de la limpieza. Y la comprobación que importa —que lo publicado ES lo
 construido, midiendo `md5` en la URL contra el fichero local— fallaría ahora a propósito.
 Los `md5` locales de hoy, que son los que tendrán que aparecer en la URL pública tras el próximo
 despliegue: `bar-replay-pro-unico.html` `9ac66add…` (968 722 B), `index.html` `57763621`,
