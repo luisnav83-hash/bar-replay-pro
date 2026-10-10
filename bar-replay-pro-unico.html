@@ -1772,6 +1772,30 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #sidebar > #orderCard { order: -1; }
   #sidebar > #orderCard .card-head { border-top: 0; }
 }
+#drawToolbar > .rail-body { display: contents; }
+@media (min-width: 1360px) {
+  #chartArea { --toolbar-h: 0px; position: relative; padding-left: 34px; }
+  #drawToolbar { position: static; height: 0; min-height: 0; padding: 0; border: 0;
+                 background: transparent; overflow: visible; }
+  #drawToolbar > .rail-body {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 34px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 3px 2px;
+    border-right: 1px solid var(--line); background: var(--bg-1); overflow: hidden;
+  }
+  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 2px;
+                               padding-right: 0; border-right: 0; border-bottom: 1px solid var(--line-soft); padding-bottom: 3px; }
+  #drawToolbar > .rail-body { overflow-y: auto; scrollbar-width: thin; }
+  #drawToolbar .tool-cluster:last-child { border-bottom: 0; padding-bottom: 0; }
+  #drawToolbar .tool-cluster-right { margin-left: 0; order: 9; }
+  #drawToolbar .tool { width: 28px; height: 26px; padding: 0; font-size: 12px; }
+  #drawToolbar .color-pick { width: 26px; height: 20px; }
+  #drawToolbar .mini-select { width: 28px; height: 22px; padding: 0 1px; font-size: 10px; }
+  #drawToolbar .switch { justify-content: center; gap: 0; }
+  #drawToolbar .switch span { display: none; }
+  #drawToolbar .switch:has(input:checked)::after { content: ""; width: 5px; height: 5px; border-radius: 50%;
+                                                    background: var(--up); display: block; }
+}
+.hint { color: var(--tx-3); }
 </style>
 </head>
 <body>
@@ -1965,6 +1989,12 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 
     <!-- Barra de herramientas de dibujo -->
     <div id="drawToolbar">
+    <!-- .rail-body: el envoltorio que en ≥1360 px se convierte en el RIEL vertical
+             (css/bitunix.css, bloque 16). Se abre AQUÍ y se cierra justo antes de </div> del
+             toolbar: el riel es un solo box absoluto, así que `#drawToolbar` puede seguir siendo un
+             ítem del grid con altura 0 -y `PC.ajustaEscalera`, que mide su caja para repartir la
+             escalera, sigue viendo 0 en vez de la altura del lienzo—. -->
+    <div class="rail-body">
       <div class="tool-cluster" role="group" aria-label="Herramientas de dibujo">
         <button class="tool active" data-tool="cursor" title="Cursor: seleccionar y mover dibujos">↖</button>
         <button class="tool" data-tool="trend" title="Línea de tendencia">╱</button>
@@ -2016,6 +2046,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
           <span>⊘ scroll</span>
         </label>
       </div>
+    </div><!-- /.rail-body -->
     </div>
 
     <!-- Gráfico principal + canvas de dibujos -->
@@ -8724,6 +8755,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const ro = new ResizeObserver(() => { DT.resize(); DT.render(); });
     ro.observe(document.getElementById('chartWrap'));
 
+    /* Y al cambiar de PANTALLA, que no cambia el tamaño CSS: el observador de arriba mira el
+       `#chartWrap` y la relación de pixeles NO le afecta a su caja, así que el lienzo de
+       dibujos se quedaba a 1× en un panel 2× (dibujos y líneas siamesas, pero borrosas). Lo
+       midió tools/barrido-graficos.js el 11-oct en «retina 1360×900 (dpr 2)»: «#overlayCanvas →
+       1× (debería 2×)» y, como prueba de que el mecanismo funciona, «forzando DT.resize() pasa a
+       2×». La única forma de enterarse es escuchar el media query de la resolución ACTUAL y
+       re-engancharlo después (el query viejo deja de coincidir en cuanto cambia). */
+    DT._vigilaDpr = function () {
+      if (!global.matchMedia) return false;
+      const q = global.matchMedia(`(resolution: ${global.devicePixelRatio || 1}dppx)`);
+      const on = () => { DT.resize(); DT.render(); DT._vigilaDpr(); };
+      if (q.addEventListener) q.addEventListener('change', on, { once: true });
+      else if (q.addListener) q.addListener(on);
+      return true;
+    };
+    DT._vigilaDpr();
+
     // El gráfico cambia de rango (zoom/scroll) → redibujar
     CM.main.timeScale().subscribeVisibleLogicalRangeChange(() => DT.render());
 
@@ -10173,20 +10221,45 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       `<span class="t">${OB.fmtQty(r[2])}</span></div>`;
   }
 
+  /* FILAS QUE SIGUEN AL ESPACIO (11-oct-2026, ítem 4 del registro). El libro se pintaba con
+     `OB.ROWS` fijo -10 niveles por lado- mientras la caja podía medir 102 px (los dos medios
+     del cajón apaisado) o 230 px. Con 17 px por fila, 10 filas son 170 px: desbordaban 68 px
+     y el `overflow:hidden` se comía las cuatro filas del borde sin barra de desplazamiento ni
+     aviso -así lo contaba tools/barrido-graficos.js: «Libro: 10 filas pintadas en una caja de
+     102 px» en dos líneas NO CUADRA—. El sitio resuelve el mismo cajón con ~15 filas en 460 px
+     (30 px por fila con barras detrás), o sea: el número de niveles ES función del alto.
+     Se pinta `suelo(alto / 17)`, entre 5 y 12; como el recorte se hace por las MEJORES filas
+     (`slice(0, n)` sobre arrays ordenados de mejor a peor), lo que desaparece es lo más
+     lejano al precio, que es lo que menos informa. */
+  OB.ROW_H = 17;
+  OB.filasDisponibles = function (boxA) {
+    const alto = boxA ? boxA.clientHeight : 0;
+    if (!alto) return OB.ROWS;
+    return Math.max(5, Math.min(12, Math.floor(alto / OB.ROW_H)));
+  };
+
   OB.renderBook = function () {
     const boxA = el('bookAsks');
     const boxB = el('bookBids');
     if (!boxA || !boxB) return;
     const b = OB.state.book;
     if (!b) { boxA.innerHTML = ''; boxB.innerHTML = ''; return; }
-    const max = Math.max(b.asks[b.asks.length - 1][2] || 0, b.bids[b.bids.length - 1][2] || 0) || 1;
+    OB._observaCajon();
+    const nF = OB.filasDisponibles(boxA);
+    const asks = b.asks.slice(0, nF);
+    const bids = b.bids.slice(0, nF);
+    /* El máximo de las barras de profundidad sale de la ÚLTIMA fila PINTADA, no de la última
+       del array: si no, con el libro recortado a 6 filas la barra de la sexta mediría la mitad
+       y parecería que falta liquidez donde solo falta espacio. */
+    const max = Math.max(asks[asks.length - 1] ? asks[asks.length - 1][2] : 0,
+                         bids[bids.length - 1] ? bids[bids.length - 1][2] : 0) || 1;
     // Se pintan en el orden que devuelve el exchange (mejor primero). El orden
     // VISUAL lo decide la hoja: `.bf-asks` es `column-reverse`, así que la mejor
     // venta cae abajo, pegada al precio último, y la más lejana arriba —como en
     // Bitunix—. Su columna «Total» (acumulada) es por eso máxima en la fila de
     // arriba. No invertir también el array: se harían dos volteos y quedaría al revés.
-    boxA.innerHTML = b.asks.map((r) => rowHtml(r, max)).join('');
-    boxB.innerHTML = b.bids.map((r) => rowHtml(r, max)).join('');
+    boxA.innerHTML = asks.map((r) => rowHtml(r, max)).join('');
+    boxB.innerHTML = bids.map((r) => rowHtml(r, max)).join('');
 
     const px = App.currentPrice();
     const last = el('bookLast');
@@ -10201,8 +10274,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       if (wrap) wrap.classList.toggle('up', up), wrap.classList.toggle('dn', !up);
     }
     // banda bid/ask del pie del libro
-    const bq = b.bids.reduce((s, r) => s + r[1], 0);
-    const aq = b.asks.reduce((s, r) => s + r[1], 0);
+    const bq = bids.reduce((s, r) => s + r[1], 0);
+    const aq = asks.reduce((s, r) => s + r[1], 0);
     const tot = bq + aq || 1;
     const bidPct = (bq / tot) * 100;
     const bar = el('bookBidBar');
@@ -10340,6 +10413,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       partes.push(meta && meta.mark ? 'mark/OI/funding: ' + meta.venues.join(' + ') : 'futuros: sin dato');
       src.textContent = partes.join(' · ');
       src.title = (OB.state.errors.length ? 'Avisos: ' + OB.state.errors.join(' · ') : 'Sin avisos de red.');
+    }
+  };
+
+  /* El alto del cajón cambia con la ventana y con el tier de la hoja; sin repintar, las filas
+     seguirían las del tamaño anterior (recorte o hueco en blanco). El observador se engancha en
+     la PRIMERA pintura -no al cargar el módulo: el script puede adelantarse al DOM, y entonces
+     `getElementById` da null y el mecanismo no se activa nunca, que es de esos fallos que solo
+     se ven en la ventana pequeña—. Un frame de aplazamiento evita la pelea con el
+     `ResizeObserver` del layout. */
+  let pendOB = 0, obsOB = false;
+  OB._observaCajon = function () {
+    if (obsOB || typeof window === 'undefined' || !('ResizeObserver' in window)) return;
+    obsOB = true;
+    const repinta = () => { if (pendOB) return; pendOB = requestAnimationFrame(() => { pendOB = 0; OB.renderBook(); }); };
+    for (const id of ['bookAsks', 'bookBids']) {
+      const e = document.getElementById(id);
+      if (e) new ResizeObserver(repinta).observe(e);
     }
   };
 
@@ -11760,8 +11850,21 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       if (typing) return;
 
       switch (e.key) {
-        case ' ':
+        case ' ': {
+          /* La barra SOLO reproduce/pausa si lo enfocado no es un control que ya la
+             use. Antes se hacía `preventDefault()` sin mirar: un botón de la barra de
+             replay enfocado (por ejemplo «Indicadores») no recibía su click nativo y
+             la tecla no hacía lo que uno espera del teclado -lo medía
+             tools/barrido-graficos.js como «Teclado sobre un botón enfocado», con
+             0 clicks tras la barra y 1 tras Enter—. Sin `preventDefault`, el navegador
+             dispara el click del botón enfocado y la reproducción no se toca; si no hay
+             nada enfocado (o es el propio cuerpo), la tecla es nuestra. */
+          const t = document.activeElement;
+          const control = t && t !== document.body && t.tabIndex >= 0
+            && /^(BUTTON|A|SUMMARY|SELECT)$/.test(t.tagName);
+          if (control) break;
           e.preventDefault(); App.togglePlay(); break;
+        }
         case 'ArrowRight':
           e.preventDefault(); App.stepForward(); break;
         case 'ArrowLeft':

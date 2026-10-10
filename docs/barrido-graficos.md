@@ -1,44 +1,15 @@
 # Barrido medible de la zona de gráficos
 
-Generado por `tools/barrido-graficos.js` sobre `bar-replay-pro-unico.html` con la red cortada, 71 comprobaciones en 22s: **5 no cuadran**, 64 cuadran, 2 a decidir.
+Generado por `tools/barrido-graficos.js` sobre `bar-replay-pro-unico.html` con la red cortada, 70 comprobaciones en 22s: **0 no cuadran**, 69 cuadran, 1 a decidir.
 
 Esto no es la lista de las doce quejas: es una lista **fabricada midiendo**, para poder cruzarla con ellas. Cada línea lleva el número, el sitio y el criterio. Lo que sale en «cuadra» no se toca, que fue la instrucción recibida («arreglar los errores que están bien y no cambiarlos si no arreglan nada» se entiende al revés: lo que está bien se deja).
 
 ## 1 · Lo que no cuadra (medido y mal)
 
-**G1 · Lienzos sin escalar a devicePixelRatio 2 (retina 1360×900 (dpr 2))**  
-- medido: #overlayCanvas → 1× (debería 2×)
-- dónde: `canvas del gráfico`
-- por qué importa: un lienzo a 1× en una pantalla 2× se ve borroso: la línea sale con antialias doble
-
-**G2 · Teclado sobre un botón enfocado (#btnIndicators)**  
-- medido: clicks contados en el botón: tras la barra 0 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=true, índice 916)
-- dónde: `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>`
-- por qué importa: la barra espaciadora hace preventDefault a nivel de documento y el botón enfocado no recibe su click: un botón de la barra de replay no se puede activar con la tecla que le corresponde
-
-**G3 · Libro: 10 filas pintadas en una caja de 102 px (bookAsks)**  
-- medido: 10 filas × 17 px = 170 px en 102 px de caja (max-height 102px) · caben 6 · desborde 68 px
-- dónde: `#bookAsks · js/orderBook.js · css/bitunix.css (.bf-asks)`
-- por qué importa: se pintan 4 fila(s) más de las que caben: la última sale cortada a la mitad y sin scrollbar · la cantidad de filas la fija OB.ROWS (js/orderBook.js:34, «ROWS = 10 · el original muestra 10-15») y el alto de la caja sale del CSS (--cuerpo), así que las dos mitades no se han visto nunca: 10 × 17 = 170 px en 102 px
-
-**G4 · Libro: 10 filas pintadas en una caja de 102 px (bookBids)**  
-- medido: 10 filas × 17 px = 170 px en 102 px de caja (max-height 102px) · caben 6 · desborde 68 px
-- dónde: `#bookBids · js/orderBook.js · css/bitunix.css (.bf-asks)`
-- por qué importa: se pintan 4 fila(s) más de las que caben: la última sale cortada a la mitad y sin scrollbar · la cantidad de filas la fija OB.ROWS (js/orderBook.js:34, «ROWS = 10 · el original muestra 10-15») y el alto de la caja sale del CSS (--cuerpo), así que las dos mitades no se han visto nunca: 10 × 17 = 170 px en 102 px
-
-**G5 · Contraste de los rótulos pequeños de la zona de gráficos**  
-- medido: medidos 10 · #ohlcLegend 11.94:1/11px · #lgInd 11.94:1/11px · #bfIndex 6.3:1/9.5px · #bookBidPct 8.3:1/9.5px · #bookAskPct 5.31:1/9.5px · #tagPrice 5.17:1/9.5px · #trigHint 3.43:1/10.5px · #limitHint 3.43:1/10.5px · #riesgoHint 3.43:1/10.5px · #posPnlSparkNote 6.3:1/10px
-- dónde: `css/bitunix.css`
-- por qué importa: #trigHint (3.43:1 a 10.5px) · #limitHint (3.43:1 a 10.5px) · #riesgoHint (3.43:1 a 10.5px) —por debajo de 4,5:1 con letra pequeña (WCAG AA); ojo: `.hint` se mide sobre el primer elemento de la clase, no es un promedio
-
+_Nada: el barrido no encontró defectos medibles._
 ## 2 · Lo que hay que decidir tú (medido, pero el criterio no es mío)
 
-**D1 · retina 1360×900 (dpr 2): por qué el lienzo de dibujos no escala**  
-- medido: forzando DT.resize() pasa a 2× (el dpr es 2)
-- dónde: `js/drawingTools.js:139 · #overlayCanvas`
-- nota: el código sabe escalar; falta que alguien llame al cambiar la pantalla (ventana movida a otro monitor, zoom del navegador): el bug es de cableado, no de fórmula
-
-**D2 · Botones de entrada a la vista sin desplazar (ventana mínima 320×240 (dpr 1))**  
+**D1 · Botones de entrada a la vista sin desplazar (ventana mínima 320×240 (dpr 1))**  
 - medido: #btnLong: 34 px de alto, su borde inferior en y=697 con la ventana en 240 y la columna en 732 · se puede pinchar desde ese punto: false (lo que hay encima: nada) · tarjeta 248 px · 0 px ocultos por su propio scroll
 - dónde: `#orderCard · css/bitunix.css (bloque 11)`
 - nota: ventana de prueba de 240 px de alto: por debajo de ~400 px no cabe el formulario completo en ninguna pantalla de trading, así que se anota como criterio y no como defecto
@@ -56,8 +27,9 @@ Esto no es la lista de las doce quejas: es una lista **fabricada midiendo**, par
 | Recortes en #bottomPanel (escritorio 1360×900 (dpr 1)) | ningún desbord > 1 px | `#bottomPanel` |
 | Recortes en #orderCard (escritorio 1360×900 (dpr 1)) | ningún desbord > 1 px | `#orderCard` |
 | Alineación del lienzo de dibujos con el gráfico (escritorio 1360×900 (dpr 1)) | Δx 0 · Δy 0 · Δancho 0 · Δalto 0 px | `#overlayCanvas vs #mainChart` |
-| Escalera: el pane mide lo que el módulo dice y el lienzo no se recorta (escritorio 1360×900 (dpr 1)) | #panePnl 100 px vs PC.alto() 100 (mín 56) · #chartPnl cliente 74 / contenido 74 (recorte 0 px) · #mainChart 333 · #chartArea 612 | `js/pnlChart.js · #panePnl` |
+| Escalera: el pane mide lo que el módulo dice y el lienzo no se recorta (escritorio 1360×900 (dpr 1)) | #panePnl 100 px vs PC.alto() 100 (mín 56) · #chartPnl cliente 74 / contenido 74 (recorte 0 px) · #mainChart 367 · #chartArea 612 | `js/pnlChart.js · #panePnl` |
 | Solape leyenda ↔ eje del gráfico (escritorio 1360×900 (dpr 1)) | intersección 0 px | `#ohlcLegend · #bfIndex` |
+| Nitidez a devicePixelRatio 2 (retina 1360×900 (dpr 2)) | #mainChart canvas 2× · #mainChart canvas 2× · #mainChart canvas 2× · #mainChart canvas 2× · #overlayCanvas 2× · #chartPnl canvas 2× · #chartPnl canvas 2× · #chartPnl canvas 2× · #chartPnl canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× · #chartRsi canvas 2× | `#mainChart/#overlayCanvas/paneles` |
 | Botones de entrada a la vista sin desplazar (retina 1360×900 (dpr 2)) | #btnLong: 40 px de alto, su borde inferior en y=693 con la ventana en 900 y la columna en 702 · se puede pinchar desde ese punto: true · tarjeta 697 px · 0 px ocultos por su propio scroll | `#orderCard · css/bitunix.css (bloque 11)` |
 | Scroll horizontal de la página (retina 1360×900 (dpr 2)) | Δx 0 px sobre 1360 px · Δy 0 px | `documento` |
 | Recortes en #chartArea (retina 1360×900 (dpr 2)) | peor desborde 3 px | `#chartArea` |
@@ -66,7 +38,7 @@ Esto no es la lista de las doce quejas: es una lista **fabricada midiendo**, par
 | Recortes en #bottomPanel (retina 1360×900 (dpr 2)) | ningún desbord > 1 px | `#bottomPanel` |
 | Recortes en #orderCard (retina 1360×900 (dpr 2)) | ningún desbord > 1 px | `#orderCard` |
 | Alineación del lienzo de dibujos con el gráfico (retina 1360×900 (dpr 2)) | Δx 0 · Δy 0 · Δancho 0 · Δalto 0 px | `#overlayCanvas vs #mainChart` |
-| Escalera: el pane mide lo que el módulo dice y el lienzo no se recorta (retina 1360×900 (dpr 2)) | #panePnl 100 px vs PC.alto() 100 (mín 56) · #chartPnl cliente 74 / contenido 74 (recorte 0 px) · #mainChart 333 · #chartArea 612 | `js/pnlChart.js · #panePnl` |
+| Escalera: el pane mide lo que el módulo dice y el lienzo no se recorta (retina 1360×900 (dpr 2)) | #panePnl 100 px vs PC.alto() 100 (mín 56) · #chartPnl cliente 74 / contenido 74 (recorte 0 px) · #mainChart 367 · #chartArea 612 | `js/pnlChart.js · #panePnl` |
 | Solape leyenda ↔ eje del gráfico (retina 1360×900 (dpr 2)) | intersección 0 px | `#ohlcLegend · #bfIndex` |
 | Nitidez a devicePixelRatio 1 (portátil 1024×768 (dpr 1)) | #mainChart canvas 1× · #mainChart canvas 1× · #mainChart canvas 1× · #mainChart canvas 1× · #mainChart canvas 1× · #mainChart canvas 1× · #mainChart canvas 1× · #overlayCanvas 1× · #chartPnl canvas 1× · #chartPnl canvas 1× · #chartPnl canvas 1× · #chartPnl canvas 1× · #chartRsi canvas 1× · #chartRsi canvas 1× · #chartRsi canvas 1× · #chartRsi canvas 1× | `#mainChart/#overlayCanvas/paneles` |
 | Botones de entrada a la vista sin desplazar (portátil 1024×768 (dpr 1)) | #btnLong: 40 px de alto, su borde inferior en y=470 con la ventana en 768 y la columna en 612 · se puede pinchar desde ese punto: true · tarjeta 388 px · 0 px ocultos por su propio scroll | `#orderCard · css/bitunix.css (bloque 11)` |
@@ -104,12 +76,16 @@ Esto no es la lista de las doce quejas: es una lista **fabricada midiendo**, par
 | Controles que lanzan una excepción al pulsarlos | ninguno de los 39 sondados | `click() sobre cada control` |
 | Leyenda OHLC al cambiar de temporalidad | 0 temporalidades probadas · con NaN/undefined: ninguna | `js/barReplay.js · #ohlcLegend` |
 | Atajos de tecla con el foco dentro de un campo | foco en #sizeInput · teclas b/s/t/f/x y espacio · órdenes nuevas 0 · play alternado false | `js/uiController.js (guarda `typing`)` |
-| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 77,176.41 H 77,415.33 L 77,116.00 C 77,341.98 » · cierre de la vela actual 77341.98 | `#ohlcLegend` |
+| Teclado sobre un botón enfocado (#btnIndicators) | clicks contados en el botón: tras la barra 1 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=false, índice 888) | `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>` |
+| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 77,130.01 H 77,387.99 L 77,073.86 C 77,300.27 » · cierre de la vela actual 77300.27 | `#ohlcLegend` |
 | Lienzos duplicados tras seis cambios de tamaño | 15 lienzos antes · 15 después de 6 resize | `#mainChart/#chartPnl/#overlayCanvas` |
 | Vaivén de la altura de la escalera (ResizeObserver) | alturas medidas tras estabilizar: 0 · 0 · 0 · 0 · 0 px (establecida 0 → 0) | `js/pnlChart.js · #paneArea` |
-| Zona de gráficos con la máquina recién reiniciada | velas 2000 · índice 877 · NaN en la leyenda false · «NaN» escrito en 0 sitios | `estado inicial` |
-| Libro: las dos mitades del desbalance cuadran | bid 39.37 + ask 60.63 = 100.0 % · filas 10/10 · barras 39.4 % / 60.6 % · origen «derivado» | `js/orderBook.js · #bookCard` |
-| Libro: el precio último es el del gráfico | #bookLast «77,830.01» · cierre actual 77830.01 | `#bookLast` |
+| Zona de gráficos con la máquina recién reiniciada | velas 2000 · índice 880 · NaN en la leyenda false · «NaN» escrito en 0 sitios | `estado inicial` |
+| Libro: 6 filas pintadas en una caja de 102 px (bookAsks) | 6 filas × 17 px = 102 px en 102 px de caja (max-height 102px) · caben 6 · desborde 0 px | `#bookAsks · js/orderBook.js · css/bitunix.css (.bf-asks)` |
+| Libro: 6 filas pintadas en una caja de 102 px (bookBids) | 6 filas × 17 px = 102 px en 102 px de caja (max-height 102px) · caben 6 · desborde 0 px | `#bookBids · js/orderBook.js · css/bitunix.css (.bf-asks)` |
+| Libro: las dos mitades del desbalance cuadran | bid 53.19 + ask 46.81 = 100.0 % · filas 6/6 · barras 53.2 % / 46.8 % · origen «derivado» | `js/orderBook.js · #bookCard` |
+| Libro: el precio último es el del gráfico | #bookLast «78,470.00» · cierre actual 78470.00 | `#bookLast` |
+| Contraste de los rótulos pequeños de la zona de gráficos | medidos 10 · #ohlcLegend 11.94:1/11px · #lgInd 11.94:1/11px · #bfIndex 6.3:1/9.5px · #bookBidPct 8.3:1/9.5px · #bookAskPct 5.31:1/9.5px · #tagPrice 5.17:1/9.5px · #trigHint 6.3:1/10.5px · #limitHint 6.3:1/10.5px · #riesgoHint 6.3:1/10.5px · #posPnlSparkNote 6.3:1/10px | `css/bitunix.css` |
 | Errores de consola y excepciones durante todo el barrido | 0 de la app · 30 abortos de red del arnés (esperados aquí, con la red cortada) | `consola del navegador` |
 
 ---

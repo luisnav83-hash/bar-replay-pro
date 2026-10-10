@@ -162,20 +162,45 @@
       `<span class="t">${OB.fmtQty(r[2])}</span></div>`;
   }
 
+  /* FILAS QUE SIGUEN AL ESPACIO (11-oct-2026, ítem 4 del registro). El libro se pintaba con
+     `OB.ROWS` fijo -10 niveles por lado- mientras la caja podía medir 102 px (los dos medios
+     del cajón apaisado) o 230 px. Con 17 px por fila, 10 filas son 170 px: desbordaban 68 px
+     y el `overflow:hidden` se comía las cuatro filas del borde sin barra de desplazamiento ni
+     aviso -así lo contaba tools/barrido-graficos.js: «Libro: 10 filas pintadas en una caja de
+     102 px» en dos líneas NO CUADRA—. El sitio resuelve el mismo cajón con ~15 filas en 460 px
+     (30 px por fila con barras detrás), o sea: el número de niveles ES función del alto.
+     Se pinta `suelo(alto / 17)`, entre 5 y 12; como el recorte se hace por las MEJORES filas
+     (`slice(0, n)` sobre arrays ordenados de mejor a peor), lo que desaparece es lo más
+     lejano al precio, que es lo que menos informa. */
+  OB.ROW_H = 17;
+  OB.filasDisponibles = function (boxA) {
+    const alto = boxA ? boxA.clientHeight : 0;
+    if (!alto) return OB.ROWS;
+    return Math.max(5, Math.min(12, Math.floor(alto / OB.ROW_H)));
+  };
+
   OB.renderBook = function () {
     const boxA = el('bookAsks');
     const boxB = el('bookBids');
     if (!boxA || !boxB) return;
     const b = OB.state.book;
     if (!b) { boxA.innerHTML = ''; boxB.innerHTML = ''; return; }
-    const max = Math.max(b.asks[b.asks.length - 1][2] || 0, b.bids[b.bids.length - 1][2] || 0) || 1;
+    OB._observaCajon();
+    const nF = OB.filasDisponibles(boxA);
+    const asks = b.asks.slice(0, nF);
+    const bids = b.bids.slice(0, nF);
+    /* El máximo de las barras de profundidad sale de la ÚLTIMA fila PINTADA, no de la última
+       del array: si no, con el libro recortado a 6 filas la barra de la sexta mediría la mitad
+       y parecería que falta liquidez donde solo falta espacio. */
+    const max = Math.max(asks[asks.length - 1] ? asks[asks.length - 1][2] : 0,
+                         bids[bids.length - 1] ? bids[bids.length - 1][2] : 0) || 1;
     // Se pintan en el orden que devuelve el exchange (mejor primero). El orden
     // VISUAL lo decide la hoja: `.bf-asks` es `column-reverse`, así que la mejor
     // venta cae abajo, pegada al precio último, y la más lejana arriba —como en
     // Bitunix—. Su columna «Total» (acumulada) es por eso máxima en la fila de
     // arriba. No invertir también el array: se harían dos volteos y quedaría al revés.
-    boxA.innerHTML = b.asks.map((r) => rowHtml(r, max)).join('');
-    boxB.innerHTML = b.bids.map((r) => rowHtml(r, max)).join('');
+    boxA.innerHTML = asks.map((r) => rowHtml(r, max)).join('');
+    boxB.innerHTML = bids.map((r) => rowHtml(r, max)).join('');
 
     const px = App.currentPrice();
     const last = el('bookLast');
@@ -190,8 +215,8 @@
       if (wrap) wrap.classList.toggle('up', up), wrap.classList.toggle('dn', !up);
     }
     // banda bid/ask del pie del libro
-    const bq = b.bids.reduce((s, r) => s + r[1], 0);
-    const aq = b.asks.reduce((s, r) => s + r[1], 0);
+    const bq = bids.reduce((s, r) => s + r[1], 0);
+    const aq = asks.reduce((s, r) => s + r[1], 0);
     const tot = bq + aq || 1;
     const bidPct = (bq / tot) * 100;
     const bar = el('bookBidBar');
@@ -329,6 +354,23 @@
       partes.push(meta && meta.mark ? 'mark/OI/funding: ' + meta.venues.join(' + ') : 'futuros: sin dato');
       src.textContent = partes.join(' · ');
       src.title = (OB.state.errors.length ? 'Avisos: ' + OB.state.errors.join(' · ') : 'Sin avisos de red.');
+    }
+  };
+
+  /* El alto del cajón cambia con la ventana y con el tier de la hoja; sin repintar, las filas
+     seguirían las del tamaño anterior (recorte o hueco en blanco). El observador se engancha en
+     la PRIMERA pintura -no al cargar el módulo: el script puede adelantarse al DOM, y entonces
+     `getElementById` da null y el mecanismo no se activa nunca, que es de esos fallos que solo
+     se ven en la ventana pequeña—. Un frame de aplazamiento evita la pelea con el
+     `ResizeObserver` del layout. */
+  let pendOB = 0, obsOB = false;
+  OB._observaCajon = function () {
+    if (obsOB || typeof window === 'undefined' || !('ResizeObserver' in window)) return;
+    obsOB = true;
+    const repinta = () => { if (pendOB) return; pendOB = requestAnimationFrame(() => { pendOB = 0; OB.renderBook(); }); };
+    for (const id of ['bookAsks', 'bookBids']) {
+      const e = document.getElementById(id);
+      if (e) new ResizeObserver(repinta).observe(e);
     }
   };
 

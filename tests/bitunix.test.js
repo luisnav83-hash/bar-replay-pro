@@ -163,6 +163,40 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   // Se midió primero en 76 y la segunda línea asomaba 11 px por debajo (`.replay-line` en
   // y=51..87), así que el techo del ancla es el que sale de la aritmética, no un gusto. Contra el
   // sitio, que usa 113 px para lo mismo (nav 40 + franja de símbolo 73), seguimos más apretados.
+  /* RIEL VERTICAL DE DIBUJO (ítem 3 del registro, 11-oct-2026). Medido en el sitio: entre el
+     borde de la carta y el lienzo hay una columna de ~34 px con los útiles apilados. Aquí se
+     comprueba el par entero: el riel mide ~34 px, el gráfico empieza a su derecha, la fila 1 del
+     grid de `#chartArea` vale 0 (si valiera 34, el gráfico habría pagado el riel con su alto) y
+     `#chartWrap` sigue cuadrando con su fila -que es la contabilidad que `PC.ajustaEscalera`
+     comparte con tests/pnl-chart.test.js, y la que rompió la primera versión del riel: puesto
+     `absolute` sobre todo el área, la fórmula de la escalera le restaba 612 px y el gráfico caía
+     al suelo de 240—. */
+  {
+    const riel = await page.evaluate(() => {
+      const g = (id) => document.getElementById(id);
+      const area = g('chartArea'), tb = g('drawToolbar'), rail = tb.querySelector('.rail-body'), wrap = g('chartWrap');
+      const R = (e) => e.getBoundingClientRect();
+      const fila1 = Math.round(parseFloat(getComputedStyle(area).gridTemplateRows.split(' ')[1]) || 0);
+      const r = R(rail), q = R(wrap);
+      const t = tb.querySelector('[data-tool="trend"]');
+      const tq = R(t), enc = document.elementFromPoint(Math.round(tq.left + tq.width / 2), Math.round(tq.top + tq.height / 2));
+      const box = g('bookAsks');
+      return { anchoRiel: Math.round(r.width), altoRiel: Math.round(r.height), sobraRiel: Math.max(0, Math.round(rail.scrollHeight - r.height)),
+               cajaToolbar: Math.round(R(tb).height), inseto: Math.round(q.left - R(area).left),
+               fila1, caja: Math.round(q.height), solape: Math.max(0, Math.round(q.bottom - (g('paneArea') ? R(g('paneArea')).top : 1e9))),
+               toolPinchable: !!enc && (t.contains(enc) || enc === t), tiles: tb.querySelectorAll('.tool').length,
+               filasLibro: box.children.length, cajaLibro: Math.round(R(box).height),
+               desbordaLibro: Math.max(0, box.scrollHeight - box.clientHeight) };
+    });
+    ok(riel.anchoRiel >= 30 && riel.anchoRiel <= 40 && riel.inseto >= 30 && riel.tiles >= 10,
+       `el riel de dibujo mide ${riel.anchoRiel} px, el lienzo arranca ${riel.inseto} px a su derecha y caben sus ${riel.tiles} útiles (los 34 px del sitio)`);
+    ok(riel.cajaToolbar === 0 && riel.fila1 >= 200 && Math.abs(riel.caja - riel.fila1) <= 2 && riel.solape === 0,
+       `y el gráfico no lo paga: fila 1 del grid = caja del toolbar (${riel.cajaToolbar} px), fila ${riel.fila1} == caja ${riel.caja}, solape con los paneles ${riel.solape} px`);
+    ok(riel.sobraRiel === 0 && riel.toolPinchable,
+       `el riel entra entero sin recorte (sobran ${riel.sobraRiel} px) y su «╱» se puede pulsar`);
+    ok(riel.filasLibro * 17 <= riel.cajaLibro + 2 && riel.desbordaLibro === 0,
+       `el libro pinta ${riel.filasLibro} filas en ${riel.cajaLibro} px de caja y no desborda (las filas siguen al espacio: ${Math.floor(riel.cajaLibro / 17)} caben)`);
+  }
   ok(est.barraAlta <= 96 && est.barraAlta >= 60,
      `barra superior entera: ${est.barraAlta} px de alto en DOS líneas (antes 155 en tres franjas; el sitio usa 40 de nav + 73 de franja = 113)`);
   {

@@ -203,6 +203,12 @@
 
     <!-- Barra de herramientas de dibujo -->
     <div id="drawToolbar">
+    <!-- .rail-body: el envoltorio que en ≥1360 px se convierte en el RIEL vertical
+             (css/bitunix.css, bloque 16). Se abre AQUÍ y se cierra justo antes de </div> del
+             toolbar: el riel es un solo box absoluto, así que `#drawToolbar` puede seguir siendo un
+             ítem del grid con altura 0 -y `PC.ajustaEscalera`, que mide su caja para repartir la
+             escalera, sigue viendo 0 en vez de la altura del lienzo—. -->
+    <div class="rail-body">
       <div class="tool-cluster" role="group" aria-label="Herramientas de dibujo">
         <button class="tool active" data-tool="cursor" title="Cursor: seleccionar y mover dibujos">↖</button>
         <button class="tool" data-tool="trend" title="Línea de tendencia">╱</button>
@@ -254,6 +260,7 @@
           <span>⊘ scroll</span>
         </label>
       </div>
+    </div><!-- /.rail-body -->
     </div>
 
     <!-- Gráfico principal + canvas de dibujos -->

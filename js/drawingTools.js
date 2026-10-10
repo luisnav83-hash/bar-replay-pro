@@ -76,6 +76,23 @@
     const ro = new ResizeObserver(() => { DT.resize(); DT.render(); });
     ro.observe(document.getElementById('chartWrap'));
 
+    /* Y al cambiar de PANTALLA, que no cambia el tamaño CSS: el observador de arriba mira el
+       `#chartWrap` y la relación de pixeles NO le afecta a su caja, así que el lienzo de
+       dibujos se quedaba a 1× en un panel 2× (dibujos y líneas siamesas, pero borrosas). Lo
+       midió tools/barrido-graficos.js el 11-oct en «retina 1360×900 (dpr 2)»: «#overlayCanvas →
+       1× (debería 2×)» y, como prueba de que el mecanismo funciona, «forzando DT.resize() pasa a
+       2×». La única forma de enterarse es escuchar el media query de la resolución ACTUAL y
+       re-engancharlo después (el query viejo deja de coincidir en cuanto cambia). */
+    DT._vigilaDpr = function () {
+      if (!global.matchMedia) return false;
+      const q = global.matchMedia(`(resolution: ${global.devicePixelRatio || 1}dppx)`);
+      const on = () => { DT.resize(); DT.render(); DT._vigilaDpr(); };
+      if (q.addEventListener) q.addEventListener('change', on, { once: true });
+      else if (q.addListener) q.addListener(on);
+      return true;
+    };
+    DT._vigilaDpr();
+
     // El gráfico cambia de rango (zoom/scroll) → redibujar
     CM.main.timeScale().subscribeVisibleLogicalRangeChange(() => DT.render());
 

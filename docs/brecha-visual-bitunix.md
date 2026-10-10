@@ -255,21 +255,51 @@ añadió la unidad, no se cambió el significado.
 un borrado accidental de los 1900 px de `css/bitunix.css` (un `python` que escribió `fin + nuevo`
 en vez de `reemplazar`) sin que se enterase ninguna suite. Desde ahora: **parchear → construir → suites**, y `git diff --stat` antes de dar nada por bueno.
 
-**LO QUE SIGUE ABIERTO, con su aritmética** (renumerado tras cerrar los dos de arriba):
+**HECHO el 11-oct (rieles y abiertos del barrido).** Cuatro cosas, todas medidas antes:
+· **Riel vertical de dibujo** (lo que faltaba del ítem 3): a ≥1360 px los útiles pasan a una
+  columna de 34 px a la izquierda del lienzo, con `padding-left` en la carta para que el gráfico,
+  la leyenda, los paneles y la barra de replay se desplacen TODOS -como en el sitio—. La fila 1 del
+  grid pasa a `--toolbar-h: 0px`, así que la contabilidad que comparten `PC.ajustaEscalera` y
+  `tests/pnl-chart.test.js` sigue cuadrando (367 de fila == 367 de caja, solape 0) y el gráfico
+  GANA 20 px en vez de perderlos. El primer intento puso `#drawToolbar` en `position:absolute` con
+  `top:0;bottom:0`: su caja medía lo mismo que el área (612 px), la fórmula `612 − 612 − 44`
+  dejaba la escalera en 0 y el gráfico caía al suelo de 240 -lo contó `pnl-chart` como
+  «caja 240 == fila 568, solape 240»; la prueba existía y funcionó-. Ahora el toolbar se queda
+  como ítem del grid con **altura 0** y el riel visible es su envoltorio `.rail-body`, que fuera de
+  la franja es `display:contents` (a 1280 px la barra horizontal sigue ocupando «exacto su fila»,
+  28 en 28, como exige `tests/responsive.test.js`).
+· **Filas del libro que siguen al espacio** (era el punto 1 de esta lista): `OB.renderBook`
+  pinta `suelo(alto / 17)` filas, entre 5 y 12, recortando por las LEJANAS al precio (los arrays
+  vienen de mejor a peor y el `max` de las barras de profundidad se recalcula sobre lo pintado,
+  si no la última barra parecería corta donde solo falta espacio). Un `ResizeObserver` en las dos
+  cajas repinta, enganchado en la primera pintura y no al cargar el módulo. Desaparecen las dos
+  líneas «Libro: 10 filas pintadas en una caja de 102 px»: medido, 10 filas en 235 px a 1440 y
+  6 en 102 px a 1280, desborde 0 en los dos casos.
+· **Space**: el `preventDefault()` de nivel documento se hacía sin mirar qué estaba enfocado, así
+  que un botón de la barra de replay enfocado no recibía su click nativo. Ahora la tecla se cede
+  si lo enfocado es `BUTTON/A/SUMMARY/SELECT` con `tabIndex ≥ 0`, y si no es nuestra (reproducir).
+· **Contraste de los `.hint`**: de `--tx-4` `#66686b` (3,43:1 con 10,5 px) a `--tx-3` `#919499`
+  (6,3:1), que es el nivel que el sitio usa para TODOS sus rótulos apagados -no se inventa un
+  gris-.
+· **`#overlayCanvas` a 1× en pantallas 2×**: `DT.resize()` sí lee `devicePixelRatio`, pero nadie
+  lo llamaba cuando lo que cambia es la relación de pixeles (el `ResizeObserver` mira la caja del
+  `#chartWrap`, y moverse a otra pantalla no la toca). Añadido `DT._vigilaDpr()`: escucha el media
+  query de la resolución actual y se re-engancha.
 
-1. **Filas del libro que siguen al espacio.** A ≥1360 el libro tiene columna propia y caben las
-   10 de `OB.ROWS`; por debajo del corte el cajón es de 102 px y `js/orderBook.js` pinta 10 fijas
-   → 68 px de desborde (dos líneas del barrido que siguen ahí). Hace falta
-   `suelo(alto/17)` filas.
-2. **Riel vertical de dibujo + widget flotante de orden rápida** (sus 34 px a la izquierda del
-   gráfico y la caja de 312×66 en `#131414` con borde `#292a2b`, `Comprar precio / Por costo
-   (USDT) ▾ / Vender precio`). Nuestra barra de dibujo sigue horizontal encima del gráfico.
-3. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
+**Resultado del barrido tras esto: 70 comprobaciones · 0 NO CUADRA · 1 a decidir (la ventana de
+prueba de 320×240, que no es una pantalla de trading) · 69 cuadra.** Estaba en 8 NO CUADRA al
+empezar la serie (recortes del libro ×2, teclado, dpr, contraste, botones de entrada ×2).
+
+**LO QUE SIGUE ABIERTO, con su aritmética:**
+
+1. **Widget flotante de orden rápida** (los 312×66 en `#131414` con borde `#292a2b`,
+   `Comprar precio / Por costo (USDT) ▾ / Vender precio` del sitio). El riel de dibujo ya está;
+   falta la caja.
+2. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
    pestañas; con 272 px el rótulo ya no se recorta (11,5 px) pero la forma de la fila sigue
    siendo nuestra. Ojo: `test:formulario` ancla los cuatro `data-otype` en el DOM.
-4. **Abiertos del barrido:** `#overlayCanvas` a 1× en pantallas 2× (falta avisar a `DT.resize()`
-   al cambiar de dpr), Space no activa el botón enfocado (Enter sí), los `.hint` a 3,43:1 con
-   10,5 px y las 10 filas de libro del punto 1.
+3. **Abiertos del barrido:** ninguno. Ver el bloque de arriba: se cerraron el dpr del lienzo de
+   dibujos, la tecla Space, el contraste de los `.hint` y las filas del libro.
 5. **El reposo del teléfono aprieta los campos.** Medido con la app en el commit previo y con los cambios de
    esta pasada, es lo mismo (no es culpa del bloque 15): a 390×844 el cuerpo de la tarjeta está
    topeado a 221 px y sus hijos se encogen, así que `#sizeInput` mide **24 px en vez de 42**. El

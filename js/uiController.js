@@ -1302,8 +1302,21 @@
       if (typing) return;
 
       switch (e.key) {
-        case ' ':
+        case ' ': {
+          /* La barra SOLO reproduce/pausa si lo enfocado no es un control que ya la
+             use. Antes se hacía `preventDefault()` sin mirar: un botón de la barra de
+             replay enfocado (por ejemplo «Indicadores») no recibía su click nativo y
+             la tecla no hacía lo que uno espera del teclado -lo medía
+             tools/barrido-graficos.js como «Teclado sobre un botón enfocado», con
+             0 clicks tras la barra y 1 tras Enter—. Sin `preventDefault`, el navegador
+             dispara el click del botón enfocado y la reproducción no se toca; si no hay
+             nada enfocado (o es el propio cuerpo), la tecla es nuestra. */
+          const t = document.activeElement;
+          const control = t && t !== document.body && t.tabIndex >= 0
+            && /^(BUTTON|A|SUMMARY|SELECT)$/.test(t.tagName);
+          if (control) break;
           e.preventDefault(); App.togglePlay(); break;
+        }
         case 'ArrowRight':
           e.preventDefault(); App.stepForward(); break;
         case 'ArrowLeft':

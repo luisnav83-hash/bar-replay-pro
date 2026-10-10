@@ -1990,3 +1990,82 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #sidebar > #orderCard { order: -1; }
   #sidebar > #orderCard .card-head { border-top: 0; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 16 — EL RIEL VERTICAL DE DIBUJO, como el suyo (11-oct-2026, ítem 3 del
+   registro `docs/brecha-visual-bitunix.md`).
+
+   Medido en Bitunix a 1600×900: entre el borde de la carta y el lienzo hay una
+   columna de ~34 px con los útilitos de dibujo APILADOS, y el gráfico empieza a
+   su derecha. Nosotros teníamos `#drawToolbar` como primera fila del grid de
+   `#chartArea`: 34 px de ALTO que el gráfico pagaba con su altura, y las
+   herramientas estiradas en horizontal (1102 px de contenido, de ahí que
+   `css/chart.css` tenga que llevar `minmax(0,1fr)` en las columnas).
+
+   La fila se quita de en medio bajando `--toolbar-h` a 0 -que es como se declara
+   en `css/chart.css:17`, así que la variable sigue siendo la única fuente: quien
+   mide `grid-template-rows` (tests/pnl-chart.test.js) ve `0px` en la posición 0 y
+   el gráfico en la 1, exactamente como antes-. El `#drawToolbar` pasa a
+   `position:absolute` dentro de `#chartArea`, y el hueco de 34 px lo abre el
+   `padding-left` de la propia carta: el lienzo, la leyenda, los paneles y la barra
+   de replay se desplazan a la derecha TODOS, que es lo que hace el sitio (el riel
+   acompaña a todo el bloque, no solo al canvas).
+
+   Los útiles que no son de dibujo (color, grosor, estilo, PnL, escala A/log y el
+   interruptor de scroll) se quedan dentro del riel, apilados: no hay otra fila que
+   los acoja sin devolverle 34 px al gráfico, y a 1360 px de ancho el riel cabe en
+   alto (10 útiles de 26 + 6 de complemento ≈ 420 px en una carta de ~630).
+   Por debajo de 1360 px sigue mandando la barra horizontal de siempre.
+   ════════════════════════════════════════════════════════════════════════════ */
+/* Fuera de la franja del riel, el envoltorio no existe para el reparto: `#drawToolbar` vuelve
+   a ser la barra horizontal de siempre con sus `​.tool-cluster` como ítems directos (que es como
+   lo conocen el tier ≤1000 y las pruebas de tablet). Sin esta línea el div se come un nivel de
+   flex y los clusters se apilan en bloque: medido a 1280x800, la barra de 28 px con 46 px de
+   contenido y la herramienta «trend» tapada. */
+#drawToolbar > .rail-body { display: contents; }
+
+@media (min-width: 1360px) {
+  #chartArea { --toolbar-h: 0px; position: relative; padding-left: 34px; }
+  /* `#drawToolbar` NO se saca del grid: se deja como ítem con altura 0 (y `padding:0`,
+     `border:0`), porque `PC.ajustaEscalera` reparte la escalera con `fila('drawToolbar')`
+     -la caja medida, no la fila declarada- y si el elemento se pone `absolute` con
+     `top:0;bottom:0` su caja mide lo mismo que el área (612 px): la fórmula se queda en
+     `612 − 612 − 44 = 0`, los paneles se comen el sitio del gráfico y `#chartWrap` cae al
+     suelo de 240 px (así lo midió tests/pnl-chart.test.js: «caja 240 == fila 568, solape 240»).
+     Con altura 0 la caja mide 0 -lo que la aritmética esperaba-, la fila del grid es 0 -lo que
+     tests/pnl-chart.test.js lee de `grid-template-rows`- y el riel visible es el envoltorio
+     `.rail-body`, que se posiciona contra `#chartArea` (por eso el toolbar está `static`). */
+  #drawToolbar { position: static; height: 0; min-height: 0; padding: 0; border: 0;
+                 background: transparent; overflow: visible; }
+  #drawToolbar > .rail-body {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 34px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 3px 2px;
+    border-right: 1px solid var(--line); background: var(--bg-1); overflow: hidden;
+  }
+  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 2px;
+                               padding-right: 0; border-right: 0; border-bottom: 1px solid var(--line-soft); padding-bottom: 3px; }
+  /* 4 px de más medidos a 1440x900: el riel es tan alto como el área y sus 17 útiles + 6 de
+     complemento no daban. Se aprieta el paso interno antes que tocar el alto de un botón (26 px
+     es el mínimo cómodo) y, si aun así la ventana es corta, el riel desplaza en vertical en vez
+     de recortar: `overflow-y: auto` con la barra fina del sitio. */
+  #drawToolbar > .rail-body { overflow-y: auto; scrollbar-width: thin; }
+  #drawToolbar .tool-cluster:last-child { border-bottom: 0; padding-bottom: 0; }
+  #drawToolbar .tool-cluster-right { margin-left: 0; order: 9; }
+  #drawToolbar .tool { width: 28px; height: 26px; padding: 0; font-size: 12px; }
+  #drawToolbar .color-pick { width: 26px; height: 20px; }
+  #drawToolbar .mini-select { width: 28px; height: 22px; padding: 0 1px; font-size: 10px; }
+  /* El interruptor «⊘ scroll» no cabe en 34 px con su texto: se queda el control,
+     su `title` (que ya explica qué hace) y un punto que avisa de que está activo. */
+  #drawToolbar .switch { justify-content: center; gap: 0; }
+  #drawToolbar .switch span { display: none; }
+  #drawToolbar .switch:has(input:checked)::after { content: ""; width: 5px; height: 5px; border-radius: 50%;
+                                                    background: var(--up); display: block; }
+}
+
+/* Los `.hint` (avisos de 10,5 px bajo los campos) estaban en `--tx-4` `#66686b`:
+   3,43:1 sobre el fondo de la carta, por debajo del 4,5:1 que se exige a un texto
+   de ese tamaño (lo mide tools/barrido-graficos.js en «Contraste de los rótulos
+   pequeños de la zona de gráficos»). El sitio usa `#919499` -`--tx-3`, 6,3:1- para
+   TODOS sus rótulos apagados, así que se pasa al nivel que ya tenemos medido en vez
+   de inventar un gris. `--tx-4` sigue para lo decorativo grande (`.brand-sub`). */
+.hint { color: var(--tx-3); }
