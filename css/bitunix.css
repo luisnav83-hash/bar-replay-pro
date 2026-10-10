@@ -1100,7 +1100,14 @@ kbd {
      se mira, y la banda long/short se oculta DEL TODO —a propósito, no por recorte— con un
      selector de dos IDs: con `#bookCard .bf-book-frac { display:none }` el tema la volvía a
      mostrar más abajo y el `display:none` se quedaba en nada (medido: la banda seguía ahí).
-     Sin banda, `--marco` baja a 34 y la cuenta vuelve a cerrar: 34 + 2×24 = 82 = el tope. */
+     Sin banda, `--marco` baja a 34 y la cuenta vuelve a entrar. MEDIDO en 900×560: precio 28
+     + dos columnas de 24 = 76 px dentro de 82 de caja. Fíjate en la DIRECCIÓN del error, que
+     es lo que hace esto seguro: declarar el marco algo por ENCIMA de lo que pinta (34 frente a
+     28 medidos) deja 6 px de holgura y las filas se quedan cortas; un marco corto hace lo
+     contrario, que es exactamente el defecto que veníamos arrastrando. Por eso los asserts de la
+     tira son de COTA (`suma <= caja + 1`), no de igualdad: el marco cambia de talla en talla
+     (34 en la franja ancha, 26 en el teléfono) y exigir «cuadra al píxel» saltaba sin haber
+     ningún defecto. */
   #sidebar > #bookCard > .card-body > .bf-book-frac { display: none; }
   #sidebar { --marco: 34px; }
   /* 122 de franja − 33 de cabecera = 89 para el cuerpo del libro: precio (24) y banda (29)

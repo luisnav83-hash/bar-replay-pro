@@ -1255,6 +1255,23 @@ bar-replay-app/
   deslizar primero y luego mirar); y exigir «en reposo el formulario entra entero» justo después
   del bloque que abre «Avanzado» acusaba 64 px que el propio test había metido.
 
+- **Queda abierto (medido hoy, y NO es de la tira): las franjas ultrabajas con dos paneles de
+  indicadores.** Al comprobar la tira en 900×560, 1000×560, 1000×600 y 860×540 con RSI + MACD
+  abiertos —el peor caso de la escalera—, el gráfico acaba en **90 px de caja dentro de una
+  fila de 36 (70 en 1000×600, 16 en 860×540)**: `PC.comprimeEscalera()` aprieta los paneles
+  hasta su `MIN_PANE` y baja el `min-height` del gráfico hasta lo que da la fila, pero con el
+  suelo duro de 90 px la caja no puede caber en 36 de fila y **desborda su propia fila**, que es
+  lo que los contratos de `test:layout` (`caja === fila`, `solape === 0`) no dejan pasar en
+  ninguna otra talla. Es preexistente: medido hoy sobre lo publicado (que todavía no lleva este
+  incremento) da **exactamente 90/36 en las mismas tallas**, y la franja mide 116 antes y
+  después —el libro, en cambio, sí mejoró ahí: 82 de caja con 130 de contenido (48 px fuera y
+  **cero filas de compras visibles**) antes, 82/82 con una fila por lado después—. Ninguna suite
+  lo veía porque ninguna lista de tamaños incluye una franja ≤1000 de ANCHO con ≤600 de ALTO:
+  `responsive.test.js` prueba 1400×560, que es columna, no tira. No se ha relajado el assert
+  para «arreglarlo»: hace falta una decisión en el subsistema de compresión (dejar que la
+  franja ceda alto al gráfico en esas tallas, o bajar `MIN_PANE`, o admitir que con dos paneles
+  abiertos en 540 px de alto el libro no cabe y hay que plegar algo), y eso es un incremento
+  entero, no una línea.
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).
