@@ -31,6 +31,17 @@ REPO="${1:-bar-replay-pro}"
 if [ -z "$TOKEN" ]; then
   echo "❌ Falta el token. Uso:"
   echo "   GITHUB_TOKEN=tu_token ./tools/subir-a-github.sh [nombre-repo]"
+  echo
+  echo "· Token clásico: permiso «repo». · Fine-grained: «Contents: Read and write»"
+  echo "  (con ese hay que crear antes el repositorio vacío en https://github.com/new)."
+  if ! git remote get-url origin >/dev/null 2>&1; then
+    echo
+    echo "· AVISO: este clon no tiene remoto configurado (sale vacío)."
+    echo "  Suele pasar en una caja donde el archivo .git/config no se conservó; pasa igual"
+    echo "  en un clon recién hecho, y es lo que hace falta -además del token- para saber a"
+    echo "  usuario/repositorio subir. Si el repo aún no existe, el script lo crea con el"
+    echo "  nombre que le pases (por defecto «bar-replay-pro»)."
+  fi
   exit 1
 fi
 
@@ -72,10 +83,18 @@ fi
 git branch -M main 2>/dev/null || true
 
 # ── 4) Subir ──────────────────────────────────────────────────────────────
+# ── 4) Subir ──────────────────────────────────────────────────────────────
+# EL TOKEN NO PUEDE ACABAR EN `.git/config`. La versión de este script que había añadía el remoto
+# con la URL `https://x-access-token:$TOKEN@github.com/...`, que es EXACTAMENTE guardar el token en
+# un archivo (`.git/config`), en contradicción con lo que prometía su propio cabecero -y en una caja
+# compartida o en un snapshot del proyecto, eso es una filtración—. Se guarda el remoto SIN
+# credenciales y la autenticación viaja por cabecera, en memoria, solo para este push.
 git remote remove origin 2>/dev/null || true
-git remote add origin "https://x-access-token:$TOKEN@github.com/$USUARIO/$REPO.git"
+git remote add origin "https://github.com/$USUARIO/$REPO.git"
+B64=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
 say "· Subiendo los archivos a GitHub…"
-if git push -u origin main --quiet 2>/tmp/gh_push.log; then
+if git -c credential.helper= -c "http.extraHeader=AUTHORIZATION: Basic $B64" \
+     push -u origin main --quiet 2>/tmp/gh_push.log; then
   say "  ✓ Subido: https://github.com/$USUARIO/$REPO"
 else
   say "  ✗ El push falló:"
@@ -86,7 +105,8 @@ else
   if grep -qiE "non-fast-forward|fetch first" /tmp/gh_push.log; then
     if [ "${FUERZA:-0}" = "1" ]; then
       say "  · Reintentando con --force-with-lease (FUERZA=1)…"
-      if git push -u origin main --force-with-lease --quiet 2>/tmp/gh_push2.log; then
+      if git -c credential.helper= -c "http.extraHeader=AUTHORIZATION: Basic $B64" \
+           push -u origin main --force-with-lease --quiet 2>/tmp/gh_push2.log; then
         say "  ✓ Subido forzando: https://github.com/$USUARIO/$REPO"
               else
         say "  ✗ También falló:"; sed 's/^/     /' /tmp/gh_push2.log; exit 1
@@ -116,4 +136,15 @@ say "   Repositorio: https://github.com/$USUARIO/$REPO"
 say "   App (navegador normal): https://$USUARIO.github.io/$REPO/"
 say "   Archivo único (ideal para móvil): https://$USUARIO.github.io/$REPO/bar-replay-pro-unico.html"
 say ""
+# Se comprueba QUE NO QUEDA ninguna credencial en el repo: si `.git/config` llegara a tener una URL
+# con `@github.com` preceded by user:pass, esto lo canta (y lo limpia).
+if git remote get-url origin 2>/dev/null | grep -q '://[^/@]*:[^/@]*@'; then
+  say "· ⚠ El remoto guardaba credenciales en .git/config: se limpian."
+  git remote set-url origin "https://github.com/$USUARIO/$REPO.git"
+fi
+if grep -q 'x-access-token' .git/config 2>/dev/null; then
+  sed -i 's|https://x-access-token:[^@]*@|https://|' .git/config
+  say "· ⚠ Limpiado un token sobrante en .git/config"
+fi
+
 say "⚠️ Recuerda revocar el token cuando termines: https://github.com/settings/tokens"
