@@ -233,10 +233,32 @@
     document.getElementById('btnLong').addEventListener('click', () => App.placeOrder('long'));
     document.getElementById('btnShort').addEventListener('click', () => App.placeOrder('short'));
 
-    /* ---- Tipo de orden: ⚡ Mercado / ⏳ Límite ---- */
+    /* ---- Tipo de orden: ⚡ Mercado / ⏳ Límite / 🎯 Trigger ---- */
     document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
       b.addEventListener('click', () => UI.setOrderType(b.dataset.otype));
     });
+    /* Disparo (mark|last) y ejecución (market|limit) de la trigger: son los dos selectores que la
+       API separa en `tpStopType` y `tpOrderType`; aquí se guardan en App.trigOrder porque el
+       formulario los necesita también al calcular el coste y al pintar la pista. */
+    [['#segTrigSrc', 'tsrc', 'src'], ['#segTrigExec', 'texec', 'exec']].forEach(([sel, attr, clave]) => {
+      const cont = document.querySelector(sel);
+      if (!cont) return;
+      cont.addEventListener('click', (e) => {
+        const b = e.target.closest ? e.target.closest(`[data-${attr}]`) : null;
+        if (!b) return;
+        cont.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+        if (!App.trigOrder) App.trigOrder = { src: 'last', exec: 'market' };
+        App.trigOrder[clave] = b.dataset[attr] === 'mark' ? 'mark' : (clave === 'exec' ? (b.dataset[attr] === 'limit' ? 'limit' : 'market') : 'last');
+        const lim = document.getElementById('trigLimitRow');
+        if (lim) lim.style.display = App.trigOrder.exec === 'limit' ? '' : 'none';
+        UI.updateTriggerHint();
+      });
+    });
+    // La pista se recalcula al escribir el nivel, como la del límite.
+    {
+      const ti = document.getElementById('trigInput');
+      if (ti) ti.addEventListener('input', () => UI.updateTriggerHint());
+    }
     // Atajos rápidos de precio límite (% respecto al precio actual)
     document.querySelectorAll('#quickLimit .chip').forEach((c) => {
       c.addEventListener('click', () => {
@@ -660,14 +682,27 @@
 
   /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
   UI.setOrderType = function (tipo) {
-    App.orderType = tipo === 'limite' ? 'limite' : 'market';
+    App.orderType = (tipo === 'limite' || tipo === 'trigger') ? tipo : 'market';
     document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.otype === App.orderType);
     });
     const esLimite = App.orderType === 'limite';
+    const esTrigger = App.orderType === 'trigger';
     document.getElementById('limitRow').style.display = esLimite ? '' : 'none';
-    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR LÍMITE' : '▲ COMPRAR / LONG';
-    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER LÍMITE' : '▼ VENDER / SHORT';
+    // Las dos filas nuevas viven del tipo de orden: la de disparo/ejecución solo tiene sentido en
+    // trigger, y la validez aplica a todo lo que puede QUEDAR en espera (límite y trigger-límite).
+    const trigRow = document.getElementById('trigRow');
+    if (trigRow) trigRow.style.display = esTrigger ? '' : 'none';
+    const effRow = document.getElementById('effectRow');
+    if (effRow) effRow.style.display = (esLimite || esTrigger) ? '' : 'none';
+    /* Los rótulos miden lo mismo en los tres modos a propósito: `.order-actions` es una rejilla
+       `1fr 1fr`, y `1fr` = `minmax(AUTO,1fr)` → un texto más largo ensancha el min-content del
+       botón y tira la tarjeta fuera de su propio borde (14 px de desborde medidos así). Lo que
+       cambia es el icono, que es lo que se ve de reojo; el tipo elegido ya está en el segmentado. */
+    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR / LONG'
+      : esTrigger ? '🎯 COMPRAR / LONG' : '▲ COMPRAR / LONG';
+    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER / SHORT'
+      : esTrigger ? '🎯 VENDER / SHORT' : '▼ VENDER / SHORT';
     if (esLimite) {
       const el = document.getElementById('limitInput');
       if (el && !parseFloat(el.value)) {
@@ -676,6 +711,27 @@
       }
       UI.updateLimitHint();
     }
+    if (esTrigger) UI.updateTriggerHint();
+  };
+
+  /** Explica qué hará la trigger: contra qué se mide y qué pasa al disparar. */
+  UI.updateTriggerHint = function () {
+    const inp = document.getElementById('trigInput');
+    const hint = document.getElementById('trigHint');
+    if (!inp || !hint) return;
+    const ref = App.currentPrice();
+    const v = parseFloat(inp.value);
+    if (!ref || !Number.isFinite(v) || v <= 0) {
+      hint.textContent = 'La orden no reserva margen mientras espera: si al dispararse no cabe el tamaño, se rechaza.';
+      hint.className = 'hint';
+      return;
+    }
+    const t = App.trigOrder || { src: 'last', exec: 'market' };
+    const pct = ((v - ref) / ref) * 100;
+    hint.textContent = `${v > ref ? 'Se dispara al SUBIR' : 'Se dispara al BAJAR'} a ${U.fmtPrice(v)} ` +
+      `(${U.num(pct, 2)} % desde ${U.fmtPrice(ref)}) · mide el ${t.src === 'mark' ? 'MARK (el cuerpo de la vela: una mecha no la dispara)' : 'LAST (basta con que la mecha toque)'} · ` +
+      (t.exec === 'limit' ? 'al disparar COLOCA un límite, que puede no rellenarse' : 'al disparar entra a MERCADO, sí o sí');
+    hint.className = 'hint';
   };
 
   /** Explica si el nivel elegido es de compra, de venta o se cruzaría. */
@@ -715,28 +771,43 @@
     if (card) card.classList.toggle('has-orders', ordenes.length > 0);
 
     if (!ordenes.length) {
-      cont.innerHTML = '<div class="hint">No hay órdenes en espera. Con el modo «⏳ Límite» puedes dejar ' +
-        'una orden colocada y el replay la ejecutará solo cuando el precio llegue a tu nivel.</div>';
+      cont.innerHTML = '<div class="hint">No hay órdenes en espera. Con «⏳ Límite» dejas un ' +
+        'precio colocado y se ejecuta al tocarlo; con «🎯 Trigger» dejas una condición que, al ' +
+        'dispararse, entra a mercado o coloca un límite (y no reserva margen mientras espera).</div>';
       return;
     }
 
     const ref = App.currentPrice();
     cont.innerHTML = ordenes.map((o) => {
-      const dist = ref ? ((o.limitPrice - ref) / ref) * 100 : null;
-      const eta = dist === null ? '' :
-        (o.side === 'long'
+      // Dos clases de orden descanso en la lista: la LÍMITE (su nivel ES el precio de ejecución) y
+      // la TRIGGER (su nivel es solo el DISPARO; la ejecución va aparte y puede ser a mercado).
+      // Mezclarlas pintaría `undefined` en el precio o diría «faltan X%» desde el sitio equivocado.
+      const esTrig = o.tipo === 'trigger';
+      const nivel = esTrig ? o.triggerPrice : o.limitPrice;
+      const dist = (ref && nivel) ? ((nivel - ref) / ref) * 100 : null;
+      let eta;
+      if (dist === null) eta = '';
+      else if (esTrig) {
+        eta = Math.abs(dist) < 0.0001 ? 'está tocando el nivel ahora mismo'
+          : `faltan ${U.num(Math.abs(dist), 2)} % para activarse (${U.fmtPrice(Math.abs(nivel - ref))} USD)`;
+      } else eta = (o.side === 'long'
           ? (dist < 0 ? `faltan ${U.num(Math.abs(dist), 2)}% a la baja (${U.fmtPrice(ref - o.limitPrice)} USD)` : 'se ejecutará en la próxima vela')
           : (dist > 0 ? `faltan ${U.num(dist, 2)}% al alza (${U.fmtPrice(o.limitPrice - ref)} USD)` : 'se ejecutará en la próxima vela'));
-      return `<div class="pending-item ${o.side}">` +
+      const sub = `tamaño ${o.size}${o.mode === 'pct' ? '%' : o.mode === 'qty' ? ' uds' : ' USD'}` +
+        `${o.sl ? ' · SL ' + U.fmtPrice(o.sl) : ''}${o.tp ? ' · TP ' + U.fmtPrice(o.tp) : ''}`;
+      const meta = esTrig
+        ? `${o.src === 'mark' ? 'dispara por MARK' : 'dispara por LAST'} · ` +
+          (o.exec === 'limit' ? `ejecuta como LÍMITE a ${U.fmtPrice(o.limitPrice)} (puede no rellenarse)` : 'ejecuta a MERCADO (entra sí o sí)') +
+          `${o.reduceOnly ? ' · reduce-only' : ''}${o.efecto && o.efecto !== 'GTC' ? ' · ' + o.efecto : ''}`
+        : `${o.efecto && o.efecto !== 'GTC' ? 'validez ' + o.efecto + ' · ' : ''}${o.reduceOnly ? 'reduce-only · ' : ''}nivel de ejecución`;
+      return `<div class="pending-item ${o.side}${esTrig ? ' trig' : ''}">` +
         `<div class="pi-head">` +
-          `<span class="pi-side">${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
-          `<b class="pi-price">${U.fmtPrice(o.limitPrice)}</b>` +
+          `<span class="pi-side">${esTrig ? '🎯 ' : ''}${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
+          `<b class="pi-price">${U.fmtPrice(nivel)}</b>` +
           `<button class="pi-cancel" data-cancel="${o.id}" title="Cancelar esta orden">✖</button>` +
         `</div>` +
-        `<div class="pi-sub">` +
-          `tamaño ${o.size}${o.mode === 'pct' ? '%' : o.mode === 'qty' ? ' uds' : ' USD'}` +
-          `${o.sl ? ' · SL ' + U.fmtPrice(o.sl) : ''}${o.tp ? ' · TP ' + U.fmtPrice(o.tp) : ''}` +
-        `</div>` +
+        `<div class="pi-sub">${sub}</div>` +
+        `<div class="pi-sub">${meta}</div>` +
         `<div class="pi-eta">${eta}</div>` +
       `</div>`;
     }).join('');
@@ -1005,7 +1076,12 @@
         // existía y el atajo lanzaba un TypeError sin hacer nada)
         case 'B': App.placeLimitOrder('long'); break;
         case 'S': App.placeLimitOrder('short'); break;
-        case 't': case 'T': UI.setOrderType(App.orderType === 'limite' ? 'market' : 'limite'); break;
+        case 't': case 'T': {
+          // Los tres tipos del selector, en el mismo orden que en el panel del exchange.
+          const orden = ['market', 'limite', 'trigger'];
+          UI.setOrderType(orden[(orden.indexOf(App.orderType) + 1) % orden.length]);
+          break;
+        }
         case '/': e.preventDefault(); UI.openSymbols(); break;
         case 'a': case 'A': DT.setTool('arrow'); break;
         case 'p': case 'P': DT.setTool('path'); break;

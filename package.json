@@ -13,6 +13,7 @@
     "test:single": "node tools/build-single.js && node tests/single.test.js",
     "test:logic": "node tests/logic.test.js",
     "test:futuros": "node tests/futuros.test.js",
+    "test:formulario": "node tests/formulario.test.js",
     "test:dom": "node tests/dom.smoke.js",
     "test:iframe": "node tests/iframe.test.js",
     "test:all": "node tools/run-all.js",

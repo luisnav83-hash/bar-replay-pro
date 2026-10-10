@@ -436,6 +436,7 @@
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
             <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
             <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
+            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">🎯 Trigger</button>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
@@ -463,6 +464,58 @@
             <button class="chip" data-limpct="2">+2%</button>
           </div>
           <div class="hint" id="limitHint">Elige un nivel por debajo del precio para comprar, o por encima para vender.</div>
+        </div>
+
+        <!-- ORDEN TRIGGER (F1 «Trigger order»). El precio de ACTIVACIÓN y la EJECUCIÓN son dos
+             campos distintos, igual que en el TP/SL de la API (`tpPrice` frente a
+             `tpOrderType`/`tpOrderPrice`): confundirlos es el error clásico, porque el disparo no
+             garantiza el precio de relleno. Solo se muestra con el tipo «🎯 Trigger». -->
+        <div id="trigRow" style="display:none">
+          <label class="field full">
+            <span class="field-label">Precio de activación</span>
+            <span class="input-row">
+              <input type="number" id="trigInput" step="any" placeholder="ej. 64000">
+              <span class="suffix">USD</span>
+            </span>
+          </label>
+          <div class="grid-2-min">
+            <div class="field">
+              <span class="field-label">Se comprueba contra</span>
+              <div class="seg" id="segTrigSrc" role="group" aria-label="Precio contra el que se comprueba el disparo">
+                <button class="seg-btn active" data-tsrc="last" title="Last price: basta con que la mecha de la vela toque el nivel">Last</button>
+                <button class="seg-btn" data-tsrc="mark" title="Mark price: se mide contra el precio de marca (aquí, el cuerpo de la vela), así que una mecha no lo dispara">Mark</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">Al disparar</span>
+              <div class="seg" id="segTrigExec" role="group" aria-label="Cómo se ejecuta al dispararse">
+                <button class="seg-btn active" data-texec="market" title="A mercado: entra sí o sí, al peor precio plausible de la vela">Mercado</button>
+                <button class="seg-btn" data-texec="limit" title="Como límite: se coloca tu precio de ejecución y puede no rellenarse nunca">Límite</button>
+              </div>
+            </div>
+          </div>
+          <div id="trigLimitRow" style="display:none">
+            <label class="field full">
+              <span class="field-label">Precio de ejecución (límite)</span>
+              <span class="input-row"><input type="number" id="trigLimitInput" step="any" placeholder="por defecto, el propio nivel de activación"><span class="suffix">USD</span></span>
+            </label>
+          </div>
+          <div class="hint" id="trigHint">La orden no reserva margen mientras espera: si al dispararse no cabe el tamaño, se rechaza.</div>
+        </div>
+
+        <!-- Validez (`effect` de la API) y reduce-only: afectan a las órdenes que DESCANSAN (límite
+             y trigger con ejecución límite). POST_ONLY es la única forma de asegurarse la comisión
+             de maker; IOC/FOK no dejan quedar nada en espera. -->
+        <div class="grid-2-min" id="effectRow" style="display:none">
+          <label class="field"><span class="field-label">Validez</span>
+            <select id="ordEffect">
+              <option value="GTC" selected>GTC · descansa hasta ejecutarse o cancelarse</option>
+              <option value="IOC">IOC · lo que no se ejecute ahora se cancela</option>
+              <option value="FOK">FOK · todo o nada en este momento</option>
+              <option value="POST_ONLY">POST ONLY · no se coloca si cruzaría</option>
+            </select></label>
+          <label class="field pm-check"><input type="checkbox" id="ordReduceOnly">
+            <span>Solo reducir: no puede abrir ni aumentar la posición</span></label>
         </div>
 
         <label class="field full">

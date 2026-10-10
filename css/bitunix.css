@@ -1426,7 +1426,7 @@ kbd {
      el teléfono. Y con las filas a una columna desaparece el efecto secundario: el
      `scrollIntoView` del campo ya no desplazaba la tarjeta en horizontal (se veía
      «COMPRAR / LONG» cortado por el borde izquierdo). */
-  #orderCard > .card-body .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  #orderCard > .card-body .grid-2, #orderCard > .card-body .grid-2-min { grid-template-columns: minmax(0, 1fr); }
   /* «Avanzado»: la única regla que oculta, y solo dentro de este medio. */
   #orderAvanzado { display: flex; flex-direction: column; gap: 4px; }
   #orderCard.adv-cerrado #orderAvanzado { display: none; }

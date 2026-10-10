@@ -33,6 +33,10 @@
    * reales y se aplican; sin proxy se queda la de la doc y se avisa, sin simular que hay datos.
    * `App.riesgo.doc` guarda la tabla de arranque para poder volver a ella con el interruptor. */
   App.riesgo = { doc: null, niveles: null, funding: null, fuente: null, auto: true };
+
+  /* Opciones del tipo TRIGGER, separadas como en la API: `src` decide CONTRA QUÉ se comprueba el
+     nivel (MARK_PRICE | LAST_PRICE) y `exec` decide QUÉ se hace al disparar (mercado o límite). */
+  App.trigOrder = { src: 'last', exec: 'market' };
   App.interval = '1h';
   // Ancla temporal exacta entre cambios de serie: la fecha en la que está el
   // replay. Se conserva mientras no se mueva el cursor, de modo que encadenar
@@ -740,6 +744,7 @@
   App.placeOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
     if (App.orderType === 'limite') return App.placeLimitOrder(side);
+    if (App.orderType === 'trigger') return App.placeTriggerOrder(side);
 
     const price = App.currentPrice();
     if (!price) { U.toast('No hay vela actual', 'err'); return; }
@@ -798,6 +803,69 @@
    * gráfico). El tamaño, apalancamiento, comisión y SL/TP son los mismos
    * campos del panel de orden.
    */
+  /**
+   * Orden TRIGGER: coloca una condición que no reserva margen. Alcanzado el nivel, `TE.placeTrigger`
+   * decide: a mercado entra en el peor precio plausible de esa vela; como límite, coloca el cierre y
+   * puede no rellenarse nunca. Si al disparar no cabe el tamaño, la orden se rechaza EN ESE MOMENTO
+   * (comportamiento del exchange, no un fallo del simulador).
+   */
+  App.placeTriggerOrder = function (side) {
+    if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
+    const ref = App.currentPrice();
+    if (!ref) { U.toast('No hay vela actual', 'err'); return null; }
+
+    const el = document.getElementById('trigInput');
+    let trig = el ? parseFloat(el.value) : NaN;
+    if (!Number.isFinite(trig) || trig <= 0) {
+      // Sin nivel escrito: se propone 1 % a favor del lado (comprar al bajar, vender al subir).
+      trig = side === 'long' ? ref * 0.99 : ref * 1.01;
+      if (el) el.value = trig.toFixed(2);
+      U.toast('Sin precio de activación: se propone ' + U.fmtPrice(trig) + ' (puedes cambiarlo)', 'info', 3600);
+    }
+    const exec = (App.trigOrder && App.trigOrder.exec === 'limit') ? 'limit' : 'market';
+    const limEl = document.getElementById('trigLimitInput');
+    let lim = limEl ? parseFloat(limEl.value) : NaN;
+    if (exec === 'limit' && (!Number.isFinite(lim) || lim <= 0)) {
+      lim = trig;                     // por defecto se ejecuta en el propio nivel de activación
+      if (limEl) limEl.value = lim.toFixed(2);
+    }
+
+    const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
+    if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
+    const slIn = parseFloat(document.getElementById('slInput').value);
+    const tpIn = parseFloat(document.getElementById('tpInput').value);
+    const ro = document.getElementById('ordReduceOnly');
+    const ef = document.getElementById('ordEffect');
+
+    const orden = TE.placeTrigger(side, {
+      triggerPrice: trig,
+      src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
+      exec,
+      limitPrice: exec === 'limit' ? lim : null,
+      mode: App.sizeMode,
+      size: sizeVal,
+      sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
+      tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
+      leverage: TE.state.leverage,
+      feePct: TE.state.feePct,
+      reduceOnly: !!(ro && ro.checked),
+      efecto: (ef && ef.value) || 'GTC',
+      time: App.currentTime(),
+    });
+    if (orden) {
+      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App.refreshOrderLines();
+      UI.refreshAll();
+      const posAb = TE.state.position;
+      if (posAb && posAb.side !== side && !(ro && ro.checked)) {
+        U.log(`ℹ️ La trigger se comprueba contra el precio de la vela que la dispare; con una ${posAb.side.toUpperCase()} ` +
+              `abierta NO cierra por sí sola: abriría la del otro lado (en el exchange, para cerrar se usa reduce-only).`, 'sys');
+      }
+      U.toast(`🎯 Trigger colocada a ${U.fmtPrice(trig)} · ${exec === 'limit' ? 'ejecuta como límite' : 'ejecuta a mercado'}`, 'ok', 3200);
+    }
+    return orden;
+  };
+
   App.placeLimitOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
     const ref = App.currentPrice();
@@ -829,6 +897,8 @@
       leverage: TE.state.leverage,
       feePct: TE.state.feePct,
       refPrice: ref,
+      efecto: (document.getElementById('ordEffect') || {}).value || undefined,
+      reduceOnly: !!(document.getElementById('ordReduceOnly') || {}).checked,
       time: App.currentTime(),
     });
 

@@ -208,7 +208,8 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
 2. **Capa 2 — el formulario.** Selector de tipo con **Trigger**, filas de «Disparo», «Ejecución» y
   «Validez», precio de activación y retroceso del trailing, tick visible, `reduceOnly`, y «Cerrar
   todo»/«Cerrar %» en la carta de posición con los nombres de F2. **Verificación:** suite de
-  navegador sobre el archivo único, manejando solo la UI (como las demás).
+  navegador sobre el archivo único, manejando solo la UI (como las demás). **✅ Capa 2 implementada y verde: 33 comprobaciones en `tests/formulario.test.js**, que pulsa el
+ formulario y lee el estado resultante —sin llamar al motor para «ayudar» a pasar—.
 3. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
   o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección.
 4. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
@@ -258,3 +259,32 @@ Números de referencia de la suite (capital 10 000, long 100 %, 10×, entrada 10
 qty 1 000, nivel 2, MM 500): liquidación aislada **90,50**; a 90,40 `disponible 400 < mant. 500` (con
 `Margin Rate` pintado en 0,5525 % > MMR 0,5 %); PnL de liquidación **−9 690,50** y saldo **309,50** —
 queda el mantenimiento, no se va a cero—; funding al 0,01 % = **10 USDT** por liquidación.
+
+## 14 · Capa 2: el formulario expone el motor
+
+Qué se añadió y con qué criterio de fidelidad:
+
+* **Tercer tipo en el selector**: ⚡ Mercado · ⏳ Límite · **🎯 Trigger** (F1 lista Limit, Market,
+  Trigger y Trailing Stop; el *trailing* como orden propia queda para el siguiente bloque porque el
+  motor aún no acepta `callbackRate` en una orden y no se pinta un control que no funcione).
+* **Filas separadas para «contra qué se comprueba» y «qué se hace al disparar»** (`MARK|LAST` y
+  `MERCADO|LÍMITE`), porque en la API son campos distintos (`tpStopType` frente a `tpOrderType`) y
+  confundirlos es el error clásico del TP/SL «ejecutado a precio de trigger».
+* **Validez por orden** (`GTC|IOC|FOK|POST ONLY`) y **reduce-only**, visibles solo cuando puede
+  descansar una orden. La pista del pendiente avisa de que la trigger **no reserva margen**: si al
+  disparar no cabe el tamaño, el exchange la rechaza.
+* La **lista de pendientes** distingue los dos tipos —una trigger pinta su nivel de *disparo* y,
+  aparte, su precio de *ejecución*—; antes todo se leía de `o.limitPrice` y habría salido `undefined`.
+* Cancelar una trigger escribe «ORDEN TRIGGER cancelada … no había reservado margen». Reutilizar el
+  mensaje de «orden límite» dejaba un historial que no se puede leer.
+
+Dos lecciones de medida, para no repetirlas:
+
+1. **Un rótulo más largo desborda la tarjeta.** `.order-actions` y `.grid-2` son rejillas `1fr 1fr`, y
+   `1fr` = `minmax(AUTO,1fr)`: manda el `min-content` del botón. Con «🎯 COMPRAR TRIGGER» la tarjeta
+   ganaba 14 px de desborde (atribuido elemento por elemento en el navegador, no a ojo). Las filas
+   nuevas usan una variante `.grid-2-min` (`minmax(0,1fr)`) y los botones, rótulos del mismo porte que
+   los de mercado. **El desborde preexistente de 19 px de la fila SL/TP se queda como está** (así se
+   pidió: reportado, no arreglado) y el test de esta capa juzga el *delta* que añade la capa.
+2. **El atajo `T` recorre los tres tipos** (market → límite → trigger) en lugar de alternar dos: con un
+   tipo más en el selector, alternar dejaría la trigger inalcanzable de teclado.

@@ -1238,7 +1238,12 @@
     const i = s.pending.findIndex((o) => o.id === id);
     if (i < 0) { U.toast('Esa orden ya no está pendiente', 'warn', 1800); return false; }
     const [o] = s.pending.splice(i, 1);
-    U.log(`🚫 Orden límite cancelada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(o.limitPrice)}`, 'warn');
+    // El tipo va en el aviso: cancelar una trigger no ha liberado margen ninguno (no reservaba),
+    // y decir «orden límite» en el registro haría que quien repase la sesión crea que sí.
+    const esTrig = o.tipo === 'trigger';
+    U.log(`🚫 Orden ${esTrig ? 'TRIGGER' : 'límite'} cancelada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ` +
+      `${U.fmtPrice(esTrig ? o.triggerPrice : o.limitPrice)}` +
+      (esTrig ? ' (no había reservado margen: se cancela sin más)' : ''), 'warn');
     U.playSound('close');
     TE._emit();
     return true;

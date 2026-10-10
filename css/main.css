@@ -173,6 +173,12 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid #0b1
 .meter{height:4px;background:var(--bg-0);border-radius:3px;overflow:hidden;}
 .meter-fill{height:100%;width:0;background:linear-gradient(90deg,var(--up),var(--warn),var(--down));transition:width .25s;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+/* Igual que .grid-2 pero capaz de bajar de verdad del min-content: `1fr` es `minmax(AUTO,1fr)`,
+   así que en una tarjeta estrecha las dos pistas se comen el ancho y sobran (el desborde de 19 px
+   de #orderCard viene de ahí, y está reportado sin arreglar a propósito para no mover las medidas
+   de otras suites). Las filas nuevas del formulario de futuros —disparo/ejecución de la trigger y
+   validez— usan esta variante, que no añade ni un píxel. */
+.grid-2-min{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
 .quick-row{display:flex;gap:5px;flex-wrap:wrap;}
 .hint{font-size:10px;color:var(--tx-4);line-height:1.45;border-left:2px solid var(--line);padding-left:7px;}
 .order-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:3px;}
