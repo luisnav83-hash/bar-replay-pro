@@ -1,5 +1,5 @@
 {
- "generado": "2026-10-10T16:46:46.378Z",
+ "generado": "2026-10-10T17:26:31.999Z",
  "viewport": {
   "width": 1600,
   "height": 900,
@@ -7,7 +7,7 @@
  },
  "ellos": {
   "url": "https://www.bitunix.com/es-es/contract-trade/BTCUSDT",
-  "titulo": "83,002.1 | BTCUSDT Futuros - Exchange de Criptomonedas | Bitunix",
+  "titulo": "83,023.6 | BTCUSDT Futuros - Exchange de Criptomonedas | Bitunix",
   "fuente": {
    "familia": "\"noto sans\"",
    "tam": 14
@@ -41,7 +41,7 @@
    "peso": "400",
    "familia": "Geist",
    "padding": "0px",
-   "texto": "Disponible 0.0000 USDT Precio 8300"
+   "texto": "Disponible 0.0000 USDT Precio 8302"
   },
   "botones": [
    {
@@ -60,7 +60,7 @@
     "peso": "400",
     "familia": "Geist",
     "padding": "0px 12px",
-    "texto": "BATUSDT /"
+    "texto": "LUMIAUSDT /"
    },
    {
     "caja": {
@@ -258,7 +258,7 @@
     "peso": "400",
     "familia": "Geist",
     "padding": "4px 10px",
-    "texto": "Comprar 83,002"
+    "texto": "Comprar 83,023.6"
    },
    {
     "caja": {
@@ -276,12 +276,12 @@
     "peso": "400",
     "familia": "Geist",
     "padding": "4px 10px",
-    "texto": "Vender 83,002.1"
+    "texto": "Vender 83,023.7"
    }
   ],
   "etiquetas": [
    {
-    "t": "BTCUSDT Bitcoin 83,002.1",
+    "t": "BTCUSDT Bitcoin 83,023.6",
     "x": 0,
     "y": 60,
     "w": 361,
@@ -317,7 +317,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.6",
     "x": 259,
     "y": 70,
     "w": 102,
@@ -326,7 +326,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.6",
     "x": 284,
     "y": 70,
     "w": 77,
@@ -335,16 +335,16 @@
     "letra": "#000000"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.6",
     "x": 284,
     "y": 68,
     "w": 77,
     "h": 23,
     "fondo": "transparent",
-    "letra": "#24c18d"
+    "letra": "#f14b3f"
    },
    {
-    "t": "Cambio en 24h 0.32%",
+    "t": "Cambio en 24h 0.55%",
     "x": 392,
     "y": 64,
     "w": 84,
@@ -362,7 +362,7 @@
     "letra": "#919499"
    },
    {
-    "t": "0.32%",
+    "t": "0.55%",
     "x": 392,
     "y": 82,
     "w": 84,
@@ -371,7 +371,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "0.32%",
+    "t": "0.55%",
     "x": 392,
     "y": 80,
     "w": 34,
@@ -380,7 +380,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "Precio Marcado 83,002.1",
+    "t": "Precio Marcado 83,023.7",
     "x": 500,
     "y": 64,
     "w": 87,
@@ -398,7 +398,7 @@
     "letra": "#919499"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.7",
     "x": 500,
     "y": 83,
     "w": 87,
@@ -407,7 +407,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "Precio índice 83,047.0",
+    "t": "Precio índice 83,058.9",
     "x": 611,
     "y": 64,
     "w": 71,
@@ -425,7 +425,7 @@
     "letra": "#919499"
    },
    {
-    "t": "83,047.0",
+    "t": "83,058.9",
     "x": 611,
     "y": 82,
     "w": 71,
@@ -488,7 +488,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "Cantidad en 24h(BTC) 7.43K",
+    "t": "Cantidad en 24h(BTC) 7.01K",
     "x": 920,
     "y": 64,
     "w": 122,
@@ -506,7 +506,7 @@
     "letra": "#919499"
    },
    {
-    "t": "7.43K",
+    "t": "7.01K",
     "x": 920,
     "y": 82,
     "w": 122,
@@ -515,7 +515,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "Volumen de 24H(USDT) 614.61M",
+    "t": "Volumen de 24H(USDT) 579.61M",
     "x": 1066,
     "y": 64,
     "w": 129,
@@ -533,7 +533,7 @@
     "letra": "#919499"
    },
    {
-    "t": "614.61M",
+    "t": "579.61M",
     "x": 1066,
     "y": 82,
     "w": 129,
@@ -551,7 +551,7 @@
     "letra": "#919499"
    },
    {
-    "t": "0.0007% / 07:12:59",
+    "t": "0.0008% / 06:33:14",
     "x": 1219,
     "y": 83,
     "w": 211,
@@ -560,7 +560,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "0.0007%",
+    "t": "0.0008%",
     "x": 1219,
     "y": 81,
     "w": 49,
@@ -569,7 +569,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "07:12:59",
+    "t": "06:33:14",
     "x": 1283,
     "y": 81,
     "w": 51,
@@ -866,7 +866,7 @@
     "letra": "#919499"
    },
    {
-    "t": "83,002.1 83,002.1",
+    "t": "83,023.6 83,023.7",
     "x": 988,
     "y": 215,
     "w": 305,
@@ -875,7 +875,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83,002.1 83,002.1",
+    "t": "83,023.6 83,023.7",
     "x": 988,
     "y": 431,
     "w": 305,
@@ -884,7 +884,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.6",
     "x": 1004,
     "y": 442,
     "w": 108,
@@ -893,16 +893,16 @@
     "letra": "#ffffff"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.6",
     "x": 1004,
     "y": 440,
     "w": 108,
     "h": 26,
     "fondo": "transparent",
-    "letra": "#24c18d"
+    "letra": "#f14b3f"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.7",
     "x": 1213,
     "y": 446,
     "w": 64,
@@ -911,7 +911,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.7",
     "x": 1229,
     "y": 446,
     "w": 48,
@@ -920,7 +920,7 @@
     "letra": "#919499"
    },
    {
-    "t": "B 48.32% S 51.68%",
+    "t": "B 49.00% S 51.00%",
     "x": 988,
     "y": 704,
     "w": 305,
@@ -929,7 +929,7 @@
     "letra": "#000000"
    },
    {
-    "t": "B 48.32% S 51.68%",
+    "t": "B 49.00% S 51.00%",
     "x": 1006,
     "y": 704,
     "w": 269,
@@ -938,7 +938,7 @@
     "letra": "#000000"
    },
    {
-    "t": "B 48.32%",
+    "t": "B 49.00%",
     "x": 1006,
     "y": 704,
     "w": 135,
@@ -956,7 +956,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "48.32%",
+    "t": "49.00%",
     "x": 1030,
     "y": 707,
     "w": 41,
@@ -965,7 +965,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "48.32%",
+    "t": "49.00%",
     "x": 1030,
     "y": 705,
     "w": 41,
@@ -974,7 +974,7 @@
     "letra": "#24c18d"
    },
    {
-    "t": "S 51.68%",
+    "t": "S 51.00%",
     "x": 1141,
     "y": 704,
     "w": 135,
@@ -992,7 +992,7 @@
     "letra": "#f14b3f"
    },
    {
-    "t": "51.68%",
+    "t": "51.00%",
     "x": 1210,
     "y": 707,
     "w": 41,
@@ -1001,7 +1001,7 @@
     "letra": "#f14b3f"
    },
    {
-    "t": "51.68%",
+    "t": "51.00%",
     "x": 1210,
     "y": 705,
     "w": 41,
@@ -1271,7 +1271,7 @@
     "letra": "#919499"
    },
    {
-    "t": "83002.1 USDT",
+    "t": "83023.6 USDT",
     "x": 1311,
     "y": 361,
     "w": 272,
@@ -1280,7 +1280,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83002.1 USDT",
+    "t": "83023.6 USDT",
     "x": 1312,
     "y": 362,
     "w": 270,
@@ -1289,7 +1289,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83002.1",
+    "t": "83023.6",
     "x": 1324,
     "y": 374,
     "w": 70,
@@ -1298,7 +1298,7 @@
     "letra": "#000000"
    },
    {
-    "t": "83002.1",
+    "t": "83023.6",
     "x": 1340,
     "y": 374,
     "w": 54,
@@ -2477,7 +2477,7 @@
     "letra": "#ffffff"
    },
    {
-    "t": "Comprar 83,002",
+    "t": "Comprar 83,023.6",
     "x": 51,
     "y": 205,
     "w": 88,
@@ -2495,10 +2495,10 @@
     "letra": "#00c383"
    },
    {
-    "t": "83,002",
-    "x": 76,
+    "t": "83,023.6",
+    "x": 71,
     "y": 225,
-    "w": 38,
+    "w": 48,
     "h": 16,
     "fondo": "transparent",
     "letra": "#00c383"
@@ -2531,7 +2531,7 @@
     "letra": "#919499"
    },
    {
-    "t": "Vender 83,002.1",
+    "t": "Vender 83,023.7",
     "x": 273,
     "y": 205,
     "w": 88,
@@ -2549,7 +2549,7 @@
     "letra": "#f65353"
    },
    {
-    "t": "83,002.1",
+    "t": "83,023.7",
     "x": 293,
     "y": 225,
     "w": 48,
@@ -2572,7 +2572,7 @@
    "  div.market-price-readonly-inner.flex.items-center [270×40@1312,362]",
    "    div.market-price-readonly-value.flex.items-center [70×16@1324,374]",
    "      span.market-price-active-dot.w-12.h-12 [12×12@1324,376]",
-   "      span.market-price-readonly-text.fs-14 [54×16@1340,374] «83002.1»",
+   "      span.market-price-readonly-text.fs-14 [54×16@1340,374] «83023.6»",
    "    span.market-price-readonly-unit.fs-12.shrink-0 [31×14@1539,375] «USDT»",
    "div.volume-input-wrap.m-t12 [272×62@1311,415]",
    "  label.volume-input-label.fs-12.color-text-2 [272×16@1311,415] «Cantidad»",
@@ -3327,7 +3327,7 @@
    {
     "caja": {
      "x": 258,
-     "y": 5,
+     "y": 19,
      "w": 186,
      "h": 38
     },
@@ -3359,6 +3359,24 @@
     "familia": "noto sans",
     "padding": "0px 8px",
     "texto": "fijar"
+   },
+   {
+    "caja": {
+     "x": 1506,
+     "y": 78,
+     "w": 84,
+     "h": 22
+    },
+    "tag": "button",
+    "fondo": "#222324",
+    "letra": "#919499",
+    "borde": "#292a2b",
+    "radio": "2px",
+    "px": 12,
+    "peso": "500",
+    "familia": "noto sans",
+    "padding": "0px 6px",
+    "texto": "Avanzado ⌃"
    },
    {
     "caja": {
@@ -3561,144 +3579,54 @@
   ],
   "etiquetas": [
    {
-    "t": "Último 63,133.48",
-    "x": 23,
-    "y": 47,
-    "w": 138,
-    "h": 38,
-    "fondo": "transparent",
-    "letra": "#ffffff"
-   },
-   {
-    "t": "Último",
-    "x": 23,
-    "y": 49,
-    "w": 137,
-    "h": 14,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "24 h",
-    "x": 161,
-    "y": 45,
-    "w": 150,
-    "h": 14,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "Mark",
-    "x": 312,
-    "y": 45,
-    "w": 103,
-    "h": 14,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
     "t": "índice 63,133.48",
-    "x": 312,
-    "y": 76,
+    "x": 756,
+    "y": 48,
     "w": 103,
     "h": 11,
     "fondo": "transparent",
     "letra": "#919499"
    },
    {
-    "t": "Funding 0.0059 % en 07:12:50",
-    "x": 416,
-    "y": 43,
-    "w": 104,
-    "h": 46,
-    "fondo": "transparent",
-    "letra": "#ffffff"
-   },
-   {
-    "t": "Funding",
-    "x": 416,
-    "y": 45,
-    "w": 103,
-    "h": 14,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "en 07:12:50",
-    "x": 416,
-    "y": 76,
+    "t": "en 06:33:05",
+    "x": 860,
+    "y": 48,
     "w": 103,
     "h": 11,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "Interés abierto",
-    "x": 520,
-    "y": 45,
-    "w": 103,
-    "h": 14,
     "fondo": "transparent",
     "letra": "#919499"
    },
    {
     "t": "en 2.17 B USDT",
-    "x": 520,
-    "y": 76,
+    "x": 964,
+    "y": 48,
     "w": 103,
     "h": 11,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "Vol. 24 h",
-    "x": 624,
-    "y": 45,
-    "w": 103,
-    "h": 14,
     "fondo": "transparent",
     "letra": "#919499"
    },
    {
     "t": "781.95 M USDT",
-    "x": 624,
-    "y": 76,
-    "w": 103,
-    "h": 11,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "Long / Short",
-    "x": 728,
+    "x": 1068,
     "y": 48,
-    "w": 175,
-    "h": 14,
-    "fondo": "transparent",
-    "letra": "#919499"
-   },
-   {
-    "t": "L 65.63 % / S 34.37 %",
-    "x": 728,
-    "y": 74,
-    "w": 175,
+    "w": 103,
     "h": 11,
     "fondo": "transparent",
     "letra": "#919499"
    },
    {
-    "t": "Disponible",
-    "x": 904,
+    "t": "L 65.40 % / S 34.60 %",
+    "x": 1172,
     "y": 45,
-    "w": 103,
-    "h": 14,
+    "w": 175,
+    "h": 11,
     "fondo": "transparent",
     "letra": "#919499"
    },
    {
     "t": "equity $10,000.00",
-    "x": 904,
-    "y": 76,
+    "x": 1348,
+    "y": 48,
     "w": 103,
     "h": 11,
     "fondo": "transparent",
@@ -5118,29 +5046,29 @@
     "letra": "#f14b3f"
    },
    {
-    "t": "Nueva orden 63,133.48",
-    "x": 1329,
-    "y": 76,
-    "w": 271,
-    "h": 26,
-    "fondo": "#121212",
-    "letra": "#ffffff"
-   },
-   {
     "t": "Nueva orden",
     "x": 1339,
-    "y": 81,
-    "w": 101,
-    "h": 16,
+    "y": 73,
+    "w": 93,
+    "h": 32,
     "fondo": "transparent",
     "letra": "#ffffff"
    },
    {
     "t": "63,133.48",
-    "x": 1530,
+    "x": 1439,
     "y": 81,
     "w": 60,
     "h": 15,
+    "fondo": "#222324",
+    "letra": "#919499"
+   },
+   {
+    "t": "Avanzado ⌃",
+    "x": 1506,
+    "y": 78,
+    "w": 84,
+    "h": 22,
     "fondo": "#222324",
     "letra": "#919499"
    },
@@ -5523,28 +5451,37 @@
     "letra": "#ffffff"
    },
    {
-    "t": "Coste $10,000.00",
+    "t": "Coste (USDT) $10,000.00",
     "x": 1339,
     "y": 700,
-    "w": 69,
+    "w": 76,
     "h": 24,
     "fondo": "transparent",
     "letra": "#66686b"
    },
    {
-    "t": "Margen $10,000.00 (1x)",
-    "x": 1420,
+    "t": "(USDT)",
+    "x": 1369,
     "y": 700,
-    "w": 95,
-    "h": 24,
+    "w": 40,
+    "h": 12,
+    "fondo": "transparent",
+    "letra": "#66686b"
+   },
+   {
+    "t": "(USDT)",
+    "x": 1466,
+    "y": 700,
+    "w": 40,
+    "h": 12,
     "fondo": "transparent",
     "letra": "#66686b"
    },
    {
     "t": "Cerrar todo",
-    "x": 1526,
+    "x": 1535,
     "y": 700,
-    "w": 64,
+    "w": 55,
     "h": 24,
     "fondo": "transparent",
     "letra": "#919499"
@@ -5899,6 +5836,87 @@
     "h": 16,
     "fondo": "transparent",
     "letra": "#66686b"
+   },
+   {
+    "t": "Cuenta",
+    "x": 463,
+    "y": 703,
+    "w": 74,
+    "h": 32,
+    "fondo": "transparent",
+    "letra": "#919499"
+   },
+   {
+    "t": "Estadísticas",
+    "x": 537,
+    "y": 703,
+    "w": 107,
+    "h": 32,
+    "fondo": "transparent",
+    "letra": "#919499"
+   },
+   {
+    "t": "Log",
+    "x": 645,
+    "y": 703,
+    "w": 49,
+    "h": 32,
+    "fondo": "transparent",
+    "letra": "#919499"
+   },
+   {
+    "t": "Dibujos (0)",
+    "x": 694,
+    "y": 703,
+    "w": 100,
+    "h": 32,
+    "fondo": "transparent",
+    "letra": "#919499"
+   },
+   {
+    "t": "0",
+    "x": 768,
+    "y": 711,
+    "w": 9,
+    "h": 16,
+    "fondo": "transparent",
+    "letra": "#66686b"
+   },
+   {
+    "t": "limpiar log ⌄",
+    "x": 1488,
+    "y": 703,
+    "w": 106,
+    "h": 32,
+    "fondo": "transparent",
+    "letra": "#ffffff"
+   },
+   {
+    "t": "limpiar log",
+    "x": 1488,
+    "y": 707,
+    "w": 74,
+    "h": 24,
+    "fondo": "#222324",
+    "letra": "#919499"
+   },
+   {
+    "t": "⌄",
+    "x": 1567,
+    "y": 707,
+    "w": 27,
+    "h": 24,
+    "fondo": "#222324",
+    "letra": "#919499"
+   },
+   {
+    "t": "Posición abierta FLAT",
+    "x": 0,
+    "y": 736,
+    "w": 799,
+    "h": 33,
+    "fondo": "#121212",
+    "letra": "#ffffff"
    }
   ],
   "arbol": [
@@ -5964,18 +5982,20 @@
    "  button#btnLong.btn.btn-long [122×40@1339,639] «Abrir Largo»",
    "  button#btnShort.btn.btn-short [122×40@1468,639] «Abrir Corto»",
    "div#bfCost.bf-cost [251×32@1339,692] «   »",
-   "  span.c [69×24@1339,700] «Coste»",
+   "  span.c [76×24@1339,700] «Coste »",
+   "    span.uni [40×12@1369,700] «(USDT)»",
    "    b#bfCostVal [66×12@1339,712] «$10,000.00»",
-   "  span.m [95×24@1420,700] «Margen»",
-   "    b#bfMarginVal [94×12@1420,712] «$10,000.00 (1x)»",
-   "  button#btnFlatten.bf-flat [64×24@1526,700] «Cerrar todo»",
+   "  span.m [96×24@1427,700] «Margen »",
+   "    span.uni [40×12@1466,700] «(USDT)»",
+   "    b#bfMarginVal [94×12@1427,712] «$10,000.00 (1x)»",
+   "  button#btnFlatten.bf-flat [55×24@1535,700] «Cerrar todo»",
    "div#orderHint.hint [251×32@1339,729] «Sin SL/TP definidos (puedes añadirlos po»"
   ],
   "lienzos": [
    {
     "tag": "svg",
     "x": 10,
-    "y": 9,
+    "y": 23,
     "w": 30,
     "h": 30,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -5983,8 +6003,8 @@
    },
    {
     "tag": "svg",
-    "x": 943,
-    "y": 21,
+    "x": 1062,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -5992,8 +6012,8 @@
    },
    {
     "tag": "svg",
-    "x": 1077,
-    "y": 21,
+    "x": 1176,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6001,8 +6021,8 @@
    },
    {
     "tag": "svg",
-    "x": 1225,
-    "y": 21,
+    "x": 1304,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6010,8 +6030,8 @@
    },
    {
     "tag": "svg",
-    "x": 1301,
-    "y": 21,
+    "x": 1360,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6019,8 +6039,8 @@
    },
    {
     "tag": "svg",
-    "x": 1399,
-    "y": 17,
+    "x": 1429,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6028,8 +6048,8 @@
    },
    {
     "tag": "svg",
-    "x": 1433,
-    "y": 17,
+    "x": 1457,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6037,8 +6057,8 @@
    },
    {
     "tag": "svg",
-    "x": 1467,
-    "y": 17,
+    "x": 1485,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6046,8 +6066,8 @@
    },
    {
     "tag": "svg",
-    "x": 1501,
-    "y": 17,
+    "x": 1513,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6055,8 +6075,8 @@
    },
    {
     "tag": "svg",
-    "x": 1535,
-    "y": 17,
+    "x": 1541,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",
@@ -6065,7 +6085,7 @@
    {
     "tag": "svg",
     "x": 1569,
-    "y": 17,
+    "y": 31,
     "w": 14,
     "h": 14,
     "buf": "[object SVGAnimatedLength]×[object SVGAnimatedLength]",

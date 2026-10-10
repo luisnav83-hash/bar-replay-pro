@@ -159,7 +159,28 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   // como devuelve los 79 px de gráfico que estaba costeando la barra vieja. Se comprueba el
   // número y la convivencia en franja, no el orden en el DOM.
   ok(est.statsMismaFranja, 'las cifras de 24 h comparten franja con los controles del par (medido en el sitio: par en x=52..195 y estadísticas de x=392 a x=1430, todas a y=64/82)');
-  ok(est.barraAlta <= 80 && est.barraAlta >= 60, `barra superior entera: ${est.barraAlta} px de alto (antes 113 en dos filas; el sitio usa 40 de nav + 73 de franja)`);
+  // 60..96: la barra son DOS líneas (46 de cifras + 26 del mecanismo del replay + acolchados).
+  // Se midió primero en 76 y la segunda línea asomaba 11 px por debajo (`.replay-line` en
+  // y=51..87), así que el techo del ancla es el que sale de la aritmética, no un gusto. Contra el
+  // sitio, que usa 113 px para lo mismo (nav 40 + franja de símbolo 73), seguimos más apretados.
+  ok(est.barraAlta <= 96 && est.barraAlta >= 60,
+     `barra superior entera: ${est.barraAlta} px de alto en DOS líneas (antes 155 en tres franjas; el sitio usa 40 de nav + 73 de franja = 113)`);
+  {
+    const asoma = await page.evaluate(() => {
+      const g = (i) => document.getElementById(i), tb = g('topbar');
+      const R = (e) => e ? e.getBoundingClientRect() : null;
+      const piezas = [g('bfStats'), document.querySelector('.replay-line'), document.querySelector('.brand'), document.querySelector('.par-field')]
+        .filter(Boolean).map(R);
+      const bajo = Math.max(...piezas.map((r) => Math.round(r.bottom)));
+      return { sobra: Math.round(tb.getBoundingClientRect().bottom - bajo),
+        cifrasDentro: piezas[0].top >= tb.getBoundingClientRect().top - 1,
+        statsAncho: Math.round(R(g('bfStats')).width),
+        visible: [...g('bfStats').children].filter((c) => { const q = c.getBoundingClientRect(); return q.width > 40 && q.right <= R(g('bfStats')).right + 1; }).length };
+    });
+    ok(asoma.sobra >= 0, `la segunda línea NO asoma por debajo de la barra (sobra ${asoma.sobra} px dentro del borde)`);
+    ok(asoma.statsAncho >= 700 && asoma.visible >= 5,
+       `las cifras de 24 h van en la línea 1 con hueco de verdad: ${asoma.statsAncho} px de franja y ${asoma.visible} cifras a la vista sin desplazar (el sitio muestra 8)`);
+  }
   // ANCLA RE-ESCRITA el 2026-10-10. Antes afirmaba que «libro y panel de órdenes comparten la
   // columna derecha», que era nuestra estructura vieja y NO la del sitio: medido en su DOM, el
   // libro es una columna propia (x≈1004, 300 px) y el panel de órdenes va a su derecha
@@ -176,6 +197,51 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     ok(lb.anchoOrden === 272, `la columna de órdenes mide ${lb.anchoOrden} px (272 px medidos en el sitio)`);
   }
   ok(est.columnaDerecha, 'la columna derecha queda a la derecha del gráfico');
+
+  /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
+     Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
+     695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna
+     derecha en 1360x900 -alcanzables solo deslizando la columna, que en trading es un defecto,
+     no un detalle-. El sitio no pasa de ahí porque su `TP/SL` viene plegado de fábrica; aquí el
+     pliegue es condicional y MEDIDO (css/bitunix.css, bloque 15 + `autoAprieta` en
+     js/uiController.js), así que lo que se comprueba es el contrato: con hueco, todo abierto;
+     sin hueco, plegado solo, con el botón a la vista y diciendo por qué. */
+  {
+    const cabida = () => page.evaluate(() => {
+      const g = (id) => document.getElementById(id);
+      const card = g('orderCard'), lg = g('btnLong'), sh = g('btnShort');
+      const adv = g('orderAvanzado'), btn = g('btnOrderAvanzado');
+      let port = card.parentElement;
+      while (port) { const o = getComputedStyle(port).overflowY; if (o === 'auto' || o === 'scroll') break; port = port.parentElement; }
+      const inf = Math.max(lg.getBoundingClientRect().bottom, sh.getBoundingClientRect().bottom);
+      const limite = Math.min((port || document.documentElement).getBoundingClientRect().bottom, window.innerHeight);
+      const r = (e) => { const q = e.getBoundingClientRect(); return document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2)); };
+      const pincha = (e) => { const x = r(e); return !!x && (x === e || e.contains(x)); };
+      return {
+        plegado: !adv.offsetParent,
+        auto: card.dataset.autoApretado === '1',
+        boton: btn ? getComputedStyle(btn).display !== 'none' : false,
+        clip: Math.max(0, Math.round(inf - limite + 6)),
+        tarjeta: Math.round(card.getBoundingClientRect().height),
+        larga: pincha(lg), corta: pincha(sh),
+      };
+    });
+    const holgado = await cabida();                                     // 1440x900, viewport base
+    ok(!holgado.plegado && !holgado.auto,
+       `con hueco de sobra el bloque «Avanzado» NO se pliega solo (plegado ${holgado.plegado}, por espacio ${holgado.auto}): SL/TP y la comisión se ven sin tocar nada`);
+    ok(holgado.clip === 0 && holgado.larga && holgado.corta,
+       `y los botones de entrada se ven y se pinchan sin deslizar: tarjeta ${holgado.tarjeta} px, ${holgado.clip} px bajo el borde (antes ~140)`);
+    await page.setViewport({ width: 1024, height: 768 });
+    await new Promise((r) => setTimeout(r, 620));
+    const apretado = await cabida();
+    ok(apretado.plegado && apretado.auto && apretado.boton,
+       `en ventana que no da (1024x768, ${apretado.tarjeta} px de tarjeta) «Avanzado» se pliega SOLO (${apretado.plegado}), marcado como pliegue por espacio (${apretado.auto}) y dejando el botón para volver a abrirlo (${apretado.boton})`);
+    await page.setViewport({ width: 1440, height: 900 });
+    await new Promise((r) => setTimeout(r, 620));
+    const vuelta = await cabida();
+    ok(!vuelta.plegado && vuelta.clip === 0,
+       `y al devolverle el hueco se deshace el pliegue (${vuelta.plegado ? 'sigue plegado' : 'abierto'}, ${vuelta.clip} px bajo el borde) - el pliegue responde al espacio, no al ancho`);
+  }
   ok(est.posicionEnPestañas && est.pendientesEnPestañas, 'posición y órdenes pendientes viven en la pestaña Posiciones');
   ok(est.cuentaEnPestañas && est.statsEnPestañas && est.curvaEnPestañas, 'cuenta, estadísticas y curva de capital, en sus pestañas');
   ok(est.tradesEnPestañas && est.logEnPestañas && est.dibujosEnPestañas, 'trades, log y dibujos siguen accesibles por pestaña');

@@ -101,6 +101,11 @@
       </button>
     </label>
 
+    <!-- El mecanismo del replay (temporalidad, fecha de inicio, cargar/práctica/CSV/demo)
+         vive envuelto en `.replay-line` para poder bajarlo a su propia línea en la franja
+         ≥1360 px SIN tocar el reparto de los demás anchos: fuera de esa franja el envoltorio es
+         `display: contents` y no existe para el layout (css/bitunix.css, bloque 14). -->
+    <div class="replay-line">
     <label class="field" title="Temporalidad de cada vela">
       <span class="field-label">Temporalidad</span>
       <div class="tf-quick" id="tfQuick" role="group" aria-label="Temporalidad rápida">
@@ -148,6 +153,7 @@
       <svg viewBox="0 0 24 24" class="ico"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5v7l5 3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
       Demo
     </button>
+    </div><!-- /.replay-line -->
   </div>
 
   <div class="topbar-group topbar-right">
@@ -688,8 +694,8 @@
           <button class="btn btn-short" id="btnShort" title="Abrir posición SHORT (S)">Abrir Corto</button>
         </div>
         <div class="bf-cost" id="bfCost">
-          <span class="c">Coste <b id="bfCostVal">—</b></span>
-          <span class="m">Margen <b id="bfMarginVal">—</b></span>
+          <span class="c">Coste<span class="uni"> (USDT)</span> <b id="bfCostVal">—</b></span>
+          <span class="m">Margen<span class="uni"> (USDT)</span> <b id="bfMarginVal">—</b></span>
           <button class="bf-flat" id="btnFlatten" title="Cerrar la posición abierta al precio de mercado (Escape)">Cerrar todo</button>
         </div>
 

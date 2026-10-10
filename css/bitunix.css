@@ -1479,7 +1479,11 @@ kbd {
      `scrollIntoView` del campo ya no desplazaba la tarjeta en horizontal (se veía
      «COMPRAR / LONG» cortado por el borde izquierdo). */
   #orderCard > .card-body .grid-2, #orderCard > .card-body .grid-2-min { grid-template-columns: minmax(0, 1fr); }
-  /* «Avanzado»: la única regla que oculta, y solo dentro de este medio. */
+  /* «Avanzado» en el teléfono: la fila de 29 px del modo de posición, la de la comisión y la
+     de SL/TP no caben en el reposo del formulario (158 px de cuerpo). La regla que OCULTA está
+     ahora fuera de este medio (bloque 15, al final de la hoja) porque desde el 10-oct-2026 el
+     pliegue también se usa en escritorio cuando el hueco aprieta; aquí solo se declara el alto
+     del bloque abierto y se pinta el botón. */
   #orderAvanzado { display: flex; flex-direction: column; gap: 4px; }
   #orderCard.adv-cerrado #orderAvanzado { display: none; }
   #btnOrderAvanzado { display: inline-flex; height: 22px; }
@@ -1866,7 +1870,15 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   /* ALTO ENTERO y declarado: con `min-height` la caja quedaba en 95 px y la fila del
      workspace salía fraccionaria (34px 327.766px 201px 44px), que es lo que rompe por 1 px las
      comprobaciones de reparto de tests/pnl-chart.test.js («caja 240 == fila 239»). */
-  #topbar { height: 76px; min-height: 0; padding: 5px 10px; align-items: center; }
+  /* 90 px, no 76: la primera versión fijó 76 y la segunda línea asomaba 11 px por debajo de la
+     barra (medido: `.replay-line` en y=51..87 con la barra en 76), así que los botones de
+     temporalidad y los iconos quedaban recortados -peor pecado que la fila extra que se quería
+     quitar-. La aritmética de dos líneas es: cifras 46 (etiqueta de 12 sobre valor de 14, como
+     las suyas) + línea de controles 26 + 3 de separación + 5+5 de acolchado = 85, y se redondea
+     a 90 para que el `align-items:center` no deforme ninguna de las dos. Contra el sitio: su nav
+     (40) + su franja de símbolo (73) suman 113 -seguimos siendo más apretados, y el gráfico gana
+     65 px frente a los 155 de antes-. */
+  #topbar { height: 90px; min-height: 0; padding: 5px 10px; align-items: center; }
   #topbar .brand { min-height: 0; padding: 0 12px 0 0; }
   /* El grupo de controles se VUELVE TRANSPARENT para el reparto (`display: contents`): así sus
      hijos son ítems directos de la barra y se pueden ordenar. La primera línea queda como la
@@ -1876,10 +1888,36 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      medido, con el grupo entero en la línea 1 las estadísticas saltaban a la 2 y desbordaban por
      abajo la altura fijada de la barra (stats en y=43..89 con la barra en 76). */
   #topbar .topbar-group { display: contents; }
-  #topbar .topbar-group > * { order: 9; }
+  /* LA LÍNEA DEL REPLAY BAJA SIEMPRE, no «si no cabe». La primera versión ordenaba los hijos y
+     confiaba en el `flex-wrap`: a 1920 px de ancho CABÍAN TODOS en la línea 1 y las cifras de 24 h
+     -que se quedan el sobrante con `flex: 1 1 0`- se reducían a una lama: medido el 10-oct,
+     `#bfStats` medía 13 px en 1440 y 117 px en 1600 contra 1015 px de contenido, así que la
+     captura de 1600 mostraba «Último 63 133,48» y ninguna cifra más. Con la segunda línea forzada
+     (`flex: 1 0 100%` sobre `.replay-line`), las cifras ocupan el resto de la línea 1: ~840 px a
+     1440 y las ocho enteras a 1920. */
+  #topbar .replay-line { order: 9; flex: 1 0 100%; display: flex; align-items: center;
+                         gap: 6px; min-width: 0; padding: 0 0 0 2px; min-height: 0; }
+  #topbar .replay-line .btn { height: 26px; padding: 0 8px; font-size: 11.5px; }
+  #topbar .replay-line .field { min-height: 0; padding: 0; }
+  #topbar .replay-line .tf-quick { gap: 2px; }
+  #topbar .replay-line .tf-btn { height: 24px; min-width: 30px; padding: 0 6px; font-size: 11.5px; }
+  #topbar .replay-line input[type="datetime-local"] { height: 26px; padding: 0 6px; font-size: 11.5px; }
   #topbar .topbar-group > .par-field { order: 1; padding: 0 10px; }
   #topbar .topbar-group > *:not(.par-field) { padding: 1px 4px; }
-  #topbar .topbar-right { order: 3; padding: 0 0 0 4px; }
+  /* Los iconos de la derecha BAJAN a la segunda línea con el mecanismo del replay: medido, en
+     1440 px la línea 1 no da para marca (150) + par (200) + las ocho cifras (930) + iconos (180).
+     En el sitio los iconos van en el nav de 40 px, que aquí no existe como fila aparte -fondimos
+     las dos franjas en una-, así que la línea 2 de controles los recoge. `order: 10` los pone al
+     final de esa línea, después de «Cargar datos / Práctica / CSV / Demo». */
+  /* Los iconos van AL FINAL DE LA LÍNEA 1, como en el sitio (su franja de símbolo termina en los
+     iconos de tema/captura/ayuda, x=1430 a 1560 medido a 1600 px). `order: 10` los dejaba en la
+     línea 2 -y como `.replay-line` ocupa el 100 % de esa línea, se iban a una tercera cortada por
+     la barra-, así que vuelven a la 1 con `order: 8`. Para que de verdad sean una caja hay que
+     desactivar en él el `display: contents` que se aplica a TODA `.topbar-group` (comparte clase),
+     y en la misma regla poner su `order`: el orden del HTML es marca → grupo → iconos, y con
+     `order: 8` y `display: flex` la línea 1 queda marca · par · cifras · iconos, que es el orden
+     del sitio. */
+  #topbar .topbar-group.topbar-right { order: 8; display: flex; flex: 0 0 auto; padding: 0 0 0 4px; }
   /* Las estadísticas dejan de ser una fila de 100 %: se ponen al lado, con su
      borde izquierdo como separador, y siguen desplazándose en horizontal si el
      ancho aprieta (así no hay recorte: o caben, o se desplaza —que es lo que
@@ -1889,7 +1927,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      1440 y la franja de estadísticas saltaba a una segunda línea —que es justo lo que se quería
      quitar—, desbordando por abajo la altura fijada de la barra (medido: stats en y=43..89 con
      la barra en 76). Con base 0 las estadísticas ocupan lo que sobre y se desplazan por dentro. */
-  #topbar .bf-stats { order: 2; flex: 1 1 0; min-width: 0; width: auto; height: auto; min-height: 0;
+  #topbar .bf-stats { order: 2; flex: 1 1 0; min-width: 240px; width: auto; height: auto; min-height: 0;
                       border-top: 0; border-left: 1px solid var(--line); background: transparent;
                       padding-left: 12px; align-items: center; }
   .bf-stats .bf-stat { padding: 2px 0; }
@@ -1897,4 +1935,58 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      contexto (el par, las temporalidades y la fecha se leen solos). */
   #topbar .field { margin-bottom: 0; }
   #topbar .field > .field-label { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 15 — «Avanzado» se pliega TAMBIÉN en escritorio cuando la tarjeta no cabe
+   (10-oct-2026, ítem 2 del registro `docs/brecha-visual-bitunix.md`).
+
+   Dos ataduras se quitan aquí, y solo dos:
+     · `#orderCard.adv-cerrado #orderAvanzado { display: none }` vivía dentro del
+       `@media (max-width:640px)`, así que en escritorio la clase que pone
+       `UI.initOrdenAvanzado` no pintaba nada y el bloque de ~124 px se veía siempre;
+     · `#btnOrderAvanzado { display: none }` dejaba el botón fuera de la vista justo donde ya
+       hace falta: plegar por hueco sin botón sería un formulario al que le faltan campos sin
+       manera de recuperarlos.
+   La decisión de plegar NO se toma por ancho: se mide si los botones de compra/venta se salen
+   del cajón que los contiene (js/uiController.js, `autoAprieta`), que es el criterio del sitio
+   -su formulario con `☐ TP/SL` entra siempre- y no un número mágico de píxeles.
+
+   OJO al verificar: `tests/*.test.js` y `tools/barrido-graficos.js` abren
+   `bar-replay-pro-unico.html`, el archivo único generado. Sin `node tools/build-single.js`
+   en medio, estas líneas corren y salen en verde aunque no existan -así se coló la versión
+   rota de este bloque, que borró la hoja entera y no se enteró nadie-.
+   ════════════════════════════════════════════════════════════════════════════ */
+#orderCard.adv-cerrado #orderAvanzado { display: none; }
+#orderCard #btnOrderAvanzado { display: inline-flex; height: 22px; }
+/* Aviso de POR QUÉ está plegado: el sitio no lo necesitaría (viene plegado de fábrica), pero
+   aquí se pliega solo cuando aprieta el hueco y hay que decirlo; si no, parece un bug. */
+#orderCard[data-auto-apretado] #btnOrderAvanzado::after { content: "·"; margin-left: 3px; color: var(--warn, #e8b339); }
+/* El envoltorio de la línea del replay NO existe para el reparto fuera de la franja de
+   1360 px: en el teléfono y la tablet la barra la gestiona el bloque ≤1000 (`.topbar-group`
+   deslizable con `row-gap: 6px`), y meter ahí un div más habría cambiado esa contabilidad.
+   Se escribe COMO MEDIO (`max-width:1359px`) y no como regla suelta: esta hoja va ganando
+   bloques al final, y una regla `display:contents` suelta en el bloque 15 pisaba por orden de
+   aparición la `display:flex` del bloque 14 -con la línea del replay desaparecida del reparto y
+   la marca, el par y las cifras saltando de línea (medido: `.replay-line` en 0/0/0/0 y `#bfStats`
+   en y=39..85, desbordando 9 px la barra de 76)—. El medio lo fija por anchos, no por orden. */
+@media (max-width: 1359px) { #topbar .replay-line { display: contents; } }
+
+/* La unidad en el pie del formulario: en el sitio dice «Coste (USDT)» y «Máximo (USDT)», pero
+   en 390 px esos seis caracteres extra aplastaban el campo de tamaño (42 -> 24 px medido en
+   `#sizeInput` con `tools/captura`-like probe), y ese campo es el área táctil que exige
+   `tests/bitunix.test.js`. Se escribe la unidad y se quita en el teléfono, donde el pie ya dice
+   «Coste 12.500» y el orden lo explica. */
+@media (max-width:640px) { #bfCost .uni { display: none; } }
+
+/* Y el orden de la columna: medido en el sitio, DEBAJO del panel de órdenes van las tarjetas
+   `Margen` y `Activos (USDT)`, no encima. Aquí `#bookCard` (300 px de libro) y `#panelsCard`
+   abrían la columna, así que el formulario empezaba 360 px más abajo en 1280x800 y sus botones
+   de compra/venta se salían del cajón: medido, el borde inferior de «Abrir Largo» quedaba en
+   y=832 con el cajón terminando en 644. Poner la tarjeta de órdenes primero es lo que hace el
+   sitio y, de paso, lo que hace falta para que la entrada se vea sin deslizar; el libro y los
+   paneles, que se consultan, pasan debajo. */
+@media (min-width:1001px) {
+  #sidebar > #orderCard { order: -1; }
+  #sidebar > #orderCard .card-head { border-top: 0; }
 }

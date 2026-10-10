@@ -112,8 +112,38 @@ const LECTURA = `(() => {
   });
   ok(E0.existe && E0.dentroDeAvanzado && E0.hayBotonGuardar,
      `la fila existe (${E0.existe}), está DENTRO de «Avanzado» (${E0.dentroDeAvanzado}) y el ＋ también (${E0.hayBotonGuardar}) —montarla fuera le habría comido 26 px al reposo del teléfono—`);
-  ok(E0.modulo && E0.visibleEnEscritorio,
-     `OT está cargado y la fila se ve en escritorio sin abrir nada (${E0.visibleEnEscritorio}) —«Avanzado» solo se pliega por ancho—`);
+  /* ANCLA RE-ESCRITA el 10-oct-2026 (ítem 2 de `docs/brecha-visual-bitunix.md`). Decía
+     ««Avanzado» solo se pliega por ancho», y eso ya no es verdad: desde el bloque 15 de
+     css/bitunix.css el bloque se pliega TAMBIÉN en escritorio cuando la tarjeta no cabe en su
+     columna (medido: a 1280x800 la tarjeta abierta ocupa 697 px en un cajón de 468, y los
+     botones de compra/venta se salían 188 px; el sitio no pasa de ahí porque su `TP/SL` viene
+     plegado). Lo que importa de la fila de plantillas no es que esté siempre a la vista, sino
+     que exista y sea alcanzable: se comprueba que en un hueco que cabe se ve SIN tocar nada y
+     que donde se pliega por espacio el botón está a la vista y la devuelve. */
+  const HUECO = { width: 1440, height: 900, deviceScaleFactor: 1 };
+  await page.setViewport(HUECO);
+  await espera(650);
+  const E0h = await page.evaluate(() => ({ visible: !!document.getElementById('bfTpl').offsetParent,
+                                           plegadoPorEspacio: document.getElementById('orderCard').dataset.autoApretado === '1' }));
+  await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
+  await espera(650);
+  const E0a = await page.evaluate(async () => {
+    const g = (id) => document.getElementById(id), card = g('orderCard');
+    const antes = { plegado: !g('orderAvanzado').offsetParent, boton: getComputedStyle(g('btnOrderAvanzado')).display !== 'none' };
+    if (antes.plegado) { g('btnOrderAvanzado').click(); await new Promise((r) => setTimeout(r, 400)); }
+    const r = { antes, despues: !!g('bfTpl').offsetParent, tocando: !!(card.querySelector('.card-body').contains(g('bfTpl'))) };
+    /* Y SE DESHACE LO TOCADO: el clic deja elección guardada (`ST «ordenAvanzado»`) y el marcador
+       `explicit`, que apartan el plegado automático en toda la página. Las pruebas que vienen
+       detrás -el teléfono, que exige que el reposo entre entero- miden el estado POR DEFECTO,
+       así que se borra la elección y el ancho vuelve a mandar. */
+    g('btnOrderAvanzado').dataset.explicit && delete g('btnOrderAvanzado').dataset.explicit;
+    if (window.ST && ST.del) ST.del('ordenAvanzado');
+    return r;
+  });
+  ok(E0.modulo && E0h.visible && !E0h.plegadoPorEspacio,
+     `OT está cargado y, con hueco (1440x900), la fila se ve en escritorio sin abrir nada (visible ${E0h.visible}, plegada por espacio ${E0h.plegadoPorEspacio})`);
+  ok(E0a.antes.plegado ? (E0a.antes.boton && E0a.despues) : E0a.despues,
+     `y a 1280x800, donde el hueco no da, el bloque está plegado por espacio (${E0a.antes.plegado}) con el botón a la vista (${E0a.antes.boton}): al tocarlo aparece la fila (${E0a.despues}) y sigue dentro del cuerpo del formulario (${E0a.tocando})`);
   ok(E0.precio > 0, `hay precio del replay para derivar los porcentajes (${E0.precio.toFixed(2)})`);
 
   // El contrato de reposo del teléfono, con la fila ya montada.
@@ -136,6 +166,14 @@ const LECTURA = `(() => {
   console.log('\n▸ B·C) Guardar y no duplicar');
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
   await espera(500);
+  /* A este tamaño el bloque «Avanzado» viene PLEGADO POR ESPACIO desde el bloqueo 15 de
+     css/bitunix.css (la tarjeta abierta no cabe en la columna), y aquí se pulsa la ＋, los atajos
+     de SL/TP y la lista de plantillas -todo dentro de ese bloque-. Se abre como lo abriría una
+     persona: con el botón. El clic deja `explicit`, y desde ahí el plegado automático se aparta,
+     así que el resto de la prueba ve siempre el formulario desplegado. */
+  await page.evaluate(() => { const c = document.getElementById('orderCard'), bt = document.getElementById('btnOrderAvanzado');
+    if (c.classList.contains('adv-cerrado')) bt.click(); });
+  await espera(420);
   await page.click('#segMarginMode [data-mm="isolated"]');
   await page.evaluate(() => { const r = document.getElementById('levRange'); r.value = '20'; r.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.click('#quickSize [data-pct="50"]');
@@ -197,6 +235,12 @@ const LECTURA = `(() => {
   }
 
   console.log('\n▸ F·G) Máximo, borrar y volver a poder guardar');
+  /* Vuelta a abrir el bloque: la sección E recargó la página, y con la recarga se pierde el
+     `explicit` que puso el clic de arriba -el plegado por espacio vuelve a mandar, como debe
+     ser: es el estado por defecto de una ventana de 1280x800-. */
+  await page.evaluate(() => { const c = document.getElementById('orderCard'), bt = document.getElementById('btnOrderAvanzado');
+    if (c.classList.contains('adv-cerrado')) bt.click(); });
+  await espera(420);
   await page.evaluate(() => { if (window.OT) OT._guardar([]); if (window.OT) OT.pintar(); });
   await espera(250);
   for (const lev of [3, 5, 10, 20, 25, 50, 75]) {
@@ -283,7 +327,12 @@ const LECTURA = `(() => {
   console.log('\n▸ I) Con plantillas guardadas, el teléfono sigue siendo operable');
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await espera(600);
-  await page.evaluate(() => document.getElementById('btnOrderAvanzado').click());
+  /* ASEGURAR abierto, no alternar: con el pliegue por espacio el bloque puede venir abierto o
+     cerrado según lo que las secciones de delante dejaran en `ST «ordenAvanzado»`, y un `click()`
+     a secas lo cerraba (la fila de plantillas medía entonces 0 px y SL/TP decían NO sin que
+     nadie los tapara). Se abre solo si está cerrado, como haría quien mira el formulario. */
+  await page.evaluate(() => { const c = document.getElementById('orderCard'), bt = document.getElementById('btnOrderAvanzado');
+    if (c.classList.contains('adv-cerrado')) bt.click(); });
   await espera(420);
   // «pisa» centra cada elemento antes de medir y apaga el scroll suave: sin eso, `elementFromPoint`
   // daba «NO» falso en SL/TP, que tenían ~180 px de scroll vertical pendiente en el cuerpo del

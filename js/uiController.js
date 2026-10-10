@@ -378,13 +378,97 @@
       if (!cuerpo) return;
       card.classList.toggle('desborda', cuerpo.scrollHeight - cuerpo.clientHeight > 1);
     };
+
+    /* Alto real del bloque «Avanzado» (124 px con la fila de comisión y la de SL/TP). Se
+       guarda porque al plegarlo `display:none` lo deja sin caja y ya no se puede medir, y hay
+       que saber cuánto ocupaba para decidir si cabe abrirlo otra vez. */
+    const guardaAlto = () => {
+      if (!card.classList.contains('adv-cerrado')) {
+        btn.dataset.altoAdv = String(Math.round(adv.getBoundingClientRect().height + 8));
+      }
+    };
+    const altoBloque = () => {
+      if (btn.dataset.altoAdv) return parseFloat(btn.dataset.altoAdv);
+      const previa = adv.style.display;            // medir en frío: se saca de `display:none`
+      adv.style.display = 'block';                 // un instante (solo al arrancar, sin caché)
+      const x = Math.round(adv.getBoundingClientRect().height + 8);
+      adv.style.display = previa;
+      return x;
+    };
+    /* LO QUE NO PUEDE PASAR: que los botones de compra/venta queden por debajo del borde de la
+       columna. Medido a 1440x900 el 10-oct-2026, con la banda ya en una franja: la tarjeta de
+       órdenes mide 695 px en una fila de 556, así que los botones caen ~140 px más abajo del
+       borde y hay que deslizar la columna para pulsarlos. Bitunix no pasa nunca de ahí porque
+       su `☐ TP/SL` viene plegado. En el teléfono esto ya se resolvía así (bloque ≤640); en
+       escritorio la clase no pintaba nada porque la regla vivía dentro de ese medio.
+       Se pliega, pues, MIDIENDO y solo cuando hace falta: si con el bloque abierto los botones
+       se salen de la columna, se pliega y el botón se queda a la vista avisando del porqué; si
+       el hueco vuelve, se deshace. En cuanto la persona toca el botón manda su criterio. */
+    const autoAprieta = () => {
+      if (window.innerWidth <= 640 || btn.dataset.explicit === '1') return;
+      /* El cajón que recorta es el primer antepasado que DESLIZA (medido: `#sidebar` con
+         `overflow-y:auto` en las tres columnas y también en la franja de 1024); si no hay
+         ninguno, la ventana. */
+      let port = card.parentElement;
+      while (port) { const o = getComputedStyle(port).overflowY; if (o === 'auto' || o === 'scroll') break; port = port.parentElement; }
+      const lg = document.getElementById('btnLong');
+      const sh = document.getElementById('btnShort');
+      if (!port || !lg || !sh) return;
+      const abiertoAhora = !card.classList.contains('adv-cerrado');
+      const inferior = Math.max(lg.getBoundingClientRect().bottom, sh.getBoundingClientRect().bottom);
+      const ancho = altoBloque();
+      /* El borde que cuenta es el del scrollport VISIBLE: medido a 1024x768, `#sidebar` tiene
+         436 px de caja y 637 px de contenido, así que su `bottom` coincide con el de la ventana
+         pero la caja del grid (`#workspace`) llega hasta 436; en ventanas donde el cajón no
+         recorta (crece sin `overflow`), su `bottom` cae fuera de la pantalla y daría clip 0 con
+         los botones larguísimos por debajo del pliegue. `Math.min` con la ventana es lo que el
+         usuario ve de verdad. */
+      const visible = Math.min(port.getBoundingClientRect().bottom, window.innerHeight) - 6;
+      /* SE MIDE EL AIRE QUE SOBRA, no el recorte: `margen` es lo que hay entre el borde
+         inferior de los botones y el fondo del cajón. Con el bloque abierto basta con que ese
+         aire sea negativo para plegar; con él cerrado hay que comparar el aire con lo que
+         ocuparía abrirlo (`ancho`, 312 px medidos: modo de posición + comisión + SL/TP +
+         plantillas). La primera versión sumaba `ancho` al recorte, y eso se desmentía solo:
+         a 1440x900 el pliegue no se deshacía al devolver el hueco porque 0 + 312 > 0.
+         La banda 0 ≤ margen < ancho deja los DOS estados válidos, que es lo que evita el
+         parpadeo: si plegar y abrir dieran el mismo número, el ResizeObserver se respondería
+         a sí mismo en bucle. */
+      const margen = Math.round(visible - inferior);
+      const clipSiAbre = abiertoAhora ? Math.max(0, -margen) : Math.max(0, ancho - margen);
+      if (abiertoAhora && clipSiAbre > 0) {
+        card.classList.add('adv-cerrado');
+        card.dataset.autoApretado = '1';
+        btn.dataset.motivo = 'espacio';
+        // El `aria-expanded` tiene que decir lo que hay en pantalla, no lo que la persona
+        // pidió: si no, un lector de anuncia «expandido» sobre campos `display:none`, y
+        // `tests/responsive.test.js` (que lee aria y offsetParent juntos) se contradice.
+        btn.setAttribute('aria-expanded', 'false');
+        if (window.PC && PC.ajustaEscalera) PC.ajustaEscalera();
+      } else if (!abiertoAhora && clipSiAbre === 0 && card.dataset.autoApretado === '1') {
+        card.classList.remove('adv-cerrado');
+        delete card.dataset.autoApretado;
+        delete btn.dataset.motivo;
+        btn.setAttribute('aria-expanded', 'true');
+        if (window.PC && PC.ajustaEscalera) PC.ajustaEscalera();
+      }
+      guardaAlto();
+      marcaDesborde();
+    };
     const pinta = () => {
       card.classList.toggle('adv-cerrado', !abierto());
+      /* Si el bloque acaba abierto, el aviso de «plegado por espacio» tiene que irse: el
+         `aria-expanded` manda sobre la clase y `autoAprieta` ya no decide nada cuando la
+         persona tocó el botón, así que sin esto el punto del botón se queda mentiendo. */
+      if (abierto()) { delete card.dataset.autoApretado; delete btn.dataset.motivo; }
       const ar = btn.querySelector('.ar');
       if (ar) ar.textContent = abierto() ? '⌃' : '⌄';
+      guardaAlto();
       marcaDesborde();
     };
     btn.addEventListener('click', () => {
+      btn.dataset.explicit = '1';            // desde aquí manda la persona, no el hueco
+      delete card.dataset.autoApretado;
+      delete btn.dataset.motivo;
       btn.setAttribute('aria-expanded', abierto() ? 'false' : 'true');
       if (window.ST && ST.set) ST.set('ordenAvanzado', abierto());
       pinta();
@@ -402,16 +486,51 @@
       const g = ST.get('ordenAvanzado', null);
       if (g === true || g === false) btn.setAttribute('aria-expanded', g ? 'true' : 'false');
     }
+    /* EL DEFECTO QUE ESTO ARREGLA (medido el 10-oct-2026): poner `aria-expanded` a `true` una
+       sola vez al arrancar -que era como estaba escrito- se colaba en el teléfono al girar el
+       tablet o al redimensionar la ventana de pruebas: a 390 px el bloque quedaba abierto, el
+       cuerpo de la tarjeta pasaba de 221/220 a 221/434 y el reposo del teléfono dejaba de
+       entrar entero (rompía `tests/plantillas.test.js` y el contrato del ≤640). El estado por
+       defecto es función del ANCHO y se re-evalúa en cada resize: sin elección guardada, abierto
+       en escritorio (las filas se ven, como pide `tests/plantillas.test.js`) y plegado en el
+       teléfono. En cuanto hay elección (`ST`), manda ella en cualquier ancho. */
+    const sincroniza = () => {
+      const g = (window.ST && ST.get) ? ST.get('ordenAvanzado', null) : null;
+      const quiere = (g === true || g === false) ? g : window.innerWidth > 640;
+      if ((btn.getAttribute('aria-expanded') === 'true') !== quiere) btn.setAttribute('aria-expanded', String(quiere));
+    };
+    UI._sincronizaOrden = sincroniza;
+    sincroniza();
     pinta();
+    autoAprieta();
     // `#limitRow` lo muestra y lo oculta OTRO módulo (escribe `style.display` y no avisa):
     // el `ResizeObserver` sobre el cuerpo de la tarjeta es la forma de enterarse sin tocar
     // ese código. Como el alto casi siempre cambia con la fila, basta con él; se enganchan
     // también los botones de tipo de orden por si el cambio de alto queda en 0 px.
-    if ('ResizeObserver' in window) new ResizeObserver(() => marcaDesborde()).observe(cuerpo);
+    /* El observer dispara la decisión, pero NO en su propia notificación: plegar cambia el
+       alto del cuerpo, el cuerpo observa su propio alto y Chrome corta el bucle con
+       «ResizeObserver loop completed with undelivered notifications» (error de consola que
+       cuenta como fallo en tests/bitunix.test.js). Se difiere un frame y, si en ese frame la
+       decisión no cambia nada, no se toca el DOM. */
+    if ('ResizeObserver' in window) {
+      let pend = 0;
+      new ResizeObserver(() => {
+        if (pend) return;
+        pend = requestAnimationFrame(() => { pend = 0; autoAprieta(); });
+      }).observe(cuerpo);
+    }
     [...document.querySelectorAll('#segOrderType .seg-btn')].forEach((b) => b.addEventListener('click', () => {
       requestAnimationFrame(marcaDesborde);
     }));
-    window.addEventListener('resize', () => requestAnimationFrame(marcaDesborde));
+    window.addEventListener('resize', () => requestAnimationFrame(() => {
+      // `pinta()` en medio: `sincroniza` mueve `aria-expanded` y `autoAprieta` la clase; sin la
+      // pintura intermedia la clase se queda atrasada (medido: a 390 tras redimensionar desde
+      // 1440 el aria decía `false` y el bloque seguía visible -un plegado fantasma-).
+      sincroniza();
+      pinta();
+      autoAprieta();
+      if (window.PC && PC.ajustaEscalera) PC.ajustaEscalera();   // el hueco cambia con el pliegue
+    }));
     return true;
   };
 

@@ -186,34 +186,95 @@ financiación · Activos · Bots(0)`; a la derecha `☐ Sólo actual · Cerrar t
    (≤820 px de alto): barra más apretada y suelo del lienzo a 208 px; a 900 px de alto no se
    toca nada.
 
-**LO QUE SIGUE ABIERTO, con su aritmética** (por orden de lo que se nota):
+**HECHO en la pasada del 10-oct (mañana): ítems 1 y 2 de esta lista, con su medida.**
 
-1. **La barra de arriba, en dos filas como la suya.** La nuestra sigue en tres (marca · par/
-   temporalidad/fecha · estadísticas) y ocupa 155 px a 1440×900; la de ellos son **113 px**
-   (nav 40 + franja de símbolo 73 con las ocho cifras en la misma línea) —medido: par en x=52,
-   estadísticas de x=392 a x=1430, todas a y=64/82—. Al fusionarlas se ganan ~42 px de alto
-   para el gráfico y deja de notarse que «esto es otra aplicación». Intentado en esta pasada;
-   retirado porque alteraba la contabilidad de `PC.comprimeEscalera` (las pruebas de determinismo
-   viven a 1440×900 y aparecían diferencias de 1 px). Hay que hacerlo moviendo el DOM, no a
-   golpes de `flex-wrap`.
-2. **La tarjeta de órdenes no cabe en la fila** (695 px de tarjeta contra 495 px de fila a
-   1360×900): `#btnLong` queda **tapatado por el panel inferior** —la guarda nueva del barrido
-   («Botones de entrada a la vista sin desplazar») lo comprueba con `elementFromPoint`, no con
-   el rect, porque la primera versión de la guarda daba FALSO POSITIVO: el rect caía dentro de la
-   ventana pero debajo del panel—. Déficit: **200 px**. Se cierran con (1) [−42], el panel
-   inferior por defecto más fino [−38] y **TP/SL detrás de la casilla `☐ TP/SL`, que es lo que
-   hacen ellos** [−70]; sobran 50 px que se llevan las filas `Coste/Máximo` y el pie
-   `VIP · Maker · Taker`, que aún no existen.
-3. **Filas del libro que siguen al espacio.** A ≥1360 el libro tiene columna propia y las 10
-   filas de `OB.ROWS` caben ENTERAS (desaparecieron las dos líneas «Libro: 10 filas pintadas en
-   una caja de 102 px» del informe del barrido). Por debajo del corte vuelve el aplastamiento de antes:
-   hace falta que `js/orderBook.js` pinte `suelo(alto/17)` filas en vez de 10 fijas.
-4. **Riel vertical de dibujo + widget flotante de orden rápida** (sus 34 px a la izquierda del
+**Y el fallo que la primera versión del ítem 1 dejó puesto, descubierto al mirar la captura (no la
+suite):** dejar las cifras con `flex: 1 1 0` (solo el sobrante de la línea) y confiar en que los
+controles del replay *envolvieran* hacía que cupieran TODOS en la línea 1 y que `#bfStats` se
+redujera a **13 px a 1440 y 117 px a 1600** contra 997 px de contenido -la captura de 1600 enseñaba
+«Último 63 133,48» y ninguna cifra más, o sea: el bloque que da aspecto de Bitunix estaba cortado—.
+Ninguna de las dos anclas nuevas lo veía porque miraban el solape vertical, no el ancho. Se cierra
+con tres cosas: `.replay-line` forzado a `flex: 1 0 100%` (baja SIEMPRE, no «si no cabe»), un
+`min-width: 240px` en la franja de cifras, y la barra en 90 px -en 76 la segunda línea asomaba
+11 px y se recortaban temporalidades e iconos-. El envoltorio `.replay-line` es
+`display: contents` fuera de la franja ≥1360 para no tocar el reparto del teléfono/tablet, y se
+escribe dentro de un `@media (max-width:1359px)`: como regla suelta al final de la hoja pisaba por
+orden de aparición al bloque 14 y la línea del replay desaparecía del reparto (medido:
+`.replay-line` en `0/0/0/0`).
+
+*Ítem 1 — la banda superior, en una franja* (`f111148`, corregido hoy). `#topbar` mide ahora
+**90 px** a ≥1360 px de ancho (antes 155): en la **línea 1** van marca · par · las cifras de 24 h
+· iconos (el sitio acaba su franja de símbolo en los iconos, x=1430..1560 medido a 1600), y el
+mecanismo del replay (temporalidades, fecha, cargar/práctica/CSV/demo) baja a una **línea 2** de
+26 px, que en el sitio no existe porque no tienen replay. No hubo que mover el DOM:
+`#topbar .topbar-group { display: contents }` + `order` (par 1 · estadísticas 2 · iconos 3 ·
+resto 9) y `.bf-stats { flex: 1 1 0; min-width: 0 }`; la única marca nueva en el HTML es la clase
+`par-field` sobre el campo del par. Dos cosas que se rompieron y se cazaron midiendo: meter el
+grupo entero en la línea 1 mandaba las estadísticas a la línea 2 desbordando la barra (stats en
+y=43..89 con la barra en 76), y fijar la altura con `min-height` dejaba la caja en 95 px con las
+filas del workspace fraccionarias (`34px 327.766px 201px 44px`), lo que rompía por 1 px la
+contabilidad de `PC.comprimeEscalera`. **Ganancia: 79 px de gráfico** (fila 268 → 347 a
+1440×900). Anclas nuevas en `test:bitunix`: `statsMismaFranja` (solape vertical entre `#bfStats`
+y `#btnSymbols`) y `barraAlta` (60-80 px). En `test:pnl-chart` la comprobación «los indicadores
+se aprietan en vez de ocultarse» afirmaba un ESTADO (a 1440×900 tocaba apretar) y con los 79 px
+ya no toca nada; ahora se PROVOCA el apretación en una ventana de 600 px (J2b) y se deja «no
+hace falta apretar ninguno» como el resultado bueno.
+
+*Ítem 2 — la tarjeta de órdenes cabe* (sin comitear aún, 10-oct). Lo que se hizo:
+· **`☐ TP/SL` a la manera de ellos, pero medido en vez de fij**o: el bloque «Avanzado» (312 px:
+  modo de posición + comisión + SL/TP + plantillas) se pliega SOLO cuando los botones de entrada
+  se salen del cajón (`autoAprieta` en `js/uiController.js`); si la persona toca el botón, manda
+  su criterio y esto se aparta. La CSS que lo hacía posible estaba atrapada dentro de
+  `@media (max-width:640px)`; ahora vive al final de la hoja (bloque 15).
+· **La tarjeta de órdenes pasa la primera en la columna** (`#sidebar > #orderCard { order: -1 }`,
+  ≥1001 px): medido en el sitio, `Margen` y `Activos (USDT)` van DEBAJO del formulario, no encima,
+  y aquí `#bookCard` + `#panelsCard` abrían un hueco de 360 px que empujaba la entrada fuera de la
+  ventana.
+· El pie del formulario dice **`Coste (USDT)` y `Margen (USDT)`** con la unidad en un
+  `<span class="uni">` que el teléfono oculta (en 390 px esos seis caracteres aplastaban
+  `#sizeInput` de 42 a 24 px, y ese campo es área táctil medida por `test:bitunix`).
+
+| Ventana | Antes | Después |
+|---|---|---|
+| 1440×900 | «Abrir Largo» a 149 px del borde, tarjeta 697 | **se ve todo abierto, pincha `elementFromPoint`** |
+| 1360×900 | tapado por el panel inferior | **abierto, clip 0** |
+| 1280×800 | clip 188 px, no se podía pinchar | plegado por espacio, **clip 0, pinchable** |
+| 1024×768 | clip 220 px | plegado por espacio, **clip 0, pinchable** |
+| 1600×1000 | — | abierto, clip 0 |
+
+Lo que NO se replica, dicho en claro: la línea `VIP 0 · Maker 0.0200% · Taker 0.0600%` del pie
+suyo es dato de cuenta (su nivel de comisión real); aquí la comisión la fija `#feeInput` y
+escribir un «VIP 0» sería un adorno falso. Y la fila `Máximo (USDT)` suya es el coste total de la
+posición; la nuestra debajo de los botones es `Margen` (lo que bloquea), que no es lo mismo: se
+añadió la unidad, no se cambió el significado.
+
+**Disciplina que se aprendió a golpes en esta pasada:** las suites de navegador
+(`tests/bitunix.test.js`, `responsive`, `plantillas`, `hedge`) y `tools/barrido-graficos.js` abren
+**`bar-replay-pro-unico.html`, el archivo único generado**. Un parche que no va seguido de
+`node tools/build-single.js` se prueba contra el CSS y el JS ANTIGUOS y sale en verde: así pasó
+un borrado accidental de los 1900 px de `css/bitunix.css` (un `python` que escribió `fin + nuevo`
+en vez de `reemplazar`) sin que se enterase ninguna suite. Desde ahora: **parchear → construir → suites**, y `git diff --stat` antes de dar nada por bueno.
+
+**LO QUE SIGUE ABIERTO, con su aritmética** (renumerado tras cerrar los dos de arriba):
+
+1. **Filas del libro que siguen al espacio.** A ≥1360 el libro tiene columna propia y caben las
+   10 de `OB.ROWS`; por debajo del corte el cajón es de 102 px y `js/orderBook.js` pinta 10 fijas
+   → 68 px de desborde (dos líneas del barrido que siguen ahí). Hace falta
+   `suelo(alto/17)` filas.
+2. **Riel vertical de dibujo + widget flotante de orden rápida** (sus 34 px a la izquierda del
    gráfico y la caja de 312×66 en `#131414` con borde `#292a2b`, `Comprar precio / Por costo
    (USDT) ▾ / Vender precio`). Nuestra barra de dibujo sigue horizontal encima del gráfico.
-5. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro, como los
-   artículos 223/225) en vez de cuatro pestañas; con 272 px y cuatro pestañas el rótulo ya no se
-   recorta (11,5 px) pero la forma de la fila sigue siendo nuestra.
-6. Abiertos del barrido de esta mañana: `#overlayCanvas` a 1× en pantallas 2× (falta avisar a
-   `DT.resize()` al cambiar de dpr), Space no activa el botón enfocado (Enter sí) y los rótulos
-   `.hint` a 3,43:1 con 10,5 px.
+3. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
+   pestañas; con 272 px el rótulo ya no se recorta (11,5 px) pero la forma de la fila sigue
+   siendo nuestra. Ojo: `test:formulario` ancla los cuatro `data-otype` en el DOM.
+4. **Abiertos del barrido:** `#overlayCanvas` a 1× en pantallas 2× (falta avisar a `DT.resize()`
+   al cambiar de dpr), Space no activa el botón enfocado (Enter sí), los `.hint` a 3,43:1 con
+   10,5 px y las 10 filas de libro del punto 1.
+5. **El reposo del teléfono aprieta los campos.** Medido con la app en el commit previo y con los cambios de
+   esta pasada, es lo mismo (no es culpa del bloque 15): a 390×844 el cuerpo de la tarjeta está
+   topeado a 221 px y sus hijos se encogen, así que `#sizeInput` mide **24 px en vez de 42**. El
+   sitio mantiene 42 px a ese ancho. La ancla de `test:bitunix` tolera ≥24 y pasa; el día que se
+   arregle, hay que subirla a 40.
+6. **Ventanas cortas por debajo de 400 px de alto:** `A DECIDIR` en el barrido (320×240), que no
+   es una pantalla de trading; se anota como criterio, no como defecto.
+
