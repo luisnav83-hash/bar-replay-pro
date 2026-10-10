@@ -253,6 +253,7 @@
       </div>
 
       <div class="tool-cluster tool-cluster-right">
+        <button class="tool" id="btnQuickOrder" aria-pressed="false" title="Orden rápida sobre el gráfico: comprar y vender sin salir del lienzo">⚡</button>
         <button class="tool" id="btnAutoScale" title="Escala de precios: automática / fijar rango manual">📐A</button>
         <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
         <label class="switch" title="Bloquear desplazamiento del chart al arrastrar en él">
@@ -296,6 +297,28 @@
 
       <!-- HUD de medición -->
       <div id="measureHud" class="hidden"></div>
+
+      <!-- ORDEN RÁPIDA (ítem 3 del registro, 11-oct). En Bitunix es una caja flotante de 312×66
+           en (50,180) SOBRE el lienzo, con `Comprar · precio`, el selector de unidad
+           («Por costo (USDT)») y `Vender · precio`, más una ×: se opera sin mirar la columna de la
+           derecha. La nuestra hace lo mismo y coloca de verdad (js/uiController.js,
+           `UI.initOrdenRapida`), escribiendo en el formulario lo que el widget no modela (tipo y
+           unidad del tamaño) para que no haya dos caminos de colocación. -->
+      <div id="qrCard" class="bf-qr" hidden role="group" aria-label="Orden rápida sobre el gráfico">
+        <button class="bf-qr-side buy" id="qrBuy" title="Comprar al precio de la izquierda (a mercado si lo dejas vacío)">Comprar</button>
+        <input type="number" id="qrBuyPrice" step="any" aria-label="Precio de compra">
+        <label class="bf-qr-mid">
+          <select id="qrMode" aria-label="Unidad del importe">
+            <option value="costo" selected>Por costo (USDT)</option>
+            <option value="cantidad">Por cantidad</option>
+            <option value="pct">Por % del equity</option>
+          </select>
+          <input type="number" id="qrAmount" step="any" min="0" value="25" aria-label="Importe">
+        </label>
+        <button class="bf-qr-side sell" id="qrSell" title="Vender al precio de la derecha (a mercado si lo dejas vacío)">Vender</button>
+        <input type="number" id="qrSellPrice" step="any" aria-label="Precio de venta">
+        <button class="bf-qr-x" id="qrCerrar" title="Cerrar la orden rápida (el ⚡ de la barra la vuelve a traer)">×</button>
+      </div>
 
       <!-- Capa de PnL (js/pnlChart.js). No captura el puntero: se puede operar,
              dibujar y arrastrar líneas igual que sin ella. -->

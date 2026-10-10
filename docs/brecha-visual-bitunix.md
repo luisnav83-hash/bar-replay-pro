@@ -281,6 +281,27 @@ en vez de `reemplazar`) sin que se enterase ninguna suite. Desde ahora: **parche
 · **Contraste de los `.hint`**: de `--tx-4` `#66686b` (3,43:1 con 10,5 px) a `--tx-3` `#919499`
   (6,3:1), que es el nivel que el sitio usa para TODOS sus rótulos apagados -no se inventa un
   gris-.
+· **Caja flotante de orden rápida** (era el punto 1 de la lista de abajo): `#qrCard`, 312×66 en
+  `#131414` con borde `#292a2b` y radio 4, anclada a `#chartWrap` en `left:12px;top:96px` -los
+  96 px son para no montar la leyenda OHLC, que mide ~60 en su esquina, y el `z-index:6` es justo
+  uno por encima del `#overlayCanvas` (z 5), que es lo que la hace pinchable-. Trae el ⚡ de la
+  barra (con `aria-pressed` y memoria en `ST`), pre-rellena los dos precios con la vela actual
+  hasta que alguien escribe (`data-editado`) y **coloca de verdad**: escribe en el formulario
+  (pulsa `#segOrderType [data-otype]` y `#segSize [data-mode]`, vuelca importe y límite con su
+  `input`) y llama a `App.placeOrder(side)`, la misma puerta del ratón y de los atajos B/S -dos
+  caminos de colocación son dos oportunidades de que uno se oxide en silencio—. Dejar el precio
+  vacío significa A MERCADO, como allí, y el sitio también lo hace así.
+· **Los rótulos de entrada ya no se caen al tocar el formulario.** `UI.refreshLabels` reescribía
+  los botones con el vocabulario viejo («▲ COMPRAR / LONG») en cuanto alguien pulsaba el
+  segmentado, borrando el «Abrir Largo / Abrir Corto» del ítem 2 en media sesión; lo descubrió el
+  ⚡ al colocar. Ahora solo cambia el icono del modo y la palabra se queda (13 caracteres, dentro
+  del tope de 18 de `test:formulario`); la ancla de `test:bitunix` pide la palabra y no la cadena
+  exacta, porque el icono es información legítima.
+
+**Ojo con el riel tras esto:** al meter el ⚡ en el clúster derecho quedaban 18 blancos y el riel
+desbordaba 6 px; los útiles del riel pasan a 25 px de alto y el `gap` del clúster a 1 px (28×25
+sigue por encima del mínimo de 22 que vigilan las pruebas de puntero).
+
 · **`#overlayCanvas` a 1× en pantallas 2×**: `DT.resize()` sí lee `devicePixelRatio`, pero nadie
   lo llamaba cuando lo que cambia es la relación de pixeles (el `ResizeObserver` mira la caja del
   `#chartWrap`, y moverse a otra pantalla no la toca). Añadido `DT._vigilaDpr()`: escucha el media
@@ -292,10 +313,7 @@ empezar la serie (recortes del libro ×2, teclado, dpr, contraste, botones de en
 
 **LO QUE SIGUE ABIERTO, con su aritmética:**
 
-1. **Widget flotante de orden rápida** (los 312×66 en `#131414` con borde `#292a2b`,
-   `Comprar precio / Por costo (USDT) ▾ / Vender precio` del sitio). El riel de dibujo ya está;
-   falta la caja.
-2. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
+1. **`Activador ▾` como desplegable** (Trigger · Trailing · Riesgo fijo dentro) en vez de cuatro
    pestañas; con 272 px el rótulo ya no se recorta (11,5 px) pero la forma de la fila sigue
    siendo nuestra. Ojo: `test:formulario` ancla los cuatro `data-otype` en el DOM.
 3. **Abiertos del barrido:** ninguno. Ver el bloque de arriba: se cerraron el dpr del lienzo de

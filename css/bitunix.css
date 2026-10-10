@@ -2042,7 +2042,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
     display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 3px 2px;
     border-right: 1px solid var(--line); background: var(--bg-1); overflow: hidden;
   }
-  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 2px;
+  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 1px;
                                padding-right: 0; border-right: 0; border-bottom: 1px solid var(--line-soft); padding-bottom: 3px; }
   /* 4 px de más medidos a 1440x900: el riel es tan alto como el área y sus 17 útiles + 6 de
      complemento no daban. Se aprieta el paso interno antes que tocar el alto de un botón (26 px
@@ -2051,7 +2051,12 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #drawToolbar > .rail-body { overflow-y: auto; scrollbar-width: thin; }
   #drawToolbar .tool-cluster:last-child { border-bottom: 0; padding-bottom: 0; }
   #drawToolbar .tool-cluster-right { margin-left: 0; order: 9; }
-  #drawToolbar .tool { width: 28px; height: 26px; padding: 0; font-size: 12px; }
+  /* 25 px, no 26: el riel tiene que meter 17 útiles + el color, el grosor, el estilo, el PnL, el
+     ⚡ de la orden rápida y A/log/scroll en los ~612 px del área. A 26 px desbordaba 6 px y el
+     `overflow-y:auto` del riel aparecía en un sitio donde no debe haber barra (ancla
+     «el riel entra entero sin recorte» de tests/bitunix.test.js). 25 sigue siendo un blanco de
+     28×25, por encima del mínimo de 22 que vigilan las pruebas de puntero. */
+  #drawToolbar .tool { width: 28px; height: 25px; padding: 0; font-size: 12px; }
   #drawToolbar .color-pick { width: 26px; height: 20px; }
   #drawToolbar .mini-select { width: 28px; height: 22px; padding: 0 1px; font-size: 10px; }
   /* El interruptor «⊘ scroll» no cabe en 34 px con su texto: se queda el control,
@@ -2069,3 +2074,48 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
    TODOS sus rótulos apagados, así que se pasa al nivel que ya tenemos medido en vez
    de inventar un gris. `--tx-4` sigue para lo decorativo grande (`.brand-sub`). */
 .hint { color: var(--tx-3); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 17 — LA CAJA FLOTANTE DE ORDEN RÁPIDA (11-oct-2026, ítem 3 del registro
+   `docs/brecha-visual-bitunix.md`).
+
+   Medido en el sitio a 1600×900: caja de 312×66 en (50,180) SOBRE el lienzo, con
+   `Comprar | precio`, el selector `Por costo (USDT) ▾` y `Vender | precio`, y una ×. Fondo
+   `#131414` -un punto más clara que la carta (#121212), que es lo que la hace leer flotando—,
+   borde `#292a2b` y radio 4 px como todo lo demás.
+
+   Se ancla a `#chartWrap` -que en la franja del riel ya arranca a la derecha de los 34 px del
+   riel, así que no lo pisa- y por debajo de la leyenda OHLC (`top: 96px`: la leyenda mide ~60 px
+   en su esquina y las dos cajas se montarían si la dejara en el `top:12` natural). El `z-index: 6`
+   es exactamente uno por encima del `#overlayCanvas` (z 5, `css/chart.css:70`) -que es lo que
+   permite pincharla—; la capa de PnL y el HUD de medición quedan por debajo porque no capturan
+   el puntero. Los campos miden 20 px: es un flotante de ratón, no del formulario táctil (los 42
+   px del panel de órdenes siguen donde estaban, y `tests/bitunix.test.js` los sigue exigiendo).
+   ════════════════════════════════════════════════════════════════════════════ */
+#qrCard {
+  position: absolute; z-index: 6; left: 12px; top: 96px; width: 312px;
+  display: grid; grid-template-columns: 74px minmax(0,1fr); gap: 2px 6px; align-items: center;
+  padding: 3px 24px 3px 4px; background: #131414; border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: 0 6px 22px rgba(0,0,0,.45);
+  font-size: 12px; color: var(--tx-1);
+}
+#qrCard[hidden] { display: none; }
+#qrCard .bf-qr-side { height: 20px; border: 0; border-radius: 9999px; color: #fff;
+                      font-weight: 500; font-size: 11.5px; cursor: pointer; }
+#qrCard .bf-qr-side.buy { background: var(--up); }
+#qrCard .bf-qr-side.sell { background: var(--down); }
+#qrCard .bf-qr-side:active { filter: brightness(.92); }
+#qrCard input[type="number"], #qrCard select {
+  height: 20px; min-width: 0; background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--r); color: var(--tx-1); font: inherit; font-size: 12px; padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+#qrCard .bf-qr-mid { grid-column: 1 / -1; display: grid; grid-template-columns: 128px minmax(0,1fr); gap: 6px; }
+#qrCard .bf-qr-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+                   width: 16px; height: 16px; padding: 0; line-height: 14px; font-size: 13px;
+                   background: transparent; border: 0; color: var(--tx-3); cursor: pointer; }
+#qrCard .bf-qr-x:hover { color: var(--tx-1); }
+/* El botón de la barra se ilumina mientras la caja está abierta (el mismo lenguaje que las
+   herramientas de dibujo activas, `.tool.active`). */
+#btnQuickOrder.qr-abierto { background: var(--seg-fondo); border-color: var(--line); color: var(--tx-1); }
+@media (max-width: 700px) { #qrCard { width: min(312px, calc(100% - 24px)); } }

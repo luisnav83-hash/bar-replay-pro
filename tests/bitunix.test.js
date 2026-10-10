@@ -232,6 +232,63 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   }
   ok(est.columnaDerecha, 'la columna derecha queda a la derecha del gráfico');
 
+  /* ORDEN RÁPIDA FLOTANTE (ítem 3 del registro, 11-oct). Medido en el sitio: caja de 312×66 en
+     (50,180) sobre el lienzo, `Comprar · precio` / `Por costo (USDT) ▾` / `Vender · precio` y su ×.
+     Se exige la geometría, el fondo del flotante (#131414, un punto más claro que la carta) y -lo
+     que de verdad importa- que el botón coloque: con la caja abierta, «Comprar» deja posición larga
+     viva y el formulario refleja lo que el widget escribió. */
+  {
+    const qr = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const R = (e) => e.getBoundingClientRect();
+      const ocultoAntes = g('qrCard').hidden === true;
+      g('btnQuickOrder').click();
+      await new Promise((r) => setTimeout(r, 220));
+      const c = g('qrCard'), cs = getComputedStyle(c);
+      const precio = g('qrBuyPrice').value;
+      const posAntes = (window.TE && TE.state.position) ? TE.state.position.side : null;
+      g('qrAmount').value = '25'; g('qrAmount').dispatchEvent(new Event('input', { bubbles: true }));
+      g('qrBuy').click();
+      await new Promise((r) => setTimeout(r, 400));
+      const out = { ancho: Math.round(R(c).width), alto: Math.round(R(c).height), fondo: cs.backgroundColor,
+                    borde: cs.borderColor, radio: cs.borderRadius, ocultoAntes, precio,
+                    lados: c.querySelectorAll('.bf-qr-side').length, sobreLienzo: !!c.closest('#chartWrap'),
+                    tapaLeyenda: (() => { const l = R(g('ohlcLegend')), q = R(c);
+                      return !(q.bottom <= l.top + 1 || q.top >= l.bottom - 1 || q.right <= l.left + 1 || q.left >= l.right - 1); })(),
+                    pisable: (() => { const q = R(g('qrBuy')); const e = document.elementFromPoint(Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2));
+                                      return !!e && (g('qrBuy').contains(e) || e === g('qrBuy')); })(),
+                    pos: (window.TE && TE.state.position) ? TE.state.position.side : null, posAntes,
+                    tipo: (window.App && App.orderType) || '-', modo: (window.App && App.sizeMode) || '-',
+                    importe: g('sizeInput').value };
+      g('qrCerrar').click();
+      await new Promise((r) => setTimeout(r, 140));
+      out.cerradaConX = g('qrCard').hidden === true;
+      return out;
+    });
+    ok(qr.ancho >= 300 && qr.ancho <= 320 && qr.alto >= 56 && qr.alto <= 84 && qr.sobreLienzo && qr.lados === 2 && qr.pisable,
+       `la caja flotante mide ${qr.ancho}×${qr.alto} sobre el lienzo, con sus dos botones y «Comprar» pinchable (el sitio: 312×66) - no tapa la leyenda: ${qr.tapaLeyenda ? 'LA TAPA' : 'no'}`);
+    ok(qr.fondo === 'rgb(19, 20, 20)' && qr.borde === 'rgb(41, 42, 43)' && qr.radio === '4px',
+       `fondo ${qr.fondo} · borde ${qr.borde} · radio ${qr.radio} (los valores medidos de su flotante: #131414, #292a2b, 4 px)`);
+    ok(qr.precio && Number(qr.precio) > 0, `los precios vienen rellenos con la vela actual (${qr.precio}); dejarlo vacío = a mercado, como en el sitio`);
+    ok(qr.pos !== qr.posAntes && qr.pos === 'long' && qr.modo === 'notional' && qr.importe === '25',
+       `y «Comprar» coloca de verdad: posición ${qr.pos} (antes ${qr.posAntes}), tipo ${qr.tipo}, ${qr.importe} en ${qr.modo} escritos desde el widget`);
+    ok(qr.ocultoAntes && qr.cerradaConX, `la caja viene cerrada (${qr.ocultoAntes}) y la × la cierra (${qr.cerradaConX}) - el ⚡ de la barra la trae de vuelta`);
+    /* Y SE DEJA EL FORMULARIO COMO SE ENCONTRÓ: la colocación cambia el tipo de orden y la
+       unidad del tamaño, y la cabecera del botón de entrada se reescribe con el estado (con
+       posición abierta dice otra cosa) -si no se reparte y se espera, la ancla de los rótulos que
+       viene detrás lee el estado del widget en vez del suyo, que es exactamente como apareció el
+       falso «botones rotulados» el 11-oct—. */
+    await page.evaluate(() => {
+      const g = (id) => document.getElementById(id);
+      if (window.TE && TE.state.position) App.flatten();
+      const q = (sel) => { const e = document.querySelector(sel); if (e) e.click(); };
+      q('#segOrderType [data-otype="market"]');
+      q('#segSize [data-mode="pct"]');
+      const si = g('sizeInput'); if (si) { si.value = '100'; si.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+    await espera(500);
+  }
+
   /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
      Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
      695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna
@@ -334,7 +391,12 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(piel.bodyImg === 'none', 'sin degradados decorativos (el terminal real es plano)');
   ok(piel.radioCard === '4px', `tarjetas con radio de ${piel.radioCard} (el sitio usa 4px en la tarjeta del gráfico y en la del panel inferior)`);
   ok(piel.longBg === 'rgb(36, 193, 141)' && piel.shortBg === 'rgb(241, 75, 63)', '«Abrir Largo» en rgb(36,193,141) y «Abrir Corto» en rgb(241,75,63), el verde y el rojo del sitio');
-  ok(piel.longTxt === 'Abrir Largo' && piel.shortTxt === 'Abrir Corto', `botones rotulados «${piel.longTxt}» / «${piel.shortTxt}» (así los llama el sitio en español; «Long/Short» no aparecía en su panel)`);
+  /* La palabra, no la cadena exacta: `UI.refreshLabels` antepone el icono del modo (⏳ límite,
+     🎯 trigger, 🌀 trailing, ▲ mercado) y esa señal vale más que el literal; lo que el registro
+     exigía era que el nombre fuera el del sitio -antes «▲ COMPRAR / LONG»- y que «Long/Short»
+     siguiera fuera. Con posición abierta u otro modo activo el rótulo cambia de icono y esto no
+     debe romperse (11-oct: el ⚡ de la orden rápida, que toca el segmentado, lo rompía). */
+  ok(/(^|\s)Abrir Largo$/.test(piel.longTxt) && /(^|\s)Abrir Corto$/.test(piel.shortTxt), `botones rotulados «${piel.longTxt}» / «${piel.shortTxt}» (el nombre del sitio + el icono del modo; «Long/Short» no aparecía en su panel)`);
   ok(piel.pilla === '9999px', `los dos botones son PÍLDORA (${piel.pilla}), como los suyos (radio 9999px medido)`);
   ok(piel.altoLong >= 34 && piel.altoLong <= 44, `altura del botón de entrada: ${piel.altoLong} px`);
   ok(piel.subrayado.h === '2px' && /36, 193, 141/.test(piel.subrayado.bg), `subrayado de la pestaña activa: ${piel.subrayado.h} en ${piel.subrayado.bg} (verde, no lima)`);

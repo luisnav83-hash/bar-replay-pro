@@ -72,19 +72,19 @@ _Nada: el barrido no encontró defectos medibles._
 | Alineación del lienzo de dibujos con el gráfico (ventana mínima 320×240 (dpr 1)) | Δx 0 · Δy 0 · Δancho 0 · Δalto 0 px | `#overlayCanvas vs #mainChart` |
 | Escalera: el pane mide lo que el módulo dice y el lienzo no se recorta (ventana mínima 320×240 (dpr 1)) | #panePnl 60 px vs PC.alto() 60 (mín 56) · #chartPnl cliente 34 / contenido 34 (recorte 0 px) · #mainChart 208 · #chartArea 387 | `js/pnlChart.js · #panePnl` |
 | Solape leyenda ↔ eje del gráfico (ventana mínima 320×240 (dpr 1)) | intersección 0 px | `#ohlcLegend · #bfIndex` |
-| Controles de la zona de gráficos que no hacen nada | sondados 39 controles · mudos: ninguno | `#chartArea · #panelsCard · #bottomPanel · #bookCard` |
-| Controles que lanzan una excepción al pulsarlos | ninguno de los 39 sondados | `click() sobre cada control` |
+| Controles de la zona de gráficos que no hacen nada | sondados 40 controles · mudos: ninguno | `#chartArea · #panelsCard · #bottomPanel · #bookCard` |
+| Controles que lanzan una excepción al pulsarlos | ninguno de los 40 sondados | `click() sobre cada control` |
 | Leyenda OHLC al cambiar de temporalidad | 0 temporalidades probadas · con NaN/undefined: ninguna | `js/barReplay.js · #ohlcLegend` |
 | Atajos de tecla con el foco dentro de un campo | foco en #sizeInput · teclas b/s/t/f/x y espacio · órdenes nuevas 0 · play alternado false | `js/uiController.js (guarda `typing`)` |
-| Teclado sobre un botón enfocado (#btnIndicators) | clicks contados en el botón: tras la barra 1 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=false, índice 888) | `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>` |
-| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 77,130.01 H 77,387.99 L 77,073.86 C 77,300.27 » · cierre de la vela actual 77300.27 | `#ohlcLegend` |
+| Teclado sobre un botón enfocado (#btnIndicators) | clicks contados en el botón: tras la barra 1 · tras Enter 1 (el botón abre lo que abre; lo que se comprueba es que la tecla leproduzca un click) · con la barra además arrancó la reproducción (play=false, índice 887) | `js/uiController.js · case ' ' / case 'Enter' y el click nativo del <button>` |
+| Leyenda OHLC al sacar el cursor del gráfico | sigue el cursor: false · al salir: «BTC/USDT 1h O 76,976.01 H 77,204.68 L 76,772.05 C 77,130.02 » · cierre de la vela actual 77130.02 | `#ohlcLegend` |
 | Lienzos duplicados tras seis cambios de tamaño | 15 lienzos antes · 15 después de 6 resize | `#mainChart/#chartPnl/#overlayCanvas` |
 | Vaivén de la altura de la escalera (ResizeObserver) | alturas medidas tras estabilizar: 0 · 0 · 0 · 0 · 0 px (establecida 0 → 0) | `js/pnlChart.js · #paneArea` |
-| Zona de gráficos con la máquina recién reiniciada | velas 2000 · índice 880 · NaN en la leyenda false · «NaN» escrito en 0 sitios | `estado inicial` |
+| Zona de gráficos con la máquina recién reiniciada | velas 2000 · índice 879 · NaN en la leyenda false · «NaN» escrito en 0 sitios | `estado inicial` |
 | Libro: 6 filas pintadas en una caja de 102 px (bookAsks) | 6 filas × 17 px = 102 px en 102 px de caja (max-height 102px) · caben 6 · desborde 0 px | `#bookAsks · js/orderBook.js · css/bitunix.css (.bf-asks)` |
 | Libro: 6 filas pintadas en una caja de 102 px (bookBids) | 6 filas × 17 px = 102 px en 102 px de caja (max-height 102px) · caben 6 · desborde 0 px | `#bookBids · js/orderBook.js · css/bitunix.css (.bf-asks)` |
-| Libro: las dos mitades del desbalance cuadran | bid 53.19 + ask 46.81 = 100.0 % · filas 6/6 · barras 53.2 % / 46.8 % · origen «derivado» | `js/orderBook.js · #bookCard` |
-| Libro: el precio último es el del gráfico | #bookLast «78,470.00» · cierre actual 78470.00 | `#bookLast` |
+| Libro: las dos mitades del desbalance cuadran | bid 54.64 + ask 45.36 = 100.0 % · filas 6/6 · barras 54.6 % / 45.4 % · origen «derivado» | `js/orderBook.js · #bookCard` |
+| Libro: el precio último es el del gráfico | #bookLast «78,410.98» · cierre actual 78410.98 | `#bookLast` |
 | Contraste de los rótulos pequeños de la zona de gráficos | medidos 10 · #ohlcLegend 11.94:1/11px · #lgInd 11.94:1/11px · #bfIndex 6.3:1/9.5px · #bookBidPct 8.3:1/9.5px · #bookAskPct 5.31:1/9.5px · #tagPrice 5.17:1/9.5px · #trigHint 6.3:1/10.5px · #limitHint 6.3:1/10.5px · #riesgoHint 6.3:1/10.5px · #posPnlSparkNote 6.3:1/10px | `css/bitunix.css` |
 | Errores de consola y excepciones durante todo el barrido | 0 de la app · 30 abortos de red del arnés (esperados aquí, con la red cortada) | `consola del navegador` |
 

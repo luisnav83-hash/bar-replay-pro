@@ -337,6 +337,7 @@
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
     UI.initOrdenAvanzado();
+    UI.initOrdenRapida();
   };
 
   /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
@@ -897,10 +898,15 @@
        `1fr 1fr`, y `1fr` = `minmax(AUTO,1fr)` → un texto más largo ensancha el min-content del
        botón y tira la tarjeta fuera de su propio borde (14 px de desborde medidos así). Lo que
        cambia es el icono, que es lo que se ve de reojo; el tipo elegido ya está en el segmentado. */
-    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR / LONG'
-      : esTrigger ? '🎯 COMPRAR / LONG' : esTrail ? '🌀 COMPRAR / LONG' : '▲ COMPRAR / LONG';
-    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER / SHORT'
-      : esTrigger ? '🎯 VENDER / SHORT' : esTrail ? '🌀 VENDER / SHORT' : '▼ VENDER / SHORT';
+    /* Y LOS RÓTULOS DICEN LO MISMO EN LOS CUATRO MODOS. `tests/bitunix.test.js` los vigila
+       (ítem 2 del registro: el sitio los llama «Abrir Largo» / «Abrir Corto»), pero esta función
+       los reescribía con el vocabulario viejo en cuanto tocaban el segmentado -el ⚡ de la orden
+       rápida lo hace-: el botón volvía a «▲ COMPRAR / LONG» y la piel se caía a media sesión. Se
+       queda el nombre del sitio y solo cambia el icono, que es lo que se ve de reojo; la cadena
+       sigue midiendo 13 caracteres, por debajo del tope de 18 que fija tests/formulario.test.js
+       para que la rejilla `1fr 1fr` no ensanche la tarjeta. */
+    document.getElementById('btnLong').textContent = (esLimite ? '⏳ ' : esTrigger ? '🎯 ' : esTrail ? '🌀 ' : '▲ ') + 'Abrir Largo';
+    document.getElementById('btnShort').textContent = (esLimite ? '⏳ ' : esTrigger ? '🎯 ' : esTrail ? '🌀 ' : '▼ ') + 'Abrir Corto';
     if (esLimite) {
       const el = document.getElementById('limitInput');
       if (el && !parseFloat(el.value)) {
@@ -2324,3 +2330,68 @@
 
   global.UI = UI;
 })(window);
+
+  /* ORDEN RÁPIDA SOBRE EL LIENZO (ítem 3 del registro, 11-oct-2026). Lo que hace el sitio: una
+     caja flotante con `Comprar · precio`, el selector de unidad y `Vender · precio`. Lo que hace
+     esta: lo mismo, y coloca de verdad. Para eso escribe en el formulario -tipo de orden, unidad
+     del tamaño, importe y, si hay precio, el límite- y llama a `App.placeOrder(side)`, que es la
+     puerta por la que ya pasan el ratón y los atajos B/S: mantener DOS caminos de colocación
+     significa que uno se oxide en silencio. El widget no guarda margen ni apalancamiento propios;
+     los toma del estado del formulario, igual que ellos.
+
+     Dos detalles que no son decorativos:
+       · El precio se pre-rellena con el de la vela actual y se deja de tocar en cuanto alguien
+         escribe (la marca `data-editado`): si no, cada apertura pisaría lo escrito.
+       · «Sin precio» significa A MERCADO, no «0»: se quita el valor del medio y se elige `market`,
+         que es la semántica del sitio (su campo admite dejarlo vacío y dispara a B/S). */
+  UI.initOrdenRapida = function () {
+    const card = document.getElementById('qrCard');
+    const btn = document.getElementById('btnQuickOrder');
+    if (!card || !btn || btn.dataset.qrMontado) return false;
+    btn.dataset.qrMontado = '1';
+    const g = (id) => document.getElementById(id);
+    const pulsa = (sel) => { const e = document.querySelector(sel); if (e) e.click(); };
+    const num = (e) => { const v = parseFloat(e && e.value); return Number.isFinite(v) ? v : null; };
+    const precioActual = () => { const p = App.currentPrice(); return p ? +p.toFixed(p > 1000 ? 2 : 6) : ''; };
+    const rellena = () => { for (const id of ['qrBuyPrice', 'qrSellPrice']) { const e = g(id); if (e && !e.dataset.editado) e.value = String(precioActual()); } };
+    const abierta = () => !card.hidden;
+    const muestra = (si) => {
+      card.hidden = !si;
+      btn.classList.toggle('qr-abierto', !!si);
+      btn.setAttribute('aria-pressed', si ? 'true' : 'false');
+      if (window.ST && ST.set) ST.set('ordenRapida', !!si);
+      if (si) rellena();
+    };
+    btn.addEventListener('click', () => muestra(!abierta()));
+    g('qrCerrar').addEventListener('click', () => muestra(false));
+    for (const id of ['qrBuyPrice', 'qrSellPrice']) {
+      const e = g(id);
+      if (e) e.addEventListener('input', () => { e.dataset.editado = '1'; });
+    }
+    const colocar = (side) => {
+      const inp = g(side === 'long' ? 'qrBuyPrice' : 'qrSellPrice');
+      const p = num(inp);
+      const cur = App.currentPrice();
+      const usaLimite = p !== null && p > 0 && !(cur && Math.abs(p - cur) / cur < 1e-6);
+      pulsa('#segOrderType [data-otype="' + (usaLimite ? 'limite' : 'market') + '"]');
+      const modo = (g('qrMode') || {}).value || 'costo';
+      pulsa('#segSize [data-mode="' + (modo === 'costo' ? 'notional' : modo === 'cantidad' ? 'qty' : 'pct') + '"]');
+      const imp = num(g('qrAmount'));
+      const si = g('sizeInput');
+      if (si && imp !== null && imp > 0) { si.value = String(imp); si.dispatchEvent(new Event('input', { bubbles: true })); }
+      const li = g('limitInput');
+      if (usaLimite && li) { li.value = String(p); li.dispatchEvent(new Event('input', { bubbles: true })); }
+      const antes = { pos: TE.state.position ? TE.state.position.side : null, pend: (TE.state.pending || []).length };
+      App.placeOrder(side);
+      const despues = { pos: TE.state.position ? TE.state.position.side : null, pend: (TE.state.pending || []).length };
+      const q = usaLimite ? ' LÍMITE a ' + U.fmtPrice(p) : ' a mercado';
+      if (despues.pos !== antes.pos) U.log(`⚡ Orden rápida${q}: posición ${despues.pos ? despues.pos.toUpperCase() : 'cerrada'} · importe ${g('qrAmount').value} (${modo})`, 'trade');
+      else if (despues.pend > antes.pend) U.log(`⚡ Orden rápida${q} en espera · importe ${g('qrAmount').value} (${modo})`, 'trade');
+      else U.log('⚡ Orden rápida rechazada: mira el aviso (margen, tamaño o precio)', 'warn');
+      rellena();
+    };
+    g('qrBuy').addEventListener('click', () => colocar('long'));
+    g('qrSell').addEventListener('click', () => colocar('short'));
+    if (window.ST && ST.get && ST.get('ordenRapida', false) === true) muestra(true);
+    return true;
+  };

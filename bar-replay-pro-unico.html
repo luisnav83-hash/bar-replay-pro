@@ -1782,12 +1782,12 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
     display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 3px 2px;
     border-right: 1px solid var(--line); background: var(--bg-1); overflow: hidden;
   }
-  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 2px;
+  #drawToolbar .tool-cluster { flex-direction: column; align-items: center; gap: 1px;
                                padding-right: 0; border-right: 0; border-bottom: 1px solid var(--line-soft); padding-bottom: 3px; }
   #drawToolbar > .rail-body { overflow-y: auto; scrollbar-width: thin; }
   #drawToolbar .tool-cluster:last-child { border-bottom: 0; padding-bottom: 0; }
   #drawToolbar .tool-cluster-right { margin-left: 0; order: 9; }
-  #drawToolbar .tool { width: 28px; height: 26px; padding: 0; font-size: 12px; }
+  #drawToolbar .tool { width: 28px; height: 25px; padding: 0; font-size: 12px; }
   #drawToolbar .color-pick { width: 26px; height: 20px; }
   #drawToolbar .mini-select { width: 28px; height: 22px; padding: 0 1px; font-size: 10px; }
   #drawToolbar .switch { justify-content: center; gap: 0; }
@@ -1796,6 +1796,31 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
                                                     background: var(--up); display: block; }
 }
 .hint { color: var(--tx-3); }
+#qrCard {
+  position: absolute; z-index: 6; left: 12px; top: 96px; width: 312px;
+  display: grid; grid-template-columns: 74px minmax(0,1fr); gap: 2px 6px; align-items: center;
+  padding: 3px 24px 3px 4px; background: #131414; border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: 0 6px 22px rgba(0,0,0,.45);
+  font-size: 12px; color: var(--tx-1);
+}
+#qrCard[hidden] { display: none; }
+#qrCard .bf-qr-side { height: 20px; border: 0; border-radius: 9999px; color: #fff;
+                      font-weight: 500; font-size: 11.5px; cursor: pointer; }
+#qrCard .bf-qr-side.buy { background: var(--up); }
+#qrCard .bf-qr-side.sell { background: var(--down); }
+#qrCard .bf-qr-side:active { filter: brightness(.92); }
+#qrCard input[type="number"], #qrCard select {
+  height: 20px; min-width: 0; background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--r); color: var(--tx-1); font: inherit; font-size: 12px; padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+#qrCard .bf-qr-mid { grid-column: 1 / -1; display: grid; grid-template-columns: 128px minmax(0,1fr); gap: 6px; }
+#qrCard .bf-qr-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+                   width: 16px; height: 16px; padding: 0; line-height: 14px; font-size: 13px;
+                   background: transparent; border: 0; color: var(--tx-3); cursor: pointer; }
+#qrCard .bf-qr-x:hover { color: var(--tx-1); }
+#btnQuickOrder.qr-abierto { background: var(--seg-fondo); border-color: var(--line); color: var(--tx-1); }
+@media (max-width: 700px) { #qrCard { width: min(312px, calc(100% - 24px)); } }
 </style>
 </head>
 <body>
@@ -2039,6 +2064,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
       </div>
 
       <div class="tool-cluster tool-cluster-right">
+        <button class="tool" id="btnQuickOrder" aria-pressed="false" title="Orden rápida sobre el gráfico: comprar y vender sin salir del lienzo">⚡</button>
         <button class="tool" id="btnAutoScale" title="Escala de precios: automática / fijar rango manual">📐A</button>
         <button class="tool" id="btnLogScale" title="Escala logarítmica de precios">log</button>
         <label class="switch" title="Bloquear desplazamiento del chart al arrastrar en él">
@@ -2082,6 +2108,28 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 
       <!-- HUD de medición -->
       <div id="measureHud" class="hidden"></div>
+
+      <!-- ORDEN RÁPIDA (ítem 3 del registro, 11-oct). En Bitunix es una caja flotante de 312×66
+           en (50,180) SOBRE el lienzo, con `Comprar · precio`, el selector de unidad
+           («Por costo (USDT)») y `Vender · precio`, más una ×: se opera sin mirar la columna de la
+           derecha. La nuestra hace lo mismo y coloca de verdad (js/uiController.js,
+           `UI.initOrdenRapida`), escribiendo en el formulario lo que el widget no modela (tipo y
+           unidad del tamaño) para que no haya dos caminos de colocación. -->
+      <div id="qrCard" class="bf-qr" hidden role="group" aria-label="Orden rápida sobre el gráfico">
+        <button class="bf-qr-side buy" id="qrBuy" title="Comprar al precio de la izquierda (a mercado si lo dejas vacío)">Comprar</button>
+        <input type="number" id="qrBuyPrice" step="any" aria-label="Precio de compra">
+        <label class="bf-qr-mid">
+          <select id="qrMode" aria-label="Unidad del importe">
+            <option value="costo" selected>Por costo (USDT)</option>
+            <option value="cantidad">Por cantidad</option>
+            <option value="pct">Por % del equity</option>
+          </select>
+          <input type="number" id="qrAmount" step="any" min="0" value="25" aria-label="Importe">
+        </label>
+        <button class="bf-qr-side sell" id="qrSell" title="Vender al precio de la derecha (a mercado si lo dejas vacío)">Vender</button>
+        <input type="number" id="qrSellPrice" step="any" aria-label="Precio de venta">
+        <button class="bf-qr-x" id="qrCerrar" title="Cerrar la orden rápida (el ⚡ de la barra la vuelve a traer)">×</button>
+      </div>
 
       <!-- Capa de PnL (js/pnlChart.js). No captura el puntero: se puede operar,
              dibujar y arrastrar líneas igual que sin ella. -->
@@ -10885,6 +10933,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.getElementById('btnFlatten').addEventListener('click', () => App.flatten());
     document.getElementById('btnResetStats').addEventListener('click', () => UI.confirmReset());
     UI.initOrdenAvanzado();
+    UI.initOrdenRapida();
   };
 
   /* ── «Avanzado» del panel de órdenes (solo para la pantalla del teléfono) ─────────
@@ -11445,10 +11494,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
        `1fr 1fr`, y `1fr` = `minmax(AUTO,1fr)` → un texto más largo ensancha el min-content del
        botón y tira la tarjeta fuera de su propio borde (14 px de desborde medidos así). Lo que
        cambia es el icono, que es lo que se ve de reojo; el tipo elegido ya está en el segmentado. */
-    document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR / LONG'
-      : esTrigger ? '🎯 COMPRAR / LONG' : esTrail ? '🌀 COMPRAR / LONG' : '▲ COMPRAR / LONG';
-    document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER / SHORT'
-      : esTrigger ? '🎯 VENDER / SHORT' : esTrail ? '🌀 VENDER / SHORT' : '▼ VENDER / SHORT';
+    /* Y LOS RÓTULOS DICEN LO MISMO EN LOS CUATRO MODOS. `tests/bitunix.test.js` los vigila
+       (ítem 2 del registro: el sitio los llama «Abrir Largo» / «Abrir Corto»), pero esta función
+       los reescribía con el vocabulario viejo en cuanto tocaban el segmentado -el ⚡ de la orden
+       rápida lo hace-: el botón volvía a «▲ COMPRAR / LONG» y la piel se caía a media sesión. Se
+       queda el nombre del sitio y solo cambia el icono, que es lo que se ve de reojo; la cadena
+       sigue midiendo 13 caracteres, por debajo del tope de 18 que fija tests/formulario.test.js
+       para que la rejilla `1fr 1fr` no ensanche la tarjeta. */
+    document.getElementById('btnLong').textContent = (esLimite ? '⏳ ' : esTrigger ? '🎯 ' : esTrail ? '🌀 ' : '▲ ') + 'Abrir Largo';
+    document.getElementById('btnShort').textContent = (esLimite ? '⏳ ' : esTrigger ? '🎯 ' : esTrail ? '🌀 ' : '▼ ') + 'Abrir Corto';
     if (esLimite) {
       const el = document.getElementById('limitInput');
       if (el && !parseFloat(el.value)) {
@@ -12872,6 +12926,71 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   global.UI = UI;
 })(window);
+
+  /* ORDEN RÁPIDA SOBRE EL LIENZO (ítem 3 del registro, 11-oct-2026). Lo que hace el sitio: una
+     caja flotante con `Comprar · precio`, el selector de unidad y `Vender · precio`. Lo que hace
+     esta: lo mismo, y coloca de verdad. Para eso escribe en el formulario -tipo de orden, unidad
+     del tamaño, importe y, si hay precio, el límite- y llama a `App.placeOrder(side)`, que es la
+     puerta por la que ya pasan el ratón y los atajos B/S: mantener DOS caminos de colocación
+     significa que uno se oxide en silencio. El widget no guarda margen ni apalancamiento propios;
+     los toma del estado del formulario, igual que ellos.
+
+     Dos detalles que no son decorativos:
+       · El precio se pre-rellena con el de la vela actual y se deja de tocar en cuanto alguien
+         escribe (la marca `data-editado`): si no, cada apertura pisaría lo escrito.
+       · «Sin precio» significa A MERCADO, no «0»: se quita el valor del medio y se elige `market`,
+         que es la semántica del sitio (su campo admite dejarlo vacío y dispara a B/S). */
+  UI.initOrdenRapida = function () {
+    const card = document.getElementById('qrCard');
+    const btn = document.getElementById('btnQuickOrder');
+    if (!card || !btn || btn.dataset.qrMontado) return false;
+    btn.dataset.qrMontado = '1';
+    const g = (id) => document.getElementById(id);
+    const pulsa = (sel) => { const e = document.querySelector(sel); if (e) e.click(); };
+    const num = (e) => { const v = parseFloat(e && e.value); return Number.isFinite(v) ? v : null; };
+    const precioActual = () => { const p = App.currentPrice(); return p ? +p.toFixed(p > 1000 ? 2 : 6) : ''; };
+    const rellena = () => { for (const id of ['qrBuyPrice', 'qrSellPrice']) { const e = g(id); if (e && !e.dataset.editado) e.value = String(precioActual()); } };
+    const abierta = () => !card.hidden;
+    const muestra = (si) => {
+      card.hidden = !si;
+      btn.classList.toggle('qr-abierto', !!si);
+      btn.setAttribute('aria-pressed', si ? 'true' : 'false');
+      if (window.ST && ST.set) ST.set('ordenRapida', !!si);
+      if (si) rellena();
+    };
+    btn.addEventListener('click', () => muestra(!abierta()));
+    g('qrCerrar').addEventListener('click', () => muestra(false));
+    for (const id of ['qrBuyPrice', 'qrSellPrice']) {
+      const e = g(id);
+      if (e) e.addEventListener('input', () => { e.dataset.editado = '1'; });
+    }
+    const colocar = (side) => {
+      const inp = g(side === 'long' ? 'qrBuyPrice' : 'qrSellPrice');
+      const p = num(inp);
+      const cur = App.currentPrice();
+      const usaLimite = p !== null && p > 0 && !(cur && Math.abs(p - cur) / cur < 1e-6);
+      pulsa('#segOrderType [data-otype="' + (usaLimite ? 'limite' : 'market') + '"]');
+      const modo = (g('qrMode') || {}).value || 'costo';
+      pulsa('#segSize [data-mode="' + (modo === 'costo' ? 'notional' : modo === 'cantidad' ? 'qty' : 'pct') + '"]');
+      const imp = num(g('qrAmount'));
+      const si = g('sizeInput');
+      if (si && imp !== null && imp > 0) { si.value = String(imp); si.dispatchEvent(new Event('input', { bubbles: true })); }
+      const li = g('limitInput');
+      if (usaLimite && li) { li.value = String(p); li.dispatchEvent(new Event('input', { bubbles: true })); }
+      const antes = { pos: TE.state.position ? TE.state.position.side : null, pend: (TE.state.pending || []).length };
+      App.placeOrder(side);
+      const despues = { pos: TE.state.position ? TE.state.position.side : null, pend: (TE.state.pending || []).length };
+      const q = usaLimite ? ' LÍMITE a ' + U.fmtPrice(p) : ' a mercado';
+      if (despues.pos !== antes.pos) U.log(`⚡ Orden rápida${q}: posición ${despues.pos ? despues.pos.toUpperCase() : 'cerrada'} · importe ${g('qrAmount').value} (${modo})`, 'trade');
+      else if (despues.pend > antes.pend) U.log(`⚡ Orden rápida${q} en espera · importe ${g('qrAmount').value} (${modo})`, 'trade');
+      else U.log('⚡ Orden rápida rechazada: mira el aviso (margen, tamaño o precio)', 'warn');
+      rellena();
+    };
+    g('qrBuy').addEventListener('click', () => colocar('long'));
+    g('qrSell').addEventListener('click', () => colocar('short'));
+    if (window.ST && ST.get && ST.get('ordenRapida', false) === true) muestra(true);
+    return true;
+  };
 
 
 /* ==================== js/orderTemplates.js ==================== */
