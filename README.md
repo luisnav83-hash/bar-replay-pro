@@ -78,6 +78,18 @@ mirar el indicador nunca revela el futuro.
   promediado, el break-even mostrado **no** es el precio medio: incluye lo pagado en comisiones.
 - **Stop Loss** y **Take Profit**: por precio, con atajos por % o **arrastrando las
   etiquetas SL/TP sobre el gráfico**.
+- **Plantillas de orden** (`js/orderTemplates.js`, la fila `#bfTpl` dentro de «Avanzado»): guardan
+  apalancamiento, modo de margen, tipo de orden, unidad y tamaño, y SL/TP; se aplican de un toque.
+  **Guardan porcentajes, nunca precios**: en la vela 900 de un replay «SL 63 400» ya no significa
+  nada, «SL 1 %» sí. Al guardar se derivan del precio de ese momento y al aplicar se reconvierten
+  con **la misma fórmula de los atajos `#quickSlTp`** (una sola versión de la cuenta, en
+  `js/uiController.js`). Aplicar se hace **pulsando los controles del formulario**, no escribiendo
+  estado a mano: así siguen sincronizados el deslizador heredado, la etiqueta del tamaño, el
+  coste, el margen y las líneas del gráfico. Máximo 6, guardadas en `localStorage`
+  (`brp_plantillas`). En la columna de 335 px del terminal entran una o dos chips de las seis, así
+  que los bordes de la lista llevan un degradado que avisa de que queda más al deslizar —y se apaga
+  al llegar al final, porque un aviso que se queda encendido miente (`js/orderTemplates.js`:
+  `OT.marcaMas`).
 - Ejecución automática de SL/TP durante el replay, con **modelo realista**:
   - si la vela toca SL y TP a la vez → modo **pesimista** por defecto (ejecuta el SL);
   - si hay **hueco (gap)**, la orden se rellena en la apertura de la vela (peor precio).
@@ -213,7 +225,7 @@ aquí. **No** se usa el logo, el nombre ni ningún recurso del exchange: es un
 | 1 · Barra superior | par + temporalidades rápidas y **fila de estadísticas de 24 h** (último con flecha, %, máx/mín, volumen, mark & index, **funding con su cuenta atrás** y OI) | `#topbar` → `#bfStats` |
 | 2 · Gráfico | velas + toolbar de dibujo + paneles de indicadores + barra de replay | `#chartArea` |
 | 3 · Libro de órdenes | ventas en rojo leídas **de mayor a menor hacia el precio** (la mejor venta, justo encima del último), precio último centrado con flecha, compras en verde **de menor a mayor hacia abajo**, columna **Total** acumulada (máxima en la fila lejana) y **ratio B % / S %** al pie | `#bookCard` (`js/orderBook.js`) |
-| 4 · Panel de órdenes | modo de margen, apalancamiento, tipo (⚡ Mercado / ⏳ Límite), unidad (% equity / USD / Qty), **0 · 25 · 50 · 75 · 100**, TP/SL rápidos, **Coste** y **Margen** calculados en vivo y `Abrir Long` / `Abrir Short` | `#orderCard` |
+| 4 · Panel de órdenes | modo de margen, apalancamiento, tipo (⚡ Mercado / ⏳ Límite), unidad (% equity / USD / Qty), **0 · 25 · 50 · 75 · 100**, TP/SL rápidos, **Coste** y **Margen** calculados en vivo **plantillas de orden** (chips + ＋, dentro de «Avanzado») y `Abrir Long` / `Abrir Short` | `#orderCard` · `#bfTpl` |
 | 5 · Pestañas | Posiciones · Órdenes · Operaciones · Cuenta · Estadísticas · Registro · Dibujos, con contadores en las cabeceras | `#bottomPanel` |
 
 **Interacciones copiadas (y probadas)**
@@ -228,6 +240,22 @@ aquí. **No** se usa el logo, el nombre ni ningún recurso del exchange: es un
   y `#bfCostVal` / `#bfMarginVal` siempre dicen lo que el motor va a hacer.
 * Cambiar **Cruzado ↔ Aislado** con posición abierta **mueve la liquidación** visible
   de la tarjeta `Posición abierta`.
+* La **fila de plantillas** hace lo que hace el exchange: el chip dice lo que guarda
+  (`20x · 50 % · aislado · SL 1 % · TP 2 %` —el nombre ES el resumen, nadie tiene que recordar
+  qué era «mi setup»—), tocarlo reconfigura la orden entera y la ✕ la borra. La ✕ va **hermana**
+  al chip, no dentro de él: un `<button>` no puede anidar otro `<button>`, el navegador lo saca de
+  sitio y el clic se iba a «aplicar» en vez de a borrar.
+
+**Por qué las plantillas viven DENTRO de «Avanzado»** y no en una fila fija del panel, que es como
+lo coloca el exchange: el contrato del teléfono es que el formulario de órdenes entre entero **en
+reposo, sin deslizar** (220 px de caja medidos, que defiende `test:layout`), y 26 px fijos aquí lo
+romperían. En ancho de escritorio «Avanzado» nunca está plegado —solo se pliega por ancho—, así que
+la fila no se le esconde a nadie con sitio. Las dos mitades del trato están en el test: con la fila
+montada el reposo del teléfono sigue en 0 px de recorte, y con «Avanzado» abierto la fila se pinta
+sin tapar SL, TP, Long ni Short. Lo que **no** se hizo: copiar el desbordamiento horizontal que ya
+tenía el cuerpo del formulario en 1280 (19 px de `.grid-2 { 1fr 1fr }`, cuyo arreglo
+`minmax(0,1fr)` está escrito solo para el teléfono) —el test exige «cero píxeles MÁS», no «cero»,
+para no fingir un verde que no existe ni cambiar de paso la geometría del formulario en escritorio—.
 
 **Paleta medida de la captura de referencia** (no inventada): fondo `#0a0a0b`,
 sube `#25ca93`, baja `#f65b55`, acento lima `#b8f040`, ámbar para funding y
@@ -683,7 +711,7 @@ node tests/network.test.js    #  10 comprobaciones de paginación y datos reales
 node tests/browser.capture.js #  48 comprobaciones en Chromium real + capturas PNG
 node tests/iframe.test.js     #  22 comprobaciones dentro de un iframe sandbox (sin red)
 node tests/preview-live.test.js # 17 comprobaciones del preview EN VIVO (datos reales vía proxy)
-node tests/responsive.test.js #  145 comprobaciones de tamaño: 10 paneles, sin recortes y
+node tests/responsive.test.js #  200 comprobaciones de tamaño: 10 paneles, sin recortes y
                               #   con RSI + MACD abiertos (el peor caso de la escalera) el
                               #   gráfico no pinta sobre los paneles: caja == fila, 0 solape
                               #   + el bloque «Avanzado» del teléfono, medido pulsando
@@ -730,6 +758,18 @@ node tests/pages-pnl.js          #   65 comprobaciones del marcaje EN LA APP PUB
                                 #   compartido donde medir la preferencia cruzada)
                                 #   (Abrir largo, ⏭, 📈 PnL, Cerrar todo) y abriendo una pestaña nueva para la
                                 #   preferencia: recargar la misma se cuelga porque la app pide confirmación al salir
+node tests/plantillas.test.js   #  32 comprobaciones de las PLANTILLAS DE ORDEN sobre el archivo único, SIN RED:
+                                #   la fila existe y vive DENTRO de «Avanzado» (así el reposo del teléfono sigue
+                                #   entrando entero: 0 px de recorte, medido tras montar la fila), guardar deja un
+                                #   chip cuya ETIQUETA es el resumen, no duplica, máximo 6 con el ＋ desactivado,
+                                #   borrar reactiva, aplicar devuelve 20x · aislado · 50 % con TE.state de acuerdo,
+                                #   SL/TP recalculados sobre el precio de HOY (tolerancia 2e-6 contra la fórmula de
+                                #   los atajos), persistencia tras recargar, dianas >=20 px, cero píxeles de
+                                #   desborde AÑADIDOS (se mide el delta, no un cero absoluto: hay 19 px viejos de
+                                #   .grid-2 que no son de aquí), SL/TP/Long/Short siguen tocables en el teléfono y
+                                #   los degradados que avisan de que quedan chips al otro lado del deslizamiento
+                                #   (encendido solo donde desborda de verdad, apagado al llegar al borde; se comprueba
+                                #   DESLIZANDO, sin llamar a la función de la marca a mano)
 node tests/bitunix.test.js      # 133 comprobaciones de la PIEL BITUNEX sobre el archivo único, SIN RED:
                                 #   estructura, libro (10+10, orden visual y recorte honesto), quick sizes,
                                 #   coste/margen, liquidación por modo, pestañas y las dos capturas de docs/
@@ -742,22 +782,40 @@ node tests/single.test.js     # archivo único en navegador real sin red
 
 ```
 Resultado actual (`node tools/run-all.js`, todo lo que no depende del despliegue):
-**1157 comprobaciones, 0 fallos** ✅ · **23 suites** locales · 1 sin contador (`single.test.js`,
+**1245 comprobaciones, 0 fallos** ✅ · **24 suites** locales · 1 sin contador (`single.test.js`,
 que es un escenario completo de navegador y cuenta sus comprobaciones a medias)
-Con las seis que auditan lo publicado (`node tools/run-all.js --publicadas`):
-**1478 comprobaciones, 0 fallos** ✅ · **29 suites** · 1 sin contador (`single.test.js`)
-(1157 locales + 321 sobre `luisnav83-hash.github.io/bar-replay-pro`, medidas el 2026-10-10
-con el despliegue en `8555a78` (el commit siguiente, `830bebb`, solo tocó `README.md`, las
-capturas y un comentario de test: los siete ficheros de código servidos son byte a byte los de
-`8555a78`, que es lo que la lista de abajo comprueba). Aquí no basta con que la batería esté verde: se comprueba que
-lo servido ES lo construido, midiendo el `md5` en la URL pública contra el fichero local —
-`bar-replay-pro-unico.html` `9ee75a56…` (951 845 B), `index.html` `47646e33`,
-`css/bitunix.css` `ab76f49b`, `css/chart.css` `dd086d92`, `js/chart.js` `20df4968`,
-`js/pnlChart.js` `9e871624`, `js/uiController.js` `0163b026`: los siete, byte a byte iguales—).
+
+Medido el 2026-10-10 con las **plantillas de orden** dentro (32 de `tests/plantillas.test.js`) y
+con las dos suites que buscan puppeteer en `~/.cache/pptr` (`test:layout` 200 ✓,
+`test:incidencias` 14 ✓): si ese enlace no existe, `run-all` las marca rotas con un
+`Cannot find module` que **no** es un fallo de la app —es del entorno del sandbox, que no conserva
+`.cache`—. Con las seis de páginas corriendo **sobre este build local** se suma 329 ✓ (12 del
+buscador + 10 de dibujos + 46 de promediado/TP + 57 del trailing + 65 del PnL + **139 de la
+piel Bitunix**) → **1574 en total, 0 fallos** (1245 + 329), todas con 0 errores de JavaScript y 0 peticiones
+fallidas. **Aviso para trabajo en varias sesiones:** `node_modules` está fuera del snapshot (no
+persiste: hay que `npm i puppeteer` antes de las suites de navegador) y `.git` puede volver a un
+punto anterior —así se perdieron los dos commits iniciales de las plantillas, que eran `08e384c` y
+`b140331`; el árbol de trabajo conservaba el código, así que se perdió historia y no trabajo, y se
+volvió a commitear como `HEAD` en lugar de citar un hash que pueda quedar huérfano—.
+El total local no es fijo al último dígito: `test:promediar` cuenta **82, 83 u 84**
+según los casos que la serie del día omita por no dar el escenario (estaba en 82 cuando se midió
+el párrafo anterior de este README); todo lo demás es determinista.
+
+**Lo servido en GitHub Pages todavía no es esto.** Hay cuatro commits locales sin subir
+(`origin/main` sigue en `8bb1c63`; los tres de la escalera del teléfono —`fefcfee`, `dfeaccd`,
+`39d9b8b`— más `HEAD`, que trae las plantillas de orden) y la comprobación que importa —que lo publicado ES lo
+construido, midiendo `md5` en la URL contra el fichero local— fallaría ahora a propósito.
+Los `md5` locales de hoy, que son los que tendrán que aparecer en la URL pública tras el próximo
+despliegue: `bar-replay-pro-unico.html` `9ac66add…` (968 722 B), `index.html` `57763621`,
+`css/bitunix.css` `db54ba55`, `css/chart.css` `dd086d92`, `js/chart.js` `20df4968`,
+`js/pnlChart.js` `d9df6ff2`, `js/uiController.js` `8fccecd4` y el nuevo `js/orderTemplates.js`
+`9c8763ff` (más la suite `tests/plantillas.test.js`, `57a1f4ae`). La cifra anterior (`1478 · 29 suites`) corresponde al despliegue de `8555a78` y su
+lista de `md5` (`9ee75a56…` 951 845 B, `47646e33`, `ab76f49b`, `dd086d92`, `20df4968`, `9e871624`,
+`0163b026`, los siete byte a byte iguales) queda ahí como lo que fue medida, no como promesa.
 **Y se dejó de citar el `md5` de las capturas**: las treinta y pico las regeneran las suites en
 cada corrida (otro cambio de dos píxeles en un panel las reescribe todas), así que no son una
-huella del despliegue —lo eran en el párrafo anterior de este README, y las dos últimas veces
-hubo que re-medirlas porque habían vuelto a cambiar por sí solas
+huella del despliegue.
+
 Desglose de las seis publicadas: 12 del buscador + 10 de dibujos + 46 de promediado/TP +
 57 del trailing + **131 de la piel Bitunix** (11 más sobre lo publicado —3 por talla en las tres
 tallas del bucle móvil: fila == caja con el scrollbar sin hueco cobrado, todas las dianas dentro
@@ -880,6 +938,9 @@ bar-replay-app/
 │                             #   etiqueta, panel con curva de alto ajustable y marcas en las velas;
 │                             #   además pinta el mini-PnL de la tarjeta, la mini-curva en vivo de la
 │                             #   fila abierta y SELLA el recorrido dentro del trade cerrado)
+│   ├── orderTemplates.js     # Plantillas de orden: guardar/aplicar porcentajes, máx 6, fila
+│   │                         #   de chips dentro de «Avanzado» (js/... lee el formulario y lo
+│   │                         #   rellena pulsando controles, nunca escribiendo estado)
 │   ├── orderBook.js          # Libro del terminal: derivado del replay o real, 24 h,
 │   │                         # funding con cuenta atrás, OI y ratio B/S (js/orderBook.js)
 │   ├── drawingTools.js       # Herramientas de dibujo sobre canvas
@@ -902,6 +963,7 @@ bar-replay-app/
     ├── temporalidad.test.js  # Cambio de temporalidad + fila de la posición abierta (29)
     ├── entradas.test.js      # Entradas visibles: botón, teclado, orden límite e inversión (26)
     ├── limite-arrastrar.test.js # Arrastre de límites y SL/TP en el gráfico, ratón y táctil (25)
+    ├── plantillas.test.js    # Plantillas de orden sobre el archivo único sin red (32)
     ├── pnl-chart.test.js     # Marcaje de PnL sobre el archivo único sin red (151)
     ├── pages-pnl.js          # El mismo marcaje sobre lo publicado (65)
     └── single.test.js        # Archivo único en navegador real sin red

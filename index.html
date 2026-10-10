@@ -529,6 +529,20 @@
           <button class="chip" data-tppct="2">TP 2%</button>
           <button class="chip" data-tppct="4">TP 4%</button>
         </div>
+
+        <!-- PLANTILLAS DE ORDEN (js/orderTemplates.js) — la fila de «custom trading templates»
+             del panel de órdenes de Bitunix. Vive DENTRO de «Avanzado» a propósito: en el
+             teléfono el formulario tiene que entrar ENTERO en reposo sin deslizar (221 px
+             medidos, y `test:layout` lo defiende), y una fila de 26 px aquí lo rompería; en
+             escritorio «Avanzado» está siempre visible, así que no se le esconde a nadie. -->
+        <div class="bf-tpl" id="bfTpl" role="group" aria-label="Plantillas de orden">
+          <span class="bf-tpl-lab">Plantillas</span>
+          <!-- El envoltorio existe solo para poder pegar un degradado al borde de la lista:
+               dentro de `#bfTplList` se iría con el contenido al deslizar. -->
+          <div class="bf-tpl-desl" id="bfTplDesl"><div class="bf-tpl-list" id="bfTplList"></div></div>
+          <button type="button" class="mini-btn bf-tpl-save" id="btnTplGuardar"
+                  title="Guardar apalancamiento, tamaño y SL/TP como plantilla">＋</button>
+        </div>
         </div>
 
         <div class="order-actions">
@@ -1007,6 +1021,7 @@
 <script src="js/drawingTools.js"></script>
 <script src="js/orderBook.js"></script>
 <script src="js/uiController.js"></script>
+<script src="js/orderTemplates.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

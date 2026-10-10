@@ -1619,6 +1619,11 @@
     if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
     const sel = document.getElementById('leverageSelect');
     if (sel) UI.syncLeverage(+sel.value);     // estado inicial coherente
+
+    /* Plantillas de orden (js/orderTemplates.js). Va aquí y no en `App.init` porque es un
+       control MÁS del panel de órdenes, y `OT.init` ya se apaga solo si el bloque no existe
+       (el archivo único de otro contexto podría no tenerlo). */
+    if (global.OT && OT.init) OT.init();
   };
 
   /** Coste / margen de la orden y bloqueo si el tamaño es 0 (Bitunix lo deshabilita). */
