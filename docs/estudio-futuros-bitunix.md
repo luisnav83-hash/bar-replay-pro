@@ -191,7 +191,7 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
 | **Trailing** con precio de activación y retroceso **Ratio o Interval** | trailing por % con activación por beneficio | **ampliar** al modo intervalo |
 | **Account TP/SL** (toda la cuenta, por importe o %) | no existe | **capa 3** |
 | **Partial TP/SL** con % por nivel | TP escalonado (`addTpLevel(price, pct)`) ✓ | ya está; falta el **deslizador de retorno** del panel de posición |
-| Modo **hedge** (`ONE_WAY`/`HEDGE`, `tradeSide`, `positionId`) | una sola posición (one-way) | **capa 4**, es el cambio grande del motor |
+| Modo **hedge** (`ONE_WAY`/`HEDGE`, `tradeSide`, `positionId`) | ~~una sola posición~~ **hecho en la capa 4** (§15): `state.posiciones` por dirección, `setPosicionModo` con la regla 200014 y `tradeSide` OPEN\|CLOSE en el formulario | — |
 | Apalancamiento **por dirección** | un solo valor | **capa 3** |
 | Tick del precio (F2: `0.1` en BTCUSDT, precios a un decimal) | se redondea a 6 decimales | **implantar**: `tickSize`/`stepSize` por símbolo y entrada snapped, con el tick visible |
 | Multi-activo / combined margin, descuento de colateral, tiers reales por símbolo, ADL, depth real | n/a | **no se replica** (un backtester de OHLC no tiene libro real): se documenta en §11 |
@@ -214,6 +214,7 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
   o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección.
 4. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
   cambiar el modelo de «una posición» a «posiciones por lado» en motor, cartas, historial y PnL.
+  **✅ Implementada: `tests/hedge.test.js`, 74 comprobaciones de motor y de navegador. Ver §15.**
 
 ## 11 · Límites honestos de la réplica
 
@@ -288,3 +289,56 @@ Dos lecciones de medida, para no repetirlas:
    pidió: reportado, no arreglado) y el test de esta capa juzga el *delta* que añade la capa.
 2. **El atajo `T` recorre los tres tipos** (market → límite → trigger) en lugar de alternar dos: con un
    tipo más en el selector, alternar dejaría la trigger inalcanzable de teclado.
+
+## 15 · Capa 4: modo de posición (one-way ⇄ hedge)
+
+**Cómo está modelado, y por qué no se reescribieron las 40 lecturas de `state.position`.** El sitio
+de verdad de las posiciones es ahora `state.posiciones = { long, short }` —una ranura por dirección,
+que es lo que devuelve `get_position_list` (`positionSide` + `positionId`)—. `state.position` se
+redefinece con `Object.defineProperty` como **acceso a la principal** (la larga si la hay), con un
+*setter* que cae en la ranura del lado (escribir `null` limpia las dos, que es lo que hacen
+`resetAccount` y la importación de partidas). Así el PnL del panel y las vistas antiguas siguen
+funcionando sin tocarlas, y lo que pasa a bucle es lo que de verdad cambia:
+
+* `TE.unrealized` y `TE.marginUsed` **suman** direcciones; de ahí salen la equity, el margen
+  consumido y el libre que alimenta el cruzado;
+* el cuerpo de `TE.onCandle` se extrae a `TE._revisaPosicion(candle, p)` y se recorre
+  `TE.posiciones()`: barras, MFE/MAE, **funding**, liquidación, SL/TP, TP escalonado y trailing se
+  juzgan **por dirección**. Con el `if (p)` de antes, la segunda posición habría esperado a la vela
+  siguiente;
+* `closePosition`, `reducePosition`, `addToPosition`, `_updateTrailing`, `_checkTpLevels`,
+  `_ejecutaNivel` y `_hitStop` aceptan **qué** posición: sin eso, cerrar la corta liquidaba la larga;
+* el reduce-only mira `posicionEncontra(side)` —«qué puedo reducir» depende del lado de la orden, no
+  de la posición que esté pintando la tarjeta—.
+
+**El cambio de modo obedece a la regla medida** (§13): `TE.setPosicionModo` rechaza con
+`code: 200014` mientras haya posición *u orden pendiente*, y `App.setPosicionModo` devuelve el
+segmentado al modo real, porque un control que queda marcando un modo que la cuenta no tiene hace
+operar al usuario con la falsa seguridad de estar en hedge.
+
+**`tradeSide` en la orden.** Con hedge activo el formulario ofrece «Abrir | Cerrar» (en one-way se
+oculta: allí la orden contraria ya reduce). `Abrir` en el lado contrario abre su propia posición;
+`Cerrar` se deriva a la vía reduce-only, que ya impedía aumentar por accidente —en la API es
+`tradeSide: CLOSE` con `positionId`—, y un límite o una trigger con `Cerrar` quedan colocados como
+reduce-only. El `size` de un CLOSE es la **cantidad que se cierra**, no un sí/no.
+
+**El fallo gordo lo cazó la suite, no la lectura del código.** `App.placeOrder` tenía el atajo de
+*invertir*: pedir el lado contrario con una posición abierta la cerraba y abría la nueva. En hedge
+ese atajo se comía la segunda pata —pulsar SHORT con una LONG viva cerraba la larga—, así que el
+modo quedaba inoperable desde la interfaz aunque el motor supiera hacerlo. Ahora salta cuando el
+papel es «Abrir» en hedge.
+
+**Dónde vive el control.** La fila de modo y la de papel están **dentro de «Avanzado»**: en Bitunix
+es un ajuste de la cuenta (menú del panel, no entre el precio y el tamaño), y el contrato del
+teléfono exige que el formulario en reposo se vea entero sin deslizar —29 px de fila suelta ya lo
+rompían, que es lo que midió `tests/responsive.test.js`—. La tarjeta de posición, cuando hay dos
+direcciones, gana un conmutador LONG/SHORT y una línea que resume la no mostrada (nada queda
+invisible), el contador de la pestaña cuenta 0/1/2, «Cerrar todo» recorre las dos y
+`CM.setPositionLines` acepta lista para que el gráfico pinte y deje arrastrar los niveles de ambas.
+
+**Dos notas de herramienta**: `element.dataset` **no sobrevive** al puente de `page.evaluate` (se
+serializa como `{}`), hay que leer la cadena dentro de la página; y `setViewport({ isMobile: true })`
+provoca un recargo que con la interceptor de red de las suites cuelga el navegador —se cambia solo
+de tamaño—. En `serialize` el modo tiene que viajar **dentro de `state`**: puesto al lado de
+`position` hacía que `restore` lo ignorara y la partida volviera a one-way con dos posiciones
+colgando (así lo pilló el bloque G de la suite).
