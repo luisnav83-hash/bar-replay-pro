@@ -65,12 +65,15 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       trigVisible: getComputedStyle(document.getElementById('trigRow')).display !== 'none',
       limVisible: getComputedStyle(document.getElementById('limitRow')).display !== 'none',
       effVisible: getComputedStyle(document.getElementById('effectRow')).display !== 'none',
+      trailVisible: getComputedStyle(document.getElementById('trailPctRow')).display !== 'none',
       validez: [...document.querySelectorAll('#ordEffect option')].map((o) => o.value),
     };
   });
-  ok(a.tipos.join(',') === 'market,limite,trigger', `el selector ofrece Mercado, Límite y Trigger (${a.tipos.join(' · ')})`);
-  ok(a.textos.every((t) => /Mercado|Límite|Trigger/.test(t)), `los rótulos son legibles: ${a.textos.join(' / ')}`);
-  ok(!a.trigVisible && !a.limVisible && !a.effVisible, 'en modo Mercado no sobra ninguna fila condicional (ni la de validez)');
+  ok(a.tipos.join(',') === 'market,limite,trigger,trailing',
+    `el selector ofrece los cuatro tipos de la API (F1: Limit · Market · Trigger · Trailing Stop): ${a.tipos.join(' · ')}`);
+  ok(a.textos.every((t) => /Mercado|Límite|Trigger|Trailing/.test(t)), `los rótulos son legibles: ${a.textos.join(' / ')}`);
+  ok(!a.trigVisible && !a.limVisible && !a.effVisible && !a.trailVisible,
+    'en modo Mercado no sobra ninguna fila condicional (ni la de validez ni la del retroceso)');
   ok(a.validez.join(',') === 'GTC,IOC,FOK,POST_ONLY', `la validez ofrece las cuatro de la API: ${a.validez.join(' · ')}`);
 
   /* ═════════ B) Cambiar a Trigger muestra disparo, ejecución y validez ═════════ */
@@ -100,8 +103,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.keyboard.press('KeyT');
   await espera(160);
   const c2 = await page.evaluate(() => App.orderType);
-  ok(c1 === 'market', `desde Trigger, T vuelve a Mercado (ciclo, no interruptor de dos posiciones): «${c1}»`);
-  ok(c2 === 'limite', `y la siguiente pulsación es Límite: «${c2}»`);
+  ok(c1 === 'trailing', `desde Trigger, T pasa a Trailing —el orden del selector, no un interruptor de dos—: «${c1}»`);
+  ok(c2 === 'market', `y la siguiente cierra el ciclo de cuatro volviendo a Mercado: «${c2}»`);
   await page.click('#segOrderType [data-otype="trigger"]');
   await espera(160);
 
@@ -265,13 +268,13 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
       base,
       dx: dx(),
       segDx: seg.scrollWidth - seg.clientWidth,
-      botones: [...seg.querySelectorAll('.seg-btn')].map((x) => ({ t: x.textContent.trim(), visible: x.clientWidth > 0 && x.getBoundingClientRect().width > 0 })),
+      botones: [...seg.querySelectorAll('.seg-btn')].map((x) => ({ t: x.textContent.trim(), visible: x.clientWidth > 0 && x.getBoundingClientRect().width > 0, w: x.clientWidth })),
     };
   });
   ok(i2.segDx !== null && i2.dx <= i2.base,
     `a 390 px la tarjeta con las filas visibles no desborda más que con ellas ocultas (${i2.base} → ${i2.dx} px)`);
-  ok(i2.segDx <= 0 && i2.botones.length === 3 && i2.botones.every((x) => x.visible),
-    `los tres tipos caben y se pueden pulsar en el teléfono (Δ ${i2.segDx} px; ${i2.botones.map((x) => x.t).join(' / ')})`);
+  ok(i2.segDx <= 0 && i2.botones.length === 4 && i2.botones.every((x) => x.visible && x.w >= 24),
+    `los cuatro tipos caben y se pueden pulsar en el teléfono (Δ ${i2.segDx} px; anchos ${i2.botones.map((x) => x.w.toFixed(0)).join('/')} px; ${i2.botones.map((x) => x.t).join(' / ')})`);
   await page.setViewport({ width: 1360, height: 900 });
   await espera(250);
   ok(errs.length === 0, `sin errores de JavaScript en toda la sesión de clics (${errs.length})${errs.length ? ' → ' + errs.slice(0, 2).join(' ⧸ ') : ''}`);

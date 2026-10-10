@@ -1389,6 +1389,14 @@ kbd {
   /* Las cuatro filas de arriba del formulario, al mínimo que sigue siendo pulsable
      (22-28 px de diana, como en Bitunix): es lo que devuelve 40 px al gráfico. */
   #orderCard .bf-margin-row { min-height: 22px; }
+  /* Con CUATRO tipos en el selector (F1: Mercado · Límite · Trigger · Trailing) la fila ya no cabe
+     a 390 px: medidos, los cuatro botones desbordaban 35 px el segmentado compartido con «% equity».
+     Se quita el glifo (es adorno; la palabra es lo que informa) y se aprieta el padding SOLO en ese
+     segmentado, en vez de acortar los nombres o de gastar una línea más —una línea más rompería el
+     contrato de «el formulario en reposo se ve entero» que miden responsive/plantillas—. El emoji
+     sigue estando en `textContent`, así que las pruebas que comparan rótulos no se enteran. */
+  #orderCard #segOrderType .ic { display: none; }
+  #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
   #orderCard .field { min-height: 26px; }
   #orderCard .field input { height: 24px; }

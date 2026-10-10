@@ -1316,7 +1316,143 @@
     return orden;
   };
 
+  /**
+   * Orden TRAILING STOP (F1: el cuarto tipo del selector de órdenes —Limit · Market · Trigger ·
+   * Trailing Stop—). Es una trigger cuyo nivel de disparo NO es fijo: sigue el precio favorable a
+   * una distancia dada (`callbackPct`, el «retroceso») y se ejecuta cuando el precio retrocede esa
+   * distancia desde el extremo alcanzado. La activación es OPCIONAL (sin ella el pico arranca en
+   * el precio de colocación), y esa es la diferencia con 🌀 Trailing sobre una posición abierta:
+   * esto se coloca sin posición.
+   *
+   * Se coloca en GTC y no admite ejecución límite: un stop se ejecuta al mejor precio disponible
+   * tras el retroceso; exigirle `POST_ONLY` o un precio límite sería inventarse una regla que la
+   * API no tiene.
+   */
+  TE.placeTrailing = function (side, params) {
+    const s = TE.state;
+    const p = params || {};
+    const pct = +p.callbackPct;
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      U.toast('Retroceso no válido: indica un % entre 0 y 100', 'err');
+      return null;
+    }
+    if (p.reduceOnly && !TE.posicionEncontra(side)) {
+      U.log('🚫 Trailing reduce-only descartado: no hay posición en el lado contrario que cerrar.', 'warn');
+      U.toast('Reduce-only: no hay posición que cerrar', 'warn', 3200);
+      return null;
+    }
+    const act = +p.activation;
+    const conAct = Number.isFinite(act) && act > 0;
+    const ref = s.lastPrice;
+    const orden = {
+      id: ++s.seq, tipo: 'trailing', side,
+      callbackPct: pct,
+      triggerPrice: conAct ? act : 0,           // 0 = sin precio de activación
+      src: p.src === 'mark' ? 'mark' : 'last',
+      armado: !conAct,                          // sin activación, el seguimiento empieza ya
+      pico: conAct ? act : (Number.isFinite(ref) ? ref : null),
+      modo: p.mode || 'pct', size: +p.size || 0,
+      leverage: Math.max(1, +(p.leverage || s.leverage || 1)),
+      feePct: p.feePct !== undefined ? +p.feePct : s.feePct,
+      reduceOnly: !!p.reduceOnly,
+      creada: p.time || s.lastTime, estado: 'en espera', efecto: 'GTC',
+      refPrice: ref,
+    };
+    if (orden.pico === null) {
+      U.toast('Sin precio de referencia no se puede colocar un trailing: el pico necesita un punto de partida', 'err');
+      return null;
+    }
+    s.pending.push(orden);
+    TE._actualizaTrailingOrden(orden);
+    U.log(`🌀 Orden TRAILING ${side === 'long' ? 'de COMPRA' : 'de VENTA'}: retroceso ${U.num(pct, 2)} % `
+          + `desde el pico (ahora ${U.fmtPrice(orden.pico)}) · dispara en ${U.fmtPrice(orden.nivel)}`
+          + (conAct ? ` · activación en ${U.fmtPrice(act)} contra ${orden.src === 'mark' ? 'MARK price' : 'last price'}`
+                     : ' · sin activación: sigue el precio desde ya')
+          + `${orden.reduceOnly ? ' · reduce-only' : ''}. Mientras espera NO reserva margen.`, 'sys');
+    TE._emit();
+    return orden;
+  };
+
+  /** Nivel de disparo que le corresponde a una orden trailing con el pico conocido. */
+  TE._actualizaTrailingOrden = function (o) {
+    const dir = o.side === 'long' ? 1 : -1;
+    o.nivel = o.pico * (1 - dir * o.callbackPct / 100);
+    if (!Number.isFinite(o.nivel) || o.nivel <= 0) o.nivel = null;
+    const ref = TE.state.lastPrice;
+    o.distPct = o.nivel !== null && ref ? ((o.nivel - ref) / ref) * 100 : null;
+    return o;
+  };
+
+  /**
+   * Evalúa una orden TRAILING en esta vela. Devuelve true si se ejecutó (y desaparece del libro).
+   * Las dos reglas heredadas del trailing de posición son las que hacen honesto el resultado:
+   *   · el nivel se mide contra el pico conocido ANTES de esta vela —una vela no puede disparar un
+   *     nivel que ella misma acaba de crear, porque OHLC no dice el orden real entre high y low—;
+   *   · el pico solo se mueve al CERRAR la vela, con su extremo favorable.
+   * Y una tercera: si aún no estaba armado, la activación se detecta DENTRO de la vela y el pico
+   * arranca en el propio precio de activación (no en el extremo de esa vela).
+   */
+  TE._checkTrailing = function (candle, o, i) {
+    const s = TE.state;
+    const dir = o.side === 'long' ? 1 : -1;
+    const arriba = Math.max(candle.open, candle.close), abajo = Math.min(candle.open, candle.close);
+    if (!o.armado) {
+      const tocado = o.src === 'mark'
+        ? (dir === 1 ? arriba >= o.triggerPrice : abajo <= o.triggerPrice)
+        : (dir === 1 ? candle.high >= o.triggerPrice : candle.low <= o.triggerPrice);
+      if (!tocado) return false;
+      o.armado = true;
+      o.pico = o.triggerPrice;                       // ver el comentario de la función
+    }
+    TE._actualizaTrailingOrden(o);
+    const nivel = o.nivel;
+    const disparado = nivel !== null && (dir === 1 ? candle.low <= nivel : candle.high >= nivel);
+    if (disparado) {
+      s.pending.splice(i, 1);                        // el trailing muere al disparar: no se recoloca
+      const precio = TE._fillTrailing(candle, nivel, o.side);
+      const aviso = `🌀 Trailing: retroceso de ${U.num(o.callbackPct, 2)} % desde el pico ${U.fmtPrice(o.pico)}`;
+      let res = null;
+      if (o.reduceOnly) {
+        res = TE._reduceOnly(o.side, { mode: o.modo, size: o.size, entryPrice: precio, time: candle.time,
+          reason: 'trail', reduceOnly: true });
+        U.log(res ? aviso + ` · disparado en ${U.fmtPrice(nivel)}: se CIERRA la posición contraria a ${U.fmtPrice(precio)}`
+                   : aviso + ` · disparado en ${U.fmtPrice(nivel)} y retirado: no había posición contraria que cerrar`,
+            res ? 'ok' : 'bad');
+      } else {
+        res = TE.openPosition(o.side, { mode: o.modo, size: o.size, entryPrice: precio,
+          leverage: o.leverage, feePct: o.feePct, time: candle.time, origin: 'trailing' });
+        if (res) {
+          res.filledAtTime = candle.time;
+          U.log(aviso + ` · disparado en ${U.fmtPrice(nivel)}: abierto ${o.side === 'long' ? 'LONG' : 'SHORT'} a ${U.fmtPrice(precio)}`, 'ok');
+        } else {
+          U.log(aviso + ` · disparado en ${U.fmtPrice(nivel)} y cancelado: al disparar no cabía por margen `
+            + `o por posición ya abierta (un trailing no reserva margen mientras espera)`, 'bad');
+          U.toast('El trailing se alcanzó pero no pudo ejecutarse', 'warn', 4200);
+        }
+      }
+      if (res && TE.onFill && !o.reduceOnly) TE.onFill(res, o);
+      if (res) { U.playSound('open'); TE._emit(); return true; }
+      TE._emit();
+      return false;
+    }
+    // El pico se mueve con el extremo favorable de la vela que se acaba de cerrar.
+    const favor = dir === 1 ? candle.high : candle.low;
+    if (dir === 1 ? favor > o.pico : favor < o.pico) { o.pico = favor; o.vezMovido = candle.time; }
+    TE._actualizaTrailingOrden(o);                   // nivel y `distPct` para el panel
+    return false;
+  };
+
   /** ¿Qué precio de relleno tiene una trigger ejecutada a mercado dentro de esta vela? */
+  /* El trailing cruza su nivel EN CONTRA del movimiento que sigue: una COMPRA tiene el nivel por
+     debajo del pico y solo se ejecuta si el precio CAE hasta él. Reutilizar `_fillTrigger` salía
+     mal —su pesimismo está calculado para un cruce ascendente y rellenaba en la apertura de una
+     vela que había abierto POR ENCIMA del nivel, cobrando 101,20 donde el stop estaba a 99,47—.
+     Aquí el precio honesto es el nivel, y solo la apertura si la vela abrió más allá (hueco): en
+     ese caso el stop se habría ejecutado en la apertura y no se le puede regalar el nivel. */
+  TE._fillTrailing = function (candle, nivel, side) {
+    return side === 'long' ? Math.min(nivel, candle.open) : Math.max(nivel, candle.open);
+  };
+
   TE._fillTrigger = function (candle, trig, side) {
     // Modo pesimista, coherente con el resto del motor: con OHLC no se sabe en qué punto de la vela
     // se cruzó el trigger, así que se rellena al PEOR precio plausible de la vela (una compra no
@@ -1453,9 +1589,11 @@
     // El tipo va en el aviso: cancelar una trigger no ha liberado margen ninguno (no reservaba),
     // y decir «orden límite» en el registro haría que quien repase la sesión crea que sí.
     const esTrig = o.tipo === 'trigger';
-    U.log(`🚫 Orden ${esTrig ? 'TRIGGER' : 'límite'} cancelada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ` +
-      `${U.fmtPrice(esTrig ? o.triggerPrice : o.limitPrice)}` +
-      (esTrig ? ' (no había reservado margen: se cancela sin más)' : ''), 'warn');
+    const esTrail = o.tipo === 'trailing';
+    U.log(`🚫 Orden ${esTrig ? 'TRIGGER' : esTrail ? 'TRAILING' : 'límite'} cancelada: ` +
+      `${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(esTrail ? o.nivel : esTrig ? o.triggerPrice : o.limitPrice)}` +
+      (esTrail ? ` (retroceso ${U.num(o.callbackPct, 2)} % desde el pico ${U.fmtPrice(o.pico)}; tampoco había reservado margen)`
+        : esTrig ? ' (no había reservado margen: se cancela sin más)' : ''), 'warn');
     U.playSound('close');
     TE._emit();
     return true;
@@ -1475,7 +1613,7 @@
   TE.pendingCount = function () { return TE.state.pending.length; };
   /** Cuántas pendientes son de cada tipo, para la pestaña de órdenes y para los tests. */
   TE.pendingPorTipo = function () {
-    const out = { limite: 0, trigger: 0 };
+    const out = { limite: 0, trigger: 0, trailing: 0 };
     for (const o of TE.state.pending) if (out[o.tipo] !== undefined) out[o.tipo]++;
     return out;
   };
@@ -1504,6 +1642,7 @@
     for (let i = s.pending.length - 1; i >= 0; i--) {
       const o = s.pending[i];
       if (o.tipo === 'trigger') { TE._checkTrigger(candle, o, i); continue; }
+      if (o.tipo === 'trailing') { TE._checkTrailing(candle, o, i); continue; }
       // Con una posición abierta los órdenes ESPERAN, salvo que sean del mismo
       // lado y el promediado esté activo: en ese caso se ejecutan y AÑADEN a la
       // posición (así funciona «Add position» con orden límite en Bitunix).

@@ -188,7 +188,7 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
 | Funding cada **8 h** a 00/08/16 UTC, **largo paga / corto cobra** | `%` por vela y cobra a ambos lados | **implantar** el modelo real; el signo por lado es un defecto que se corrige |
 | `reduceOnly` | no existe | **implantar** en la orden y en el cierre |
 | `Close` por % y **`Close All`** a mercado en la fila de posición | atajo `C` (50 %) y «Cerrar todo» en la carta | **ajustar** nombres y que `Close All` sea a mercado explícito |
-| **Trailing** con precio de activación y retroceso **Ratio o Interval** | trailing por % con activación por beneficio | **ampliar** al modo intervalo |
+| **Trailing** con precio de activación y retroceso **Ratio o Interval** | **hecho en los dos sitios**: trailing de posición (§ previos) y **trailing como cuarto tipo de orden** con activación opcional y retroceso en % (§17) | falta el retroceso en **Intervalo** (importe), que aquí equivale a Ratio con otra unidad |
 | **Account TP/SL** (toda la cuenta, por importe o %) | **hecho** (§16): `TE.state.tpslCuenta` + `_revisaCuenta` en `onCandle`, ajuste en la tarjeta de posición | — |
 | **Partial TP/SL** con % por nivel | TP escalonado (`addTpLevel(price, pct)`) ✓ | ya está; falta el **deslizador de retorno** del panel de posición |
 | Modo **hedge** (`ONE_WAY`/`HEDGE`, `tradeSide`, `positionId`) | ~~una sola posición~~ **hecho en la capa 4** (§15): `state.posiciones` por dirección, `setPosicionModo` con la regla 200014 y `tradeSide` OPEN\|CLOSE en el formulario | — |
@@ -210,11 +210,14 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
   todo»/«Cerrar %» en la carta de posición con los nombres de F2. **Verificación:** suite de
   navegador sobre el archivo único, manejando solo la UI (como las demás). **✅ Capa 2 implementada y verde: 33 comprobaciones en `tests/formulario.test.js**, que pulsa el
  formulario y lee el estado resultante —sin llamar al motor para «ayudar» a pasar—.
-3. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
+3. **Capa 3b — el trailing como orden (F1).** Cuarto botón en el selector con activación opcional y
+  retroceso en %, persiguiendo el pico de las velas cerradas. **✅ Implementada: `tests/trailing-orden.test.js`,
+  77 comprobaciones de motor y de navegador. Ver §17.**
+4. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
   o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección. **✅ Hecho el Account
   TP/SL** (`tests/cuenta-tpsl.test.js`, 66 comprobaciones; ver §16). Queda el *sizing* por riesgo
   (F223/225), que es otra pieza: el formulario hoy deriva el tamaño del capital, no del riesgo.
-4. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
+5. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
   cambiar el modelo de «una posición» a «posiciones por lado» en motor, cartas, historial y PnL.
   **✅ Implementada: `tests/hedge.test.js`, 74 comprobaciones de motor y de navegador. Ver §15.**
 
@@ -262,14 +265,18 @@ Números de referencia de la suite (capital 10 000, long 100 %, 10×, entrada 10
 qty 1 000, nivel 2, MM 500): liquidación aislada **90,50**; a 90,40 `disponible 400 < mant. 500` (con
 `Margin Rate` pintado en 0,5525 % > MMR 0,5 %); PnL de liquidación **−9 690,50** y saldo **309,50** —
 queda el mantenimiento, no se va a cero—; funding al 0,01 % = **10 USDT** por liquidación.
+4. **El `max/min(open, nivel)` de arriba es para un cruce ASCENDENTE** (una trigger de compra que se
+   dispara al subir). Reutilizado en un trailing de compra —cuyo nivel está por DEBAJO y se cruza al
+   bajar— cobraba la apertura de la vela (101,20) en vez del nivel del stop (99,47): un precio que el
+   mercado ya había dejado de ofrecer. De ahí `TE._fillTrailing`, que es su espejo (§17).
 
 ## 14 · Capa 2: el formulario expone el motor
 
 Qué se añadió y con qué criterio de fidelidad:
 
-* **Tercer tipo en el selector**: ⚡ Mercado · ⏳ Límite · **🎯 Trigger** (F1 lista Limit, Market,
-  Trigger y Trailing Stop; el *trailing* como orden propia queda para el siguiente bloque porque el
-  motor aún no acepta `callbackRate` en una orden y no se pinta un control que no funcione).
+* **Tres tipos en el selector al cerrar esta capa**: ⚡ Mercado · ⏳ Límite · **🎯 Trigger** (F1 lista
+  cuatro; el *trailing* no se pintó aquí porque el motor aún no lo aceptaba como orden —«no se pinta un
+  control que no funcione»— y entró en el bloque siguiente, §17, donde ya es el cuarto botón).
 * **Filas separadas para «contra qué se comprueba» y «qué se hace al disparar»** (`MARK|LAST` y
   `MERCADO|LÍMITE`), porque en la API son campos distintos (`tpStopType` frente a `tpOrderType`) y
   confundirlos es el error clásico del TP/SL «ejecutado a precio de trigger».
@@ -383,3 +390,60 @@ ya estaban). Implementado así, sin inventar:
 Nota del arnés: para provocar el disparo en el navegador la suite **elige el lado mirando la vela que
 sigue en la serie cargada y avanza el replay con ▶▶**; así lo produce el mercado simulado, no una
 llamada al motor desde el test.
+
+## 17 · El trailing como cuarto tipo de orden (F1)
+
+F1 enumera cuatro tipos en el panel de futuros: **Limit · Market · Trigger · Trailing Stop**. El
+selector tenía tres. Ahora tiene cuatro, y el cuarto es una orden con su propia semántica en el motor
+(`TE.placeTrailing`), no un adorno del formulario.
+
+**Qué campos pide.** Retroceso desde el pico en % (`#trailPctInput`) —es lo único que define al tipo,
+así que sin él la orden no se coloca y el foco se va al campo—, y precio de activación **opcional**
+(reutiliza `#trigInput` y los conmutadores `LAST|MARK`, reetiquetados a «Precio de activación
+(opcional)»). Lo que **no** pide: ejecución límite (un stop es a mercado; el bloque `MERCADO|LÍMITE` y
+`#trigLimitRow` se ocultan) ni validez (se fuerza `GTC` y el `<select>` queda `disabled`, pero la fila
+no desaparece porque en ella vive «Solo reducir», que en un stop de cierre sí aplica). `T` recorre los
+cuatro en el orden del selector.
+
+**Las tres reglas que lo hacen honesto** (las comprueba la suite una por una, con velas diseñadas para
+tocar o no tocar el nivel):
+
+1. **El nivel se mide contra el pico conocido ANTES de esta vela.** Una vela con `high 105` y
+   `low 97` no puede disparar contra `105·0,98 = 102,9`: con OHLC no se sabe si el máximo pasó antes
+   o después del mínimo, y asumir que pasó antes es inventarse un relleno favorable. Se usa el pico
+   viejo (98) y se rellena ahí.
+2. **El pico solo avanza al cerrar la vela** (`favor = high` en una compra, `low` en una venta), y el
+   nivel **nunca se aleja** del precio: en una compra solo sube, en una venta solo baja.
+3. **Con activación, la vela que arma no puede disparar.** Dentro de esa vela el nivel sale de la
+   propia activación (`110·0,98 = 107,8`); el `high` de esa vela pasa a ser el pico al cerrarla, de
+   modo que el nivel se actualiza a 108,29 *después* de la decisión. `MARK` y `LAST` se comportan
+   distinto ante una mecha, igual que en el trailing de posición: es el mismo criterio a propósito.
+
+**Dónde se rellena.** `TE._fillTrailing`: `min(nivel, open)` al comprar, `max(nivel, open)` al vender
+—el espejo de `TE._fillTrigger`, que está calculado para un cruce ascendente y rellenaba un stop de
+compra en la apertura de una vela que había abierto por encima del nivel (§12, regla 4). Con hueco más
+allá del nivel, el stop entra en la apertura, que es lo que habría pasado de verdad.
+
+**Margen y libro.** Como la trigger, **no reserva margen** mientras espera (se comprueba con el balance
+inmóvil) y puede **fallar al ejecutarse** por no caber el tamaño o por haber ya posición: se retira y lo
+avisa, no se queda esperando otra oportunidad —un trailing **muere al disparar**, no se recoloca—. En el
+libro de pendientes se pinta el **nivel actual** (`o.nivel`), no la activación, porque el que fija la
+ejecución es el nivel y cambia con cada vela; el `eta` dice «pico X · retrocede Y % y se ejecuta» o
+«espera la activación en Z», y el contador por tipo (`TE.pendingPorTipo().trailing`) lo cuenta aparte.
+
+**Un detalle de la réplica que costó medir.** Con cuatro botones, el segmentado de tipo desbordaba 35 px
+el contenedor a 390 px (los `1fr` de `.seg` son `minmax(AUTO,1fr)` y no dejan bajar del min-content, y la
+línea la comparte con «% equity · USD · Qty»). Se resolvió en el teléfono con `#segOrderType .ic { display:none }`
+y `padding: 0 2px; font-size: 9px`, no acortando los nombres ni gastando una línea más —una línea más
+vuelve a romper el contrato de «el formulario en reposo se ve entero» que miden `responsive` y
+`plantillas`—. El emoji sigue en `textContent`, así que las pruebas de rótulos no se enteran.
+
+**Lo que se deja de hacer, dicho claro.** El retroceso en **Intervalo** (importe absoluto en vez de %)
+no está: equivale a Ratio con otra unidad y añade un conmutador al que la API llama `callbackRateType`,
+pero no cambia ninguna regla de ejecución. Y el trailing de orden **no** dibuja todavía su línea en el
+gráfico (las de límite y trigger sí se pintan); la lista de pendientes es el sitio donde se ve su nivel.
+
+Arnés: `tests/trailing-orden.test.js` — 56 comprobaciones de motor (vm, sin navegador) y 21 de
+interfaz sobre el archivo único, disparando el relleno con ▶▶ y datos reales en lugar de llamando al
+motor desde el test. Batería completa tras este bloque: **29 suites · 1599 comprobaciones · 0 fallidas ·
+0 omitidas** (la única sin contador propio es `test:single`, por diseño).

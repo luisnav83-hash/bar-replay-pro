@@ -42,6 +42,7 @@
     "test:promediar": "node tests/promediar.test.js",
     "test:plantillas": "node tests/plantillas.test.js",
     "test:trailing": "node tests/trailing.test.js",
+    "test:trailing-orden": "node tests/trailing-orden.test.js",
     "test:bitunix": "node tests/bitunix.test.js",
     "test:pnl": "node tests/pnl-chart.test.js"
   },

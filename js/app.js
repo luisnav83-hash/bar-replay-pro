@@ -770,6 +770,7 @@
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
     if (App.orderType === 'limite') return App.placeLimitOrder(side);
     if (App.orderType === 'trigger') return App.placeTriggerOrder(side);
+    if (App.orderType === 'trailing') return App.placeTrailingOrder(side);
 
     const price = App.currentPrice();
     if (!price) { U.toast('No hay vela actual', 'err'); return; }
@@ -841,6 +842,41 @@
    * puede no rellenarse nunca. Si al disparar no cabe el tamaño, la orden se rechaza EN ESE MOMENTO
    * (comportamiento del exchange, no un fallo del simulador).
    */
+  App.placeTrailingOrder = function (side) {
+    if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
+    const ref = App.currentPrice();
+    if (!ref) { U.toast('No hay vela actual', 'err'); return null; }
+    const pctEl = document.getElementById('trailPctInput');
+    const pct = parseFloat(pctEl ? pctEl.value : '');
+    if (!Number.isFinite(pct) || pct <= 0) {
+      U.toast('Un trailing necesita su retroceso (%): sin él no hay distancia que seguir', 'err', 4200);
+      if (pctEl) pctEl.focus();
+      return null;
+    }
+    const actEl = document.getElementById('trigInput');
+    const bruto = actEl ? parseFloat(actEl.value) : NaN;
+    const act = Number.isFinite(bruto) && bruto > 0 ? bruto : null;   // opcional, a diferencia de la trigger
+    const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
+    if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
+    const ro = document.getElementById('ordReduceOnly');
+    const orden = TE.placeTrailing(side, {
+      activation: act, callbackPct: pct,
+      src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
+      mode: App.sizeMode, size: sizeVal,
+      leverage: TE.state.leverage, feePct: TE.state.feePct,
+      reduceOnly: !!(ro && ro.checked),
+      time: App.currentTime(),
+    });
+    if (orden) {
+      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App.refreshOrderLines();
+      UI.refreshAll();
+      U.toast(`🌀 Trailing colocado: retrocede ${U.num(pct, 2)} % desde el pico`
+        + (act ? ` · activación en ${U.fmtPrice(act)}` : ' · sigue el precio desde ya'), 'ok', 3600);
+    }
+    return orden;
+  };
+
   App.placeTriggerOrder = function (side) {
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return null; }
     const ref = App.currentPrice();

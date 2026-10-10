@@ -434,9 +434,10 @@
              su fila propia porque solo aparece en modo «Límite». -->
         <div class="ord-segs">
           <div class="seg seg-order" id="segOrderType" role="group" aria-label="Tipo de orden">
-            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)">⚡ Mercado</button>
-            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)">⏳ Límite</button>
-            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda.">🎯 Trigger</button>
+            <button class="seg-btn active" data-otype="market" title="Se ejecuta ahora mismo, al precio actual (B / S)"><i class="ic">⚡</i>Mercado</button>
+            <button class="seg-btn" data-otype="limite" title="Queda en espera y se ejecuta sola cuando el precio llegue al nivel (Mayús+B / Mayús+S)"><i class="ic">⏳</i>Límite</button>
+            <button class="seg-btn" data-otype="trigger" title="Espera un precio de ACTIVACIÓN y al tocarlo entra a mercado o como límite. No reserva margen mientras aguarda."><i class="ic">🎯</i>Trigger</button>
+            <button class="seg-btn" data-otype="trailing" title="Sigue el precio favorable y se ejecuta al retroceder un % desde el pico. La activación es opcional y tampoco reserva margen."><i class="ic">🌀</i>Trailing</button>
           </div>
           <div class="seg" id="segSize" role="group" aria-label="Unidad del tamaño">
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
@@ -472,7 +473,7 @@
              garantiza el precio de relleno. Solo se muestra con el tipo «🎯 Trigger». -->
         <div id="trigRow" style="display:none">
           <label class="field full">
-            <span class="field-label">Precio de activación</span>
+            <span class="field-label" id="lbTrigAct">Precio de activación</span>
             <span class="input-row">
               <input type="number" id="trigInput" step="any" placeholder="ej. 64000">
               <span class="suffix">USD</span>
@@ -498,6 +499,17 @@
             <label class="field full">
               <span class="field-label">Precio de ejecución (límite)</span>
               <span class="input-row"><input type="number" id="trigLimitInput" step="any" placeholder="por defecto, el propio nivel de activación"><span class="suffix">USD</span></span>
+            </label>
+          </div>
+          <!-- RETROCESO del trailing (solo en el cuarto tipo): sin activación el pico arranca en
+               el precio de colocación; con ella, en la activación. -->
+          <div id="trailPctRow" style="display:none">
+            <label class="field full">
+              <span class="field-label">Retroceso desde el pico (%)</span>
+              <span class="input-row">
+                <input type="number" id="trailPctInput" step="any" min="0" placeholder="ej. 2">
+                <span class="suffix">%</span>
+              </span>
             </label>
           </div>
           <div class="hint" id="trigHint">La orden no reserva margen mientras espera: si al dispararse no cabe el tamaño, se rechaza.</div>

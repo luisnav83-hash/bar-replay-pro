@@ -258,6 +258,8 @@
     {
       const ti = document.getElementById('trigInput');
       if (ti) ti.addEventListener('input', () => UI.updateTriggerHint());
+      const tp = document.getElementById('trailPctInput');
+      if (tp) tp.addEventListener('input', () => UI.updateTriggerHint());
     }
     // Atajos rápidos de precio límite (% respecto al precio actual)
     document.querySelectorAll('#quickLimit .chip').forEach((c) => {
@@ -682,27 +684,47 @@
 
   /** Cambia entre orden a mercado (⚡) y orden límite (⏳). */
   UI.setOrderType = function (tipo) {
-    App.orderType = (tipo === 'limite' || tipo === 'trigger') ? tipo : 'market';
+    App.orderType = (tipo === 'limite' || tipo === 'trigger' || tipo === 'trailing') ? tipo : 'market';
     document.querySelectorAll('#segOrderType .seg-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.otype === App.orderType);
     });
     const esLimite = App.orderType === 'limite';
     const esTrigger = App.orderType === 'trigger';
+    const esTrail = App.orderType === 'trailing';
     document.getElementById('limitRow').style.display = esLimite ? '' : 'none';
     // Las dos filas nuevas viven del tipo de orden: la de disparo/ejecución solo tiene sentido en
     // trigger, y la validez aplica a todo lo que puede QUEDAR en espera (límite y trigger-límite).
     const trigRow = document.getElementById('trigRow');
-    if (trigRow) trigRow.style.display = esTrigger ? '' : 'none';
+    // La fila de disparo sirve a los dos tipos condicionales: el trailing también mide su
+    // activación contra LAST o MARK. Lo que no comparte es la ejecución (un stop es a mercado).
+    if (trigRow) trigRow.style.display = (esTrigger || esTrail) ? '' : 'none';
+    const campoExec = document.getElementById('segTrigExec') && document.getElementById('segTrigExec').closest('.field');
+    if (campoExec) campoExec.style.display = esTrail ? 'none' : '';
+    const pctRow = document.getElementById('trailPctRow');
+    if (pctRow) pctRow.style.display = esTrail ? '' : 'none';
+    const lbAct = document.getElementById('lbTrigAct');
+    if (lbAct) lbAct.textContent = esTrail ? 'Precio de activación (opcional)' : 'Precio de activación';
+    const inpAct = document.getElementById('trigInput');
+    if (inpAct) inpAct.placeholder = esTrail ? 'opcional · ej. 64000' : 'ej. 64000';
     const effRow = document.getElementById('effectRow');
-    if (effRow) effRow.style.display = (esLimite || esTrigger) ? '' : 'none';
+    if (effRow) effRow.style.display = (esLimite || esTrigger || esTrail) ? '' : 'none';
+    /* El trailing se coloca en GTC y no admite IOC/FOK/post-only: el conmutador de validez se
+       DESACTIVA en vez de desaparecer, porque en su misma fila vive «Solo reducir», que para un
+       stop de cierre sí aplica. */
+    const selEf = document.getElementById('ordEffect');
+    if (selEf) {
+      selEf.disabled = esTrail;
+      if (esTrail) selEf.value = 'GTC';
+      selEf.title = esTrail ? 'Un stop se coloca en GTC: no admite IOC, FOK ni POST ONLY.' : '';
+    }
     /* Los rótulos miden lo mismo en los tres modos a propósito: `.order-actions` es una rejilla
        `1fr 1fr`, y `1fr` = `minmax(AUTO,1fr)` → un texto más largo ensancha el min-content del
        botón y tira la tarjeta fuera de su propio borde (14 px de desborde medidos así). Lo que
        cambia es el icono, que es lo que se ve de reojo; el tipo elegido ya está en el segmentado. */
     document.getElementById('btnLong').textContent = esLimite ? '⏳ COMPRAR / LONG'
-      : esTrigger ? '🎯 COMPRAR / LONG' : '▲ COMPRAR / LONG';
+      : esTrigger ? '🎯 COMPRAR / LONG' : esTrail ? '🌀 COMPRAR / LONG' : '▲ COMPRAR / LONG';
     document.getElementById('btnShort').textContent = esLimite ? '⏳ VENDER / SHORT'
-      : esTrigger ? '🎯 VENDER / SHORT' : '▼ VENDER / SHORT';
+      : esTrigger ? '🎯 VENDER / SHORT' : esTrail ? '🌀 VENDER / SHORT' : '▼ VENDER / SHORT';
     if (esLimite) {
       const el = document.getElementById('limitInput');
       if (el && !parseFloat(el.value)) {
@@ -711,7 +733,7 @@
       }
       UI.updateLimitHint();
     }
-    if (esTrigger) UI.updateTriggerHint();
+    if (esTrigger || esTrail) UI.updateTriggerHint();
   };
 
   /** Explica qué hará la trigger: contra qué se mide y qué pasa al disparar. */
@@ -720,13 +742,42 @@
     const hint = document.getElementById('trigHint');
     if (!inp || !hint) return;
     const ref = App.currentPrice();
+    const t = App.trigOrder || { src: 'last', exec: 'market' };
+    /* El cuarto tipo comparte la fila de activación pero significa otra cosa: su nivel NO es fijo,
+       lo mueve el pico. Se enseña el nivel DE AHORA, que es lo que hace falta para saber si está
+       cerca, y como el formulario aún no sabe qué botón vas a pulsar se dicen los dos. */
+    if (App.orderType === 'trailing') {
+      const pct = parseFloat((document.getElementById('trailPctInput') || {}).value);
+      if (!Number.isFinite(pct) || pct <= 0) {
+        hint.textContent = 'El retroceso (%) es lo que define este tipo de orden: sin él no hay distancia que seguir.';
+        hint.className = 'hint';
+        return;
+      }
+      const bruto = parseFloat(inp.value);
+      const act = Number.isFinite(bruto) && bruto > 0 ? bruto : null;
+      const pico = act !== null ? act : ref;
+      if (!Number.isFinite(pico) || pico <= 0) {
+        hint.textContent = 'Carga la máquina para poder calcular el nivel del trailing.';
+        hint.className = 'hint';
+        return;
+      }
+      const abajo = pico * (1 - pct / 100), arriba = pico * (1 + pct / 100);
+      hint.textContent = `🌀 Pico ${U.fmtPrice(pico)} · retroceso ${U.num(pct, 2)} %: una COMPRA dispara en `
+        + `${U.fmtPrice(abajo)} (el nivel sube con el pico) y una VENTA en ${U.fmtPrice(arriba)} (baja con él)`
+        + (act !== null ? ` · se arma al tocar la activación ${U.fmtPrice(act)} (contra ${t.src === 'mark' ? 'MARK' : 'LAST'})`
+                        : ' · sin activación: sigue el precio desde ya')
+        + ' · ejecuta a MERCADO y no reserva margen.';
+      hint.className = 'hint';
+      return;
+    }
     const v = parseFloat(inp.value);
     if (!ref || !Number.isFinite(v) || v <= 0) {
       hint.textContent = 'La orden no reserva margen mientras espera: si al dispararse no cabe el tamaño, se rechaza.';
       hint.className = 'hint';
       return;
     }
-    const t = App.trigOrder || { src: 'last', exec: 'market' };
+    // (`t` ya está declarado arriba, antes de la rama de trailing: dos `const` con el mismo nombre
+    // en la misma función rompen el script entero, y eso fue lo que tardó en aparecer aquí.)
     const pct = ((v - ref) / ref) * 100;
     hint.textContent = `${v > ref ? 'Se dispara al SUBIR' : 'Se dispara al BAJAR'} a ${U.fmtPrice(v)} ` +
       `(${U.num(pct, 2)} % desde ${U.fmtPrice(ref)}) · mide el ${t.src === 'mark' ? 'MARK (el cuerpo de la vela: una mecha no la dispara)' : 'LAST (basta con que la mecha toque)'} · ` +
@@ -773,7 +824,8 @@
     if (!ordenes.length) {
       cont.innerHTML = '<div class="hint">No hay órdenes en espera. Con «⏳ Límite» dejas un ' +
         'precio colocado y se ejecuta al tocarlo; con «🎯 Trigger» dejas una condición que, al ' +
-        'dispararse, entra a mercado o coloca un límite (y no reserva margen mientras espera).</div>';
+        'dispararse, entra a mercado o coloca un límite; con «🌀 Trailing» el nivel te sigue '
+        + '(retrocede un % desde el pico). Las tres dejan de reservar margen mientras esperan.</div>';
       return;
     }
 
@@ -783,10 +835,17 @@
       // la TRIGGER (su nivel es solo el DISPARO; la ejecución va aparte y puede ser a mercado).
       // Mezclarlas pintaría `undefined` en el precio o diría «faltan X%» desde el sitio equivocado.
       const esTrig = o.tipo === 'trigger';
-      const nivel = esTrig ? o.triggerPrice : o.limitPrice;
+      const esTrail = o.tipo === 'trailing';
+      // En el trailing el nivel ENSEÑADO es el de disparo de AHORA (se mueve con el pico), no un
+      // precio fijo: pintar `triggerPrice` daría una cifra que ya no es la que manda.
+      const nivel = esTrail ? o.nivel : esTrig ? o.triggerPrice : o.limitPrice;
       const dist = (ref && nivel) ? ((nivel - ref) / ref) * 100 : null;
       let eta;
-      if (dist === null) eta = '';
+      if (esTrail) {
+        eta = o.armado
+          ? `pico ${U.fmtPrice(o.pico)} · retrocede ${U.num(o.callbackPct, 2)} % y se ejecuta`
+          : `espera la activación en ${U.fmtPrice(o.triggerPrice)}`;
+      } else if (dist === null) eta = '';
       else if (esTrig) {
         eta = Math.abs(dist) < 0.0001 ? 'está tocando el nivel ahora mismo'
           : `faltan ${U.num(Math.abs(dist), 2)} % para activarse (${U.fmtPrice(Math.abs(nivel - ref))} USD)`;
@@ -795,14 +854,18 @@
           : (dist > 0 ? `faltan ${U.num(dist, 2)}% al alza (${U.fmtPrice(o.limitPrice - ref)} USD)` : 'se ejecutará en la próxima vela'));
       const sub = `tamaño ${o.size}${o.mode === 'pct' ? '%' : o.mode === 'qty' ? ' uds' : ' USD'}` +
         `${o.sl ? ' · SL ' + U.fmtPrice(o.sl) : ''}${o.tp ? ' · TP ' + U.fmtPrice(o.tp) : ''}`;
-      const meta = esTrig
+      const meta = esTrail
+        ? `retroceso ${U.num(o.callbackPct, 2)} % · ` +
+          (o.triggerPrice > 0 ? `activación por ${o.src === 'mark' ? 'MARK' : 'LAST'} en ${U.fmtPrice(o.triggerPrice)}` : 'sin activación') +
+          ` · ejecuta a MERCADO${o.reduceOnly ? ' · reduce-only' : ''}`
+        : esTrig
         ? `${o.src === 'mark' ? 'dispara por MARK' : 'dispara por LAST'} · ` +
           (o.exec === 'limit' ? `ejecuta como LÍMITE a ${U.fmtPrice(o.limitPrice)} (puede no rellenarse)` : 'ejecuta a MERCADO (entra sí o sí)') +
           `${o.reduceOnly ? ' · reduce-only' : ''}${o.efecto && o.efecto !== 'GTC' ? ' · ' + o.efecto : ''}`
         : `${o.efecto && o.efecto !== 'GTC' ? 'validez ' + o.efecto + ' · ' : ''}${o.reduceOnly ? 'reduce-only · ' : ''}nivel de ejecución`;
-      return `<div class="pending-item ${o.side}${esTrig ? ' trig' : ''}">` +
+      return `<div class="pending-item ${o.side}${esTrig || esTrail ? ' trig' : ''}">` +
         `<div class="pi-head">` +
-          `<span class="pi-side">${esTrig ? '🎯 ' : ''}${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
+          `<span class="pi-side">${esTrail ? '🌀 ' : esTrig ? '🎯 ' : ''}${o.side === 'long' ? '▲ COMPRA' : '▼ VENTA'}</span>` +
           `<b class="pi-price">${U.fmtPrice(nivel)}</b>` +
           `<button class="pi-cancel" data-cancel="${o.id}" title="Cancelar esta orden">✖</button>` +
         `</div>` +
@@ -1078,7 +1141,7 @@
         case 'S': App.placeLimitOrder('short'); break;
         case 't': case 'T': {
           // Los tres tipos del selector, en el mismo orden que en el panel del exchange.
-          const orden = ['market', 'limite', 'trigger'];
+          const orden = ['market', 'limite', 'trigger', 'trailing'];
           UI.setOrderType(orden[(orden.indexOf(App.orderType) + 1) % orden.length]);
           break;
         }
