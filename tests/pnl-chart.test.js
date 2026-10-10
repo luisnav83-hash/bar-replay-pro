@@ -993,8 +993,21 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   }, mideEscalera());
   ok(J2.una.solape === 0 && J2.una.caja === J2.una.fila,
      `a 1440×900 el gráfico deja de rebosar su fila (caja ${J2.una.caja} == fila ${J2.una.fila}, solape ${J2.una.solape}; antes: caja 240 con fila 171 = 69 px encima de la escalera)`);
-  ok(J2.una.apretados.length > 0 && J2.una.apretados.every((x) => Number(x.split(':')[1]) >= J2.min),
-     `los indicadores se APRIETAN en vez de ocultarse (${J2.una.apretados.join(' ')} con suelo de panel en ${J2.min} px)`);
+  // «Los indicadores se aprietan en vez de ocultarse» es un MECANISMO, no un estado. Con la
+  // barra superior fusionada en una sola franja (bloque 14 de css/bitunix.css) la fila del
+  // gráfico ganó 79 px y a 1440×900 ya no hace falta apretar nada —que es lo deseable, no una
+  // regresión—, así que la comprobación se hace donde de verdad aprieta: en una ventana baja,
+  // provocando el caso en vez de depender del alto que salga de la ronda anterior.
+  await page.setViewport({ width: 1440, height: 600, deviceScaleFactor: 1 });
+  await espera(500);
+  const J2b = await page.evaluate((src) => {
+    const g = new Function(src)();
+    return { g, min: PC.MIN_PANE };
+  }, mideEscalera());
+  ok(J2b.g.apretados.length > 0 && J2b.g.apretados.every((x) => Number(x.split(':')[1]) >= J2b.min) && J2b.g.solape === 0,
+     `con la ventana baja los indicadores se APRIETAN en vez de ocultarse (${J2b.g.apretados.join(' ')} · suelo del panel ${J2b.min} px · solape ${J2b.g.solape} px) y a 1440×900 no hacía falta apretar ninguno (${J2.una.apretados.length})`);
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await espera(500);
   ok(J2.una.pnlInline === '', `el panel de PnL no se toca sin arrastre (su style.height está vacío: «${J2.una.pnlInline}») —ese es el que la persona estira`);
   ok(J2.rep === 0 && J2.dos.apretados.join() === J2.una.apretados.join(),
      `el reparto es determinista: repetir no mueve nada (${J2.dos.apretados.join(' ')} vs ${J2.una.apretados.join(' ')}) —antes de ser determinista era un vaivén con el observador`);

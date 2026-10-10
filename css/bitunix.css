@@ -1844,3 +1844,57 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      el suelo sigue en 240, que es donde viven las demás comprobaciones. */
   #chartWrap { min-height: 208px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   14) BARRA SUPERIOR EN UNA FRANJA (≥1360 px de ancho), como la suya.
+   Medido en el sitio a 1600×900: nav de 40 px (y=0..40) y UNA franja de símbolo
+   de 73 px (y=52..100) donde el par vive a la izquierda (x=52..195) y las ocho
+   cifras de 24 h le siguen EN LA MISMA LÍNEA (x=392 · 500 · 611 · 705 · 815 ·
+   920 · 1066 · 1219), cada una con su etiqueta de 12 px arriba (y=64) y su valor
+   de 14 px abajo (y=82). No hay segunda fila de controles ni rótulos encima de
+   cada campo.
+   Aquí la barra eran DOS franjas —la de los controles del replay, 113 px, y la de
+   estadísticas, 42—, y eso era lo primero que se veía al abrir (y le robaba 42 px
+   de alto al gráfico). A partir de 1360 px pasan a una sola: controles y
+   estadísticas comparten línea y los `field-label` de la barra se quitan, porque
+   el sitio no los pone: el botón dice «Cargar datos», las temporalidades dicen
+   «15m» y la fecha se ve en el propio campo.
+   Por debajo de 1360 px manda el tier de ≤1000 px (rejilla de tres filas), que es
+   el que conocen las pruebas de teléfono y de tablet.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1360px) {
+  /* ALTO ENTERO y declarado: con `min-height` la caja quedaba en 95 px y la fila del
+     workspace salía fraccionaria (34px 327.766px 201px 44px), que es lo que rompe por 1 px las
+     comprobaciones de reparto de tests/pnl-chart.test.js («caja 240 == fila 239»). */
+  #topbar { height: 76px; min-height: 0; padding: 5px 10px; align-items: center; }
+  #topbar .brand { min-height: 0; padding: 0 12px 0 0; }
+  /* El grupo de controles se VUELVE TRANSPARENT para el reparto (`display: contents`): así sus
+     hijos son ítems directos de la barra y se pueden ordenar. La primera línea queda como la
+     del sitio —marca · par · las ocho cifras de 24 h · iconos— y el mecanismo del replay
+     (temporalidades, fecha de inicio, cargar/práctica/CSV/demo) baja a una segunda línea fina,
+     que es lo que cuesta 34 px en vez de los 79 que se estaban peleando con las estadísticas:
+     medido, con el grupo entero en la línea 1 las estadísticas saltaban a la 2 y desbordaban por
+     abajo la altura fijada de la barra (stats en y=43..89 con la barra en 76). */
+  #topbar .topbar-group { display: contents; }
+  #topbar .topbar-group > * { order: 9; }
+  #topbar .topbar-group > .par-field { order: 1; padding: 0 10px; }
+  #topbar .topbar-group > *:not(.par-field) { padding: 1px 4px; }
+  #topbar .topbar-right { order: 3; padding: 0 0 0 4px; }
+  /* Las estadísticas dejan de ser una fila de 100 %: se ponen al lado, con su
+     borde izquierdo como separador, y siguen desplazándose en horizontal si el
+     ancho aprieta (así no hay recorte: o caben, o se desplaza —que es lo que
+     hace el sitio con `overflow-x: auto` en su franja—). */
+  /* `flex-basis` tiene que ser CERO y `min-width` cero: con una base de 340 px el reparto
+     completo (marca 200 + controles 900 + estadísticas 340 + iconos 180 = 1620) no cabía en
+     1440 y la franja de estadísticas saltaba a una segunda línea —que es justo lo que se quería
+     quitar—, desbordando por abajo la altura fijada de la barra (medido: stats en y=43..89 con
+     la barra en 76). Con base 0 las estadísticas ocupan lo que sobre y se desplazan por dentro. */
+  #topbar .bf-stats { order: 2; flex: 1 1 0; min-width: 0; width: auto; height: auto; min-height: 0;
+                      border-top: 0; border-left: 1px solid var(--line); background: transparent;
+                      padding-left: 12px; align-items: center; }
+  .bf-stats .bf-stat { padding: 2px 0; }
+  /* Los rótulos encima de los campos solo fuera de esta franja: aquí sobra el
+     contexto (el par, las temporalidades y la fecha se leen solos). */
+  #topbar .field { margin-bottom: 0; }
+  #topbar .field > .field-label { display: none; }
+}

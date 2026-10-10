@@ -1742,6 +1742,21 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   :root { --topbar-h: 74px; --stats-h: 32px; --toolbar-h: 28px; }
   #chartWrap { min-height: 208px; }
 }
+@media (min-width: 1360px) {
+  #topbar { height: 76px; min-height: 0; padding: 5px 10px; align-items: center; }
+  #topbar .brand { min-height: 0; padding: 0 12px 0 0; }
+  #topbar .topbar-group { display: contents; }
+  #topbar .topbar-group > * { order: 9; }
+  #topbar .topbar-group > .par-field { order: 1; padding: 0 10px; }
+  #topbar .topbar-group > *:not(.par-field) { padding: 1px 4px; }
+  #topbar .topbar-right { order: 3; padding: 0 0 0 4px; }
+  #topbar .bf-stats { order: 2; flex: 1 1 0; min-width: 0; width: auto; height: auto; min-height: 0;
+                      border-top: 0; border-left: 1px solid var(--line); background: transparent;
+                      padding-left: 12px; align-items: center; }
+  .bf-stats .bf-stat { padding: 2px 0; }
+  #topbar .field { margin-bottom: 0; }
+  #topbar .field > .field-label { display: none; }
+}
 </style>
 </head>
 <body>
@@ -1807,7 +1822,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   </div>
 
   <div class="topbar-group">
-    <label class="field" title="Par de trading (se descargan velas OHLCV de Binance)">
+    <label class="field par-field" title="Par de trading (se descargan velas OHLCV de Binance)">
       <span class="field-label">Par</span>
       <!-- El <select> sigue siendo la fuente de verdad (lo lee el resto de la app),
            pero se oculta: el usuario elige con el buscador de símbolos. -->

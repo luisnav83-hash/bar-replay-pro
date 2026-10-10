@@ -105,6 +105,13 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       statsEnBarra: dentro('topbar', 'bfStats'),
       statsAltura: g('bfStats') ? Math.round(g('bfStats').getBoundingClientRect().height) : 0,
       statsBajoNav: !!(g('bfStats') && g('tfQuick')) && g('bfStats').getBoundingClientRect().top >= g('tfQuick').getBoundingClientRect().bottom - 1,
+      statsMismaFranja: (() => {
+        const a = g('bfStats'), b = g('btnSymbols');   // el grupo ya no tiene caja: `display: contents`
+        if (!a || !b) return false;
+        const r = a.getBoundingClientRect(), q = b.getBoundingClientRect();
+        return r.top < q.bottom - 4 && r.bottom > q.top + 4;
+      })(),
+      barraAlta: g('topbar') ? Math.round(g('topbar').getBoundingClientRect().height) : 0,
       libroEnColumnaPropia: dentro('bookCol', 'bookCard'),
       ordenEnSidebar: dentro('sidebar', 'orderCard'),
       libroAntesQueOrden: !!(g('bookCard') && g('orderCard')) && (g('bookCard').compareDocumentPosition(g('orderCard')) & Node.DOCUMENT_POSITION_FOLLOWING) > 0,
@@ -142,12 +149,17 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   // estadísticas NO va debajo de los controles —nav 40 px y UNA franja de 73 px con el símbolo
   // a la izquierda (x=52) y las ocho cifras de 24 h en la misma línea (x=392..1430)—. Se exige
   // lo que eso implica: que esté en la misma línea que el par y por debajo del nav.
-  ok(est.statsBajoNav, 'va bajo los controles del par, como en el original');
-  // NOTA (2026-10-10, docs/brecha-visual-bitunix.md §5.1): en el sitio real la fila de
-  // estadísticas NO va debajo de los controles —nav 40 px y UNA franja de 73 px con el símbolo
-  // (x=52) y las ocho cifras de 24 h en la MISMA línea (x=392..1430)—. Fusionarlas es el paso
-  // siguiente; la comprobación de «misma fila» que intentamos aquí se quitó porque, con la
-  // barra todavía en tres filas, solo alteraba la contabilidad de alto del gráfico.
+  // Ojo con esta ancla, que he cambiado dos veces y la segunda es con medición delante: en el
+  // sitio las cifras de 24 h NO van debajo de nada —comparten la franja del símbolo con el par
+  // a la izquierda (par en x=52, estadísticas de x=392 a x=1430, todas a y=64/82)—. Se exige
+  // pues que estén en la barra, por debajo del nav y a la derecha del par; y si el ancho no da
+  // (por debajo de 1360 px) se consiente que bajen a su propia línea, que es el tier ≤1000.
+  // Y el alto de la barra, porque es lo que se fusionó: el sitio dedica 113 px a DOS bandas
+  // (nav 40 + franja del símbolo 73) y nosotros hacemos lo mismo en 76 px de UNA franja, que es
+  // como devuelve los 79 px de gráfico que estaba costeando la barra vieja. Se comprueba el
+  // número y la convivencia en franja, no el orden en el DOM.
+  ok(est.statsMismaFranja, 'las cifras de 24 h comparten franja con los controles del par (medido en el sitio: par en x=52..195 y estadísticas de x=392 a x=1430, todas a y=64/82)');
+  ok(est.barraAlta <= 80 && est.barraAlta >= 60, `barra superior entera: ${est.barraAlta} px de alto (antes 113 en dos filas; el sitio usa 40 de nav + 73 de franja)`);
   // ANCLA RE-ESCRITA el 2026-10-10. Antes afirmaba que «libro y panel de órdenes comparten la
   // columna derecha», que era nuestra estructura vieja y NO la del sitio: medido en su DOM, el
   // libro es una columna propia (x≈1004, 300 px) y el panel de órdenes va a su derecha
