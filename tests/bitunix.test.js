@@ -438,13 +438,21 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     App.placeOrder('long');
     const p = TE.state.position;
     const aislado = TE.liquidationPrice(p);
-    const esperado = p.entryPrice - (p.notional / p.leverage) / p.qty;
+    // F6: se liquida cuando el margen DISPONIBLE (margen − pérdida) baja del mantenimiento, así que
+    // el nivel es entrada − (margen − MM)/qty. Sin restar MM sale un precio MÁS lejano del que da
+    // Bitunix; el assert de abajo deja el término MM a la vista para que no se pierda la diferencia.
+    const mm = TE.liqInfo(p).mantenimiento;
+    const esperado = p.entryPrice - (p.notional / p.leverage - mm) / p.qty;
+    const esperadoSinMM = p.entryPrice - (p.notional / p.leverage) / p.qty;
     document.querySelector('[data-mm="cross"]').click();
     const cruzado = TE.liquidationPrice(TE.state.position);
     return {
       aislado, cruzado, esperado, lado: p.side, lev: p.leverage, entry: p.entryPrice,
       margen: TE.marginOf(p), libre: TE.freeMargin(), qty: p.qty, notional: p.notional,
-      esperadoCruzado: p.entryPrice - (TE.marginOf(p) + TE.freeMargin()) / p.qty,
+      esperadoSinMM,
+      esperadoCruzado: p.entryPrice - (TE.marginOf(p) + TE.freeMargin() - mm) / p.qty,
+      esperadoCruzadoSinMM: p.entryPrice - (TE.marginOf(p) + TE.freeMargin()) / p.qty,
+      mm,
       txtLiq: document.getElementById('posLiq').textContent,
       txtLiqNum: (() => { const m = String(document.getElementById('posLiq').textContent).match(/-?\d[\d,]*\.?\d*/); return m ? Number(m[0].replace(/,/g, '')) : NaN; })(),
       modo: TE.state.marginMode,
@@ -452,7 +460,9 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       margenCuenta: document.getElementById('acMargin').textContent,
     };
   });
-  ok(cerca(liq.aislado, liq.esperado, 0.01), `liquidación AISLADA ${liq.aislado.toFixed(2)} = entrada − margen/qty (${liq.esperado.toFixed(2)})`);
+  ok(cerca(liq.aislado, liq.esperado, 0.01), `liquidación AISLADA ${liq.aislado.toFixed(2)} = entrada − (margen − MM ${liq.mm.toFixed(2)})/qty (${liq.esperado.toFixed(2)})`);
+  ok(Math.abs(liq.aislado - liq.esperadoSinMM) > liq.mm / liq.qty - 0.01,
+    `y está MÁS CERCA de la entrada que el modelo simple sin mantenimiento (${liq.esperadoSinMM.toFixed(2)}): la diferencia es exactamente MM/qty = ${(liq.mm / liq.qty).toFixed(2)}`);
   ok(cerca(liq.cruzado, liq.esperadoCruzado, 0.01), `en CRUZADO ${liq.cruzado.toFixed(2)} = entrada − (margen + libre ${liq.libre.toFixed(0)})/qty (${liq.esperadoCruzado.toFixed(2)})`);
   ok(liq.cruzado < liq.aislado - 1, 'el cruzado aleja la liquidación (es más difícil que te barran, y arriesga toda la cuenta)');
   ok(liq.cruzado > 0 && liq.cruzado < liq.entry, `la liquidación cruzada sigue siendo un precio válido: ${liq.cruzado.toFixed(2)} < entrada ${liq.entry.toFixed(2)}`);

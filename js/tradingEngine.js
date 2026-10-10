@@ -29,7 +29,34 @@
     leverage: 1,
     marginMode: 'cross',     // 'cross' (toda la cuenta) | 'isolated' (solo el margen)
     feePct: 0.1,             // % por lado (apertura y cierre)
-    fundingPct: 0,           // % por vela sobre el notional (opcional)
+    /* FUNDING, como lo liquida Bitunix (docs/estudio-futuros-bitunix.md §3): un % sobre el NOTIONAL,
+       cada 8 h, en las horas UTC 00/08/16 (que son las 08:00/16:00/00:00 UTC+8 de la documentación),
+       y CON SIGNO: con tasa positiva PAGA el largo y COBRA el corto. Lo de antes —un % por vela a
+       los dos lados por igual— no es el mecanismo de ningún perpetuo: un cortos-que-pagan en un día
+       de funding negativo es un error de 2× en el resultado de la sesión.
+       `fundingPct` mantiene el nombre (Ajustes y la sesión guardada lo usan) pero ahora significa
+       «% por liquidación». `fundingCadaHoras` permite 1, que es lo que Bitunix aplica en contratos
+       recién listados o ilíquidos. */
+    fundingPct: 0,
+    fundingCadaHoras: 8,
+    fundingHorasUTC: [0, 8, 16],
+    /* RIESGO POR NIVELES (F6/F6 del estudio):
+         Maintenance Margin = Open Price · Size · MMR
+         Available Margin   = Initial Margin − PnL      (y en cruzado, + margen libre de la cuenta)
+         se liquida cuando Available Margin < Maintenance Margin.
+       La tabla por defecto es la que trae la propia API de Bitunix en `get_position_tiers`. Solo hay
+       DOS filas medidas en la documentación pública: por encima del último `endValue` se conserva la
+       última tasa (más honesto que inventarse tramos) y se señala con `fueraDeTabla`. Poner
+       `niveles: null` vuelve al modelo simple sin margen de mantenimiento. */
+    niveles: [
+      { level: 1, startValue: 0, endValue: 50000, leverage: 125, maintenanceMarginRate: 0.004 },
+      { level: 2, startValue: 50000, endValue: 200000, leverage: 100, maintenanceMarginRate: 0.005 },
+    ],
+    /* VALIDEZ por defecto de las órdenes límite (F7 `effect`: GTC | IOC | FOK | POST_ONLY). */
+    efecto: 'GTC',
+    /* Comisión de MAKER, si se quiere distinguir de la de taker (`feePct`). `null` = sin dato
+       medido y se cobra la misma a los dos lados; ver el estudio §4 (no se inventa el 0,02 %). */
+    makerFeePct: null,
     slFirst: 'worst',        // 'worst' | 'best'
     averaging: true,         // permitir AÑADIR a una posición abierta (promediar entrada)
     position: null,          // posición abierta
@@ -50,6 +77,11 @@
     if (opts.leverage !== undefined) s.leverage = +opts.leverage;
     if (opts.feePct !== undefined) s.feePct = +opts.feePct;
     if (opts.fundingPct !== undefined) s.fundingPct = +opts.fundingPct;
+    if (opts.fundingCadaHoras !== undefined) s.fundingCadaHoras = Math.max(1, +opts.fundingCadaHoras || 8);
+    if (Array.isArray(opts.fundingHorasUTC)) s.fundingHorasUTC = opts.fundingHorasUTC.map(Number);
+    if (opts.niveles !== undefined) s.niveles = Array.isArray(opts.niveles) && opts.niveles.length ? opts.niveles : null;
+    if (opts.efecto) s.efecto = String(opts.efecto).toUpperCase();
+    if (opts.makerFeePct !== undefined) s.makerFeePct = opts.makerFeePct === null || !Number.isFinite(+opts.makerFeePct) ? null : +opts.makerFeePct;
     if (opts.slFirst !== undefined) s.slFirst = opts.slFirst;
     if (opts.averaging !== undefined) s.averaging = !!opts.averaging;
   };
@@ -97,10 +129,78 @@
    *   · cruzado  → respalda también el margen libre de la cuenta:
    *                  liq = entrada ∓ (margen + libre)/cantidad
    *
-   * Se desprecia el margen de mantenimiento (el modelo de comisiones de la app
-   * tampoco lo tiene), por eso con 1x y cuenta holgada el precio sale 0: en
-   * cruzado real la posición no liquida antes de tocar suelo. Con margen de
-   * mantenimiento 0 la fórmula aislada coincide exactamente con la anterior.
+   * Ver `TE.liquidationPrice`: desde el estudio de Bitunix el margen de mantenimiento SÍ se
+   * tiene en cuenta (antes no, y así lo decía este comentario).
+   */
+  /* ---- Niveles de riesgo (get_position_tiers) ---- */
+
+  /** Nivel que ocupa un notional. `null` = no hay tabla ⇒ margen de mantenimiento 0. */
+  TE.nivel = function (notional) {
+    const tabla = TE.state.niveles;
+    if (!Array.isArray(tabla) || !tabla.length) return null;
+    const n = Math.abs(+notional || 0);
+    for (let i = 0; i < tabla.length; i++) {
+      const t = tabla[i];
+      if (n >= +t.startValue && n < +t.endValue) return Object.assign({ fueraDeTabla: false }, t);
+    }
+    // Por encima de lo medido en la documentación: la última tasa conocida, no una extrapolada.
+    return Object.assign({ fueraDeTabla: true }, tabla[tabla.length - 1]);
+  };
+
+  /** Margen de mantenimiento: `Open Price · Size · MMR` (F6, literal de la documentación). */
+  TE.margenMantenimiento = function (position) {
+    const p = position; if (!p) return 0;
+    const t = TE.nivel(p.notional);
+    return t ? Math.abs(p.entryPrice * p.qty * +t.maintenanceMarginRate) : 0;
+  };
+
+  /** Margen disponible al precio dado: Initial Margin − PnL (F6), más el libre si es cruzado. */
+  TE.margenDisponible = function (position, price) {
+    const p = position; if (!p) return 0;
+    const dir = p.side === 'long' ? 1 : -1;
+    const pr = Number.isFinite(+price) ? +price : (TE.state.lastPrice || p.entryPrice);
+    let m = TE.marginOf(p) + dir * (pr - p.entryPrice) * p.qty;
+    if ((TE.state.marginMode || 'cross') === 'cross') m += Math.max(0, TE.freeMargin());
+    return m;
+  };
+
+  /** `Margin Rate` de la carta (F2: margen / valor de la posición) y si está en riesgo (F6). */
+  TE.marginRate = function (position, price) {
+    const p = position; if (!p || !p.qty) return null;
+    const pr = Number.isFinite(+price) ? +price : (TE.state.lastPrice || p.entryPrice);
+    const valor = Math.abs(pr * p.qty);
+    if (!valor) return null;
+    const t = TE.nivel(p.notional);
+    const ratio = TE.margenDisponible(p, pr) / valor;
+    const mmr = t ? +t.maintenanceMarginRate : 0;
+    // `ratio` es el `Margin Rate` que se PINTA en la carta (F2: margen / valor de la posición).
+    // `enRiesgo` en cambio usa la regla que de verdad liquida (F6: Available Margin < Maintenance
+    // Margin), que NO es equivalente a `ratio < MMR`: el mantenimiento se define sobre el precio de
+    // entrada y el ratio sobre el valor actual, así que en la propia liquidación el ratio aún es
+    // mayor que el MMR. Comparar las dos cosas pintaría «a salvo» en el momento de liquidar.
+    return { ratio, mmr, nivel: t ? t.level : null, fueraDeTabla: t ? t.fueraDeTabla : false,
+             disponible: TE.margenDisponible(p, pr), mantenimiento: TE.margenMantenimiento(p),
+             enRiesgo: mmr > 0 ? TE.margenDisponible(p, pr) < TE.margenMantenimiento(p) : false };
+  };
+
+  /** El apalancamiento pedido es un TECHO, no un derecho: el nivel lo recorta (F8). */
+  TE.apalancamientoPermitido = function (notional, pedido) {
+    const t = TE.nivel(notional);
+    const max = t ? +t.leverage : Math.max(1, +pedido || 1);
+    const p = Math.min(Math.max(1, +pedido || 1), max);
+    return { leverage: p, max, recortado: p !== Math.max(1, +pedido || 1) };
+  };
+
+  /**
+   * Precio de liquidación con la cuenta de Bitunix (F6), no con la de libro de texto:
+   *
+   *     liq = entrada − lado · (margen + libre − entrada·tamaño·MMR) / tamaño
+   *
+   * despeje de «el margen disponible cae al margen de mantenimiento». Con MMR = 0 (`niveles:
+   * null`) sale EXACTAMENTE la fórmula que había antes, así que el modelo simple sigue siendo un
+   * caso particular, no un comportamiento perdido. Si el resultado es ≤ 0 la posición no tiene
+   * precio de liquidación dentro del dominio del precio: `liqPrice ≤ 0` en la API significa justo
+   * eso («riesgo bajo», F8) y se comunica con `TE.liqInfo().sinNivel` en vez de pintar un 0.
    */
   TE.liquidationPrice = function (position) {
     if (!position) return null;
@@ -110,8 +210,18 @@
     const margen = TE.marginOf(p);
     const libre = (TE.state.marginMode || 'cross') === 'cross'
       ? Math.max(0, TE.freeMargin()) : 0;
-    const liq = p.entryPrice - side * (margen + libre) / p.qty;
+    const liq = p.entryPrice - side * (margen + libre - TE.margenMantenimiento(p)) / p.qty;
     return Math.max(0, +liq.toFixed(6));
+  };
+
+  /** Todo lo que la carta de posición tiene que decir del riesgo, junto y medido. */
+  TE.liqInfo = function (position) {
+    const precio = TE.liquidationPrice(position);
+    const t = position ? TE.nivel(position.notional) : null;
+    return { precio, sinNivel: precio === null || precio <= 0, mmr: t ? +t.maintenanceMarginRate : 0,
+             nivel: t ? t.level : null, apalancamientoMax: t ? +t.leverage : null,
+             fueraDeTabla: t ? t.fueraDeTabla : false,
+             mantenimiento: TE.margenMantenimiento(position) };
   };
 
   /** Margen inmovilizado por UNA posición (incluye el añadido al promediar). */
@@ -147,8 +257,38 @@
    * @param {object} params { mode:'pct'|'notional'|'qty', size, entryPrice, sl, tp, leverage, feePct, time }
    * @returns {object|null} posición creada
    */
+  /**
+   * `reduceOnly` (F7): una orden así NUNCA abre ni invierte una posición; solo la reduce. En el
+   * exchange se RECHAZA si no hay posición o si, por lado, acabaría aumentando la exposición —no
+   * se transforma en otra cosa—. Aquí eso es lo que hace, y por eso el cierre de un TP/SL con
+   * ejecución límite se apoya en este camino (es un cierre, no una apertura contraria).
+   */
+  TE._reduceOnly = function (side, params) {
+    const s = TE.state, p = s.position;
+    if (!p) {
+      U.log('🚫 Orden reduce-only descartada: no hay posición abierta que reducir.', 'warn');
+      U.toast('Reduce-only: no hay posición que cerrar', 'warn', 3200);
+      return null;
+    }
+    if (p.side === side) {
+      U.log('🚫 Orden reduce-only descartada: en el mismo lado AUMENTARÍA la posición.', 'warn');
+      return null;
+    }
+    let frac = 1;
+    const modo = params.mode || 'pct', size = +params.size || 0;
+    if (modo === 'pct') frac = size / 100;
+    else if (modo === 'notional') frac = p.notional ? size / p.notional : 1;
+    else if (modo === 'qty') frac = p.qty ? size / p.qty : 1;
+    frac = Math.min(1, Math.max(0, frac));
+    if (!(frac > 0)) return null;
+    const price = Number.isFinite(+params.entryPrice) ? +params.entryPrice : (s.lastPrice || p.entryPrice);
+    if (frac >= 0.999) return TE.closePosition(price, params.reason || 'manual', params.time);
+    return TE.reducePosition(frac, price, params.time, params.reason || 'parcial');
+  };
+
   TE.openPosition = function (side, params) {
     const s = TE.state;
+    if (params && params.reduceOnly) return TE._reduceOnly(side, params);
     if (s.position) {
       // MISMO LADO con el promediado activo → se AÑADE a la posición abierta, como
       // el «Add position» de Bitunix: precio medio ponderado, tamaño y margen
@@ -215,6 +355,18 @@
       entryPrice, qty, notional,
       leverage, feePct,
       sl, tp,
+      // F7: cada nivel lleva CONTRA QUÉ se mide y CÓMO se ejecuta. Se admiten en la orden de
+      // apertura (el formulario de Bitunix los ofrece ahí, y `place_order` lleva los cuatro
+      // campos `tp*`/`sl*`), no solo al modificar la posición.
+      slSrc: params.slSrc === 'mark' ? 'mark' : 'last',
+      tpSrc: params.tpSrc === 'mark' ? 'mark' : 'last',
+      slExec: params.slExec === 'limit' ? 'limit' : 'market',
+      tpExec: params.tpExec === 'limit' ? 'limit' : 'market',
+      slExecPrice: Number.isFinite(+params.slExecPrice) && +params.slExecPrice > 0 ? +params.slExecPrice : null,
+      tpExecPrice: Number.isFinite(+params.tpExecPrice) && +params.tpExecPrice > 0 ? +params.tpExecPrice : null,
+      // Agenda de funding, anclada a la APERTURA (no a la primera vela evaluada): una posición que
+      // se abre y se mueve a una vela diaria tiene que pagar las tres liquidaciones del día.
+      pagoFundingEn: TE._siguienteFunding(params.time || s.lastTime || 0),
       riskUsd,
       entryTime: params.time || s.lastTime,
       entryBalance: s.balance,
@@ -337,6 +489,15 @@
       }
       p.sl = +price;
     }
+    // F7: un nivel de SL no es solo un precio. Lleva CONTRA QUÉ se mide el disparo
+    // (`slStopType`: MARK_PRICE | LAST_PRICE) y CÓMO se ejecuta (`slOrderType`: LIMIT | MARKET,
+    // con su `slOrderPrice`). Los campos nuevos son opcionales y su default reproduce el
+    // comportamiento anterior: disparo contra los extremos de la vela y cierre a mercado.
+    const o2 = opts || {};
+    if (o2.src !== undefined) p.slSrc = o2.src === 'mark' ? 'mark' : 'last';
+    if (o2.exec !== undefined) p.slExec = o2.exec === 'limit' ? 'limit' : 'market';
+    if (o2.execPrice !== undefined) p.slExecPrice = Number.isFinite(+o2.execPrice) && +o2.execPrice > 0 ? +o2.execPrice : null;
+    p._slLimitPlaced = false;   // mover el nivel vuelve a permitir colocar su orden de cierre
     TE.updateRisk(p);
     // {silent:true} se usa al ARRASTRAR el nivel: un log por cada mousemove
     // llenaría el registro de líneas inútiles (y los avisos, la pantalla).
@@ -356,6 +517,10 @@
       if (p.side === 'short' && price >= p.entryPrice) { if (!sil) U.toast('TP inválido: debe estar por debajo de la entrada', 'warn'); return false; }
       p.tp = +price;
     }
+    if (opts && opts.src !== undefined) p.tpSrc = opts.src === 'mark' ? 'mark' : 'last';
+    if (opts && opts.exec !== undefined) p.tpExec = opts.exec === 'limit' ? 'limit' : 'market';
+    if (opts && opts.execPrice !== undefined) p.tpExecPrice = Number.isFinite(+opts.execPrice) && +opts.execPrice > 0 ? +opts.execPrice : null;
+    p._tpLimitPlaced = false;
     TE.updateRisk(p);
     if (!sil) U.log(`🛠 TP actualizado a ${p.tp ? U.fmtPrice(p.tp) : 'sin TP'}`, 'warn');
     TE._emit();
@@ -811,6 +976,25 @@
 
     // ¿El nivel se cruzaría inmediatamente?
     const inmediata = side === 'long' ? limitPrice >= ref : limitPrice <= ref;
+    /* VALIDEZ = `effect` de la API (F7): GTC (descansa, default), POST_ONLY (si cruzaría, NO se
+       coloca), IOC y FOK (solo ejecutan lo ejecutable AHORA; lo que no, se cancela en vez de
+       descansar). Sin libro de órdenes real no se puede simular el relleno PARCIAL de un IOC, y no
+       se finge: aquí IOC/FOK deciden «¿se cruza esta vela?» y «¿hay margen?», que es lo que los
+       OHLC permiten decidir. POST_ONLY es el único cuyo efecto completo sí es exacto, porque solo
+       necesita saber si la orden cruzaría. */
+    const efecto = String(params.efecto || params.effect || s.efecto || 'GTC').toUpperCase();
+    if (efecto === 'POST_ONLY' && inmediata) {
+      U.log(`⏳ Límite ${U.fmtPrice(limitPrice)} NO se coloca: con POST_ONLY una orden que cruzaría el `
+            + `precio se rechaza (es la única forma de asegurarse la comisión de maker).`, 'warn');
+      U.toast('POST_ONLY: la orden cruzaría el precio y se ha rechazado', 'warn', 3800);
+      return null;
+    }
+    if ((efecto === 'IOC' || efecto === 'FOK') && !inmediata) {
+      U.log(`⏳ Límite ${U.fmtPrice(limitPrice)} cancelada sin ejecutar con ${efecto}: lo que no está `
+            + `cruzado ahora no pasa la vela descansando en el libro.`, 'warn');
+      U.toast(`${efecto}: la orden no estaba cruzada y se ha cancelado`, 'warn', 3600);
+      return null;
+    }
     if (inmediata) {
       U.log(`⚡ El límite ${U.fmtPrice(limitPrice)} está al otro lado del precio ` +
             `(${U.fmtPrice(ref)}): se ejecuta a mercado, como en un exchange.`, 'warn');
@@ -824,17 +1008,26 @@
     const orden = {
       id: ++s.seq,
       tipo: 'limite',
+      efecto,
+      // Una límite que DESCANSA es maker; una que llega cruzada se ejecuta contra el libro y es
+      // taker (F7: `roleType` en el histórico de fills). Con `makerFeePct` sin dato medido los dos
+      // roles pagan lo mismo y esto solo sirve para pintar/contabilizar el rol, no para inventar.
+      rol: 'maker',
+      reduceOnly: !!params.reduceOnly,
+      motivo: params.motivo || null,      // de qué nivel viene esta orden de cierre (si viene de uno)
       side,
       limitPrice,
       mode: params.mode || 'pct',
       size: +params.size || 0,
       leverage: Math.max(1, +(params.leverage || s.leverage || 1)),
-      feePct: params.feePct !== undefined ? +params.feePct : s.feePct,
+      feePct: params.feePct !== undefined ? +params.feePct
+        : (s.makerFeePct === null || s.makerFeePct === undefined ? s.feePct : +s.makerFeePct),
       sl: Number.isFinite(+params.sl) && +params.sl > 0 ? +params.sl : null,
       tp: Number.isFinite(+params.tp) && +params.tp > 0 ? +params.tp : null,
       creada: params.time || s.lastTime,
       refPrice: ref,
       estado: 'pendiente',
+      nota: params.nota || null,
     };
 
     // Distancia al nivel, para mostrarla en el panel
@@ -857,6 +1050,138 @@
    * TP de la orden se conservan.
    * @returns {object|null} la orden modificada, o null si no es válida
    */
+  /* ================= ORDEN TRIGGER (plan) — F1/F7 del estudio =================
+   *
+   * En Bitunix el selector de tipo de orden ofrece Limit, Market, **Trigger** y Trailing Stop, y la
+   * trigger es: «cuando el precio de mercado llegue al precio de activación, se coloca la orden
+   * (límite o mercado)». De ahí tres reglas que este motor no tenía y que son las que la distinguen
+   * de un límite:
+   *
+   *  · **No congela margen ni posición mientras espera** (la documentación lo dice dos veces). Por
+   *    eso el rechazo es posible AL DISPARAR: si en ese momento no hay margen, la orden no se
+   *    ejecuta y se retira. Un backtester que reserva el margen al colocar la miente a favor.
+   *  · El disparo se puede medir **contra mark o contra last** (`tpStopType`/`MARK_PRICE|LAST_PRICE`,
+   *    mismo conmutador que en TP/SL).
+   *  · Al ejecutarse puede ser **mercado** (se rellena al mejor precio disponible tras el trigger)
+   *    o **límite** (se COLOCA un límite, que puede no rellenarse nunca).
+   */
+  TE.placeTrigger = function (side, params) {
+    const s = TE.state;
+    const p = params || {};
+    const trig = +p.triggerPrice;
+    if (!Number.isFinite(trig) || trig <= 0) { U.toast('Precio de activación no válido', 'err'); return null; }
+    const exec = p.exec === 'limit' ? 'limit' : 'market';
+    const precioLimite = +p.limitPrice;
+    if (exec === 'limit' && !(precioLimite > 0)) {
+      U.toast('Una trigger con ejecución LÍMITE necesita su precio de ejecución', 'err');
+      return null;
+    }
+    const ref = s.lastPrice;
+    const orden = {
+      id: ++s.seq, tipo: 'trigger', side,
+      triggerPrice: trig,
+      src: p.src === 'mark' ? 'mark' : 'last',
+      exec, limitPrice: exec === 'limit' ? precioLimite : null,
+      mode: p.mode || 'pct', size: +p.size || 0,
+      leverage: Math.max(1, +(p.leverage || s.leverage || 1)),
+      feePct: p.feePct !== undefined ? +p.feePct : s.feePct,
+      sl: Number.isFinite(+p.sl) && +p.sl > 0 ? +p.sl : null,
+      tp: Number.isFinite(+p.tp) && +p.tp > 0 ? +p.tp : null,
+      slSrc: p.slSrc === 'mark' ? 'mark' : 'last',
+      tpSrc: p.tpSrc === 'mark' ? 'mark' : 'last',
+      reduceOnly: !!p.reduceOnly,
+      creada: p.time || s.lastTime, estado: 'en espera',
+      efecto: String(p.efecto || p.effect || 'GTC').toUpperCase(),
+      refPrice: ref,
+    };
+    // La distancia al disparo, para el panel de órdenes pendientes.
+    if (ref) orden.distPct = ((trig - ref) / ref) * 100;
+    s.pending.push(orden);
+    U.log(`🎯 Orden TRIGGER ${side === 'long' ? 'de COMPRA' : 'de VENTA'}: se dispara a ${U.fmtPrice(trig)} `
+          + `(contra ${orden.src === 'mark' ? 'MARK price' : 'last price'}) y ejecuta como `
+          + `${exec === 'limit' ? 'límite a ' + U.fmtPrice(precioLimite) : 'MERCADO'}`
+          + `${orden.reduceOnly ? ' · reduce-only' : ''}. Mientras espera NO reserva margen.`
+          + (ref ? ` · está a ${U.num(orden.distPct, 2)} % del precio actual` : ''), 'sys');
+    TE._emit();
+    return orden;
+  };
+
+  /** ¿Qué precio de relleno tiene una trigger ejecutada a mercado dentro de esta vela? */
+  TE._fillTrigger = function (candle, trig, side) {
+    // Modo pesimista, coherente con el resto del motor: con OHLC no se sabe en qué punto de la vela
+    // se cruzó el trigger, así que se rellena al PEOR precio plausible de la vela (una compra no
+    // puede rellenar por debajo de la apertura si abrió con hueco pasado el nivel).
+    return side === 'long' ? Math.max(candle.open, trig) : Math.min(candle.open, trig);
+  };
+
+  TE._checkTrigger = function (candle, o, i) {
+    const s = TE.state;
+    // El trigger se mide contra el alto/bajo (last) o contra el cuerpo de la vela (mark) — la misma
+    // diferencia que en TP/SL, y se comparte con `TE._alcanza` para que no haya dos versiones.
+    // El disparo de una trigger NO es la dirección de un TP/SL: es «el precio llegó al nivel», que
+    // para una compra se cumple al subir y para una venta al bajar (y con un hueco que ABRE pasado
+    // el nivel, también: por eso se compara con el extremo de la vela, no con un cruce desde el
+    // otro lado). Con `mark` el disparo mira el cuerpo de la vela, no la mecha.
+    const arriba = Math.max(candle.open, candle.close), abajo = Math.min(candle.open, candle.close);
+    const tocado = o.src === 'mark'
+      ? (o.side === 'long' ? arriba >= o.triggerPrice : abajo <= o.triggerPrice)
+      : (o.side === 'long' ? candle.high >= o.triggerPrice : candle.low <= o.triggerPrice);
+    if (!tocado) return false;
+    s.pending.splice(i, 1);                   // la trigger muere al disparar: se convierte o se ejecuta
+    if (o.exec === 'limit') {
+      const limite = {
+        id: ++s.seq, tipo: 'limite', side: o.side, limitPrice: o.limitPrice, efecto: 'GTC', rol: 'maker',
+        mode: o.mode, size: o.size, leverage: o.leverage, feePct: o.feePct, sl: o.sl, tp: o.tp,
+        reduceOnly: !!o.reduceOnly, creada: candle.time, refPrice: candle.close, estado: 'pendiente',
+        origenTrigger: o.triggerPrice,
+      };
+      // NO se evalúa en la misma vela: la orden límite se colocó DESPUÉS de alcanzar el nivel, y si
+      // la dejáramos rellenar en esta mecha estaríamos inventando el orden intra-vela.
+      s.pending.push(limite);
+      U.log(`🎯 Trigger alcanzada en ${U.fmtPrice(o.triggerPrice)}: colocada la orden LÍMITE `
+            + `${o.side === 'long' ? 'de compra' : 'de venta'} en ${U.fmtPrice(o.limitPrice)} (desde la vela siguiente).`, 'ok');
+      TE._emit();
+      return true;
+    }
+    const precio = TE._fillTrigger(candle, o.triggerPrice, o.side);
+    const pos = TE.openPosition(o.side, {
+      mode: o.mode, size: o.size, entryPrice: precio, sl: o.sl, tp: o.tp,
+      slSrc: o.slSrc, tpSrc: o.tpSrc, leverage: o.leverage, feePct: o.feePct,
+      time: candle.time, origin: 'trigger', triggerPrice: o.triggerPrice, reduceOnly: !!o.reduceOnly,
+    });
+    if (!pos) {
+      // El rechazo al disparar ES el comportamiento documentado, no un fallo de esta simulación.
+      U.log(`🚫 Trigger alcanzada en ${U.fmtPrice(o.triggerPrice)} y cancelada: al disparar no cabía `
+            + `por margen o por posición ya abierta (una trigger no reserva nada mientras espera).`, 'bad');
+      U.toast('La trigger se alcanzó pero no pudo ejecutarse', 'warn', 4200);
+      TE._emit();
+      return false;
+    }
+    pos.filledAtTime = candle.time;
+    if (TE.onFill) TE.onFill(pos, o);
+    U.playSound('open');
+    U.log(`✅ Trigger ejecutada: ${o.side === 'long' ? 'LONG' : 'SHORT'} @ ${U.fmtPrice(precio)}`
+          + ` (disparada en ${U.fmtPrice(o.triggerPrice)})`, 'ok');
+    U.toast(`Trigger ejecutada a ${U.fmtPrice(precio)}`, 'ok', 3000);
+    TE._emit();
+    return true;
+  };
+
+  /** Órdenes trigger pendientes (para el panel y para los tests). */
+  TE.pendingTriggers = function () { return TE.state.pending.filter((o) => o.tipo === 'trigger'); };
+  TE.cancelTrigger = function (id) {
+    const l = TE.state.pending;
+    for (let i = 0; i < l.length; i++) {
+      if (l[i].id === +id && l[i].tipo === 'trigger') {
+        const [o] = l.splice(i, 1);
+        U.log(`🗑 Trigger cancelada (estaba en ${U.fmtPrice(o.triggerPrice)}; no había reservado margen).`, 'sys');
+        TE._emit();
+        return o;
+      }
+    }
+    return null;
+  };
+
   TE.setLimitPrice = function (id, price) {
     const s = TE.state;
     const o = (s.pending || []).find((x) => x.id === id);
@@ -931,6 +1256,12 @@
 
   /** Número de órdenes pendientes. */
   TE.pendingCount = function () { return TE.state.pending.length; };
+  /** Cuántas pendientes son de cada tipo, para la pestaña de órdenes y para los tests. */
+  TE.pendingPorTipo = function () {
+    const out = { limite: 0, trigger: 0 };
+    for (const o of TE.state.pending) if (out[o.tipo] !== undefined) out[o.tipo]++;
+    return out;
+  };
 
   /**
    * Precio de ejecución de una orden límite dentro de una vela:
@@ -955,11 +1286,12 @@
     const abiertas = [];
     for (let i = s.pending.length - 1; i >= 0; i--) {
       const o = s.pending[i];
+      if (o.tipo === 'trigger') { TE._checkTrigger(candle, o, i); continue; }
       // Con una posición abierta los órdenes ESPERAN, salvo que sean del mismo
       // lado y el promediado esté activo: en ese caso se ejecutan y AÑADEN a la
       // posición (así funciona «Add position» con orden límite en Bitunix).
       const promedia = !!(s.averaging && s.position && s.position.side === o.side);
-      if (s.position && !promedia) break;
+      if (s.position && !promedia && !o.reduceOnly) break;
       const alcanzada = o.side === 'long' ? candle.low <= o.limitPrice : candle.high >= o.limitPrice;
       if (!alcanzada) continue;
 
@@ -968,6 +1300,7 @@
         mode: o.mode, size: o.size, entryPrice: precio,
         sl: o.sl, tp: o.tp, leverage: o.leverage, feePct: o.feePct,
         time: candle.time, origin: 'limite', limitPrice: o.limitPrice,
+        reduceOnly: !!o.reduceOnly, reason: o.motivo || undefined,
       });
 
       if (!pos) {
@@ -1000,6 +1333,23 @@
    * @param {object} candle  vela recién cerrada
    * @returns {object|null}  posición cerrada si la hubo
    */
+  /** Próxima hora de liquidación de funding estrictamente posterior a `desde` (F3 del estudio). */
+  TE._siguienteFunding = function (desde) {
+    const s = TE.state, DIA = 86400000;
+    const cada = Math.max(1, +s.fundingCadaHoras || 8);
+    let horas = Array.isArray(s.fundingHorasUTC) && s.fundingHorasUTC.length ? s.fundingHorasUTC.map(Number) : [0, 8, 16];
+    if (cada !== 8) { horas = []; for (let h = 0; h < 24; h += cada) horas.push(h); }
+    horas.sort((a, b) => a - b);
+    const d0 = Math.floor((+desde || 0) / DIA) * DIA;
+    for (let d = 0; d < 3; d++) {
+      for (const h of horas) {
+        const t = d0 + d * DIA + h * 3600000;
+        if (t > desde) return t;
+      }
+    }
+    return (+desde || 0) + cada * 3600000;              // horario imposible: cae al ritmo, sin horas
+  };
+
   TE.onCandle = function (candle) {
     const s = TE.state;
     s.lastPrice = candle.close;
@@ -1028,12 +1378,28 @@
       p.mfe = Math.max(p.mfe, (favPrice - p.entryPrice) * p.qty * dir);
       p.mae = Math.min(p.mae, (advPrice - p.entryPrice) * p.qty * dir);
 
-      // Coste de financiación opcional por vela
+      // FUNDING a lo Bitunix: se paga/recibe en las horas de liquidación, no en cada vela, y con
+      // el signo del lado. Las velas de 1 h o 4 h ven pasar la marca; las de 1 d pueden ver pasar
+      // tres, así que se recorre la agenda en bucle en vez de «¿esta vela es de liquidación?».
       if (s.fundingPct > 0) {
-        const f = p.notional * (s.fundingPct / 100);
-        s.balance -= f; s.feesPaid += f;
-        p.fees += f;
-        p.funding = (p.funding || 0) + f;
+        if (!(p.pagoFundingEn > 0)) p.pagoFundingEn = TE._siguienteFunding(p.entryTime || candle.time);
+        let pagado = 0, hits = 0;
+        while (candle.time >= p.pagoFundingEn) {
+          const dir = p.side === 'long' ? 1 : -1;
+          pagado -= dir * p.notional * (s.fundingPct / 100);
+          hits++;
+          p.pagoFundingEn = TE._siguienteFunding(p.pagoFundingEn);
+          if (hits > 1000) break;                     // reloj roto: no colgar la pestaña
+        }
+        if (hits) {
+          s.balance += pagado; s.feesPaid += Math.abs(pagado);
+          p.fees += Math.abs(pagado);
+          p.funding = (p.funding || 0) + pagado;
+          U.log(`💱 Funding de ${hits} liquidacion(es) ${pagado < 0 ? 'pagado' : 'recibido'}: `
+                + `${U.num(Math.abs(pagado), 4)} USDT sobre ${U.num(p.notional, 2)} de notional a `
+                + `${U.num(s.fundingPct, 4)} % · posición ${p.side === 'long' ? 'LARGA' : 'CORTA'}`,
+                pagado < 0 ? 'warn' : 'ok');
+        }
       }
 
       const liq = TE.liquidationPrice(p);
@@ -1045,8 +1411,8 @@
       }
 
       // --- 2) SL / TP ---
-      const slHit = p.sl !== null && (p.side === 'long' ? candle.low <= p.sl : candle.high >= p.sl);
-      const tpHit = p.tp !== null && (p.side === 'long' ? candle.high >= p.tp : candle.low <= p.tp);
+      const slHit = p.sl !== null && TE._alcanza(p.sl, p.side, 'sl', candle, p);
+      const tpHit = p.tp !== null && TE._alcanza(p.tp, p.side, 'tp', candle, p);
 
       // El TRAILING también es un stop: si SL fijo y trailing están tocados en la
       // misma vela, ejecuta el que esté MÁS CERCA del precio (en un LONG, el nivel
@@ -1066,7 +1432,7 @@
       if (slHit && tpHit) {
         const first = s.slFirst === 'best' ? 'tp' : 'sl';
         if (first === 'sl') return TE._hitStop(candle, stop, p);
-        return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
+        return TE._ejecutaNivel(p, 'tp', candle);
       }
       if (stop) return TE._hitStop(candle, stop, p);
 
@@ -1077,7 +1443,7 @@
         if (!s.position) { TE.updateEquity(candle.close, candle.time); TE._emit(); return null; }
       }
 
-      if (tpHit) return TE.closePosition(TE._fillPrice(candle, p.tp, p.side, false), 'tp', candle.time);
+      if (tpHit) return TE._ejecutaNivel(p, 'tp', candle);
 
       // --- 3) El trailing sigue al precio: se arma/mueve al CERRAR la vela (ver
       //     comentario de la sección TRAILING STOP: el pico no se actualiza antes
@@ -1095,9 +1461,65 @@
    * parte (Partial TP/SL en el lado del stop) y deja el resto vivo siguiendo el
    * pico; con frac = 1 cierra la posición entera con motivo «trail».
    */
+  /**
+   * ¿Se DISPARA el nivel en esta vela? Aquí está la diferencia entre `LAST_PRICE` y `MARK_PRICE`
+   * (F7), que no es decorativa: con `last` vale cualquier mecha, con `mark` el disparo se mide
+   * contra el precio de referencia de la vela —y OHLC solo permite saber su apertura y su cierre,
+   * que es lo que se usa—. Una mecha que toca el nivel y vuelve: con `last` cierra la posición,
+   * con `mark` no. Eso es exactamente para lo que Bitunix ofrece el conmutador.
+   */
+  TE._alcanza = function (nivel, side, tipo, candle, p) {
+    if (!Number.isFinite(+nivel)) return false;
+    const src = (p && (tipo === 'sl' ? p.slSrc : p.tpSrc)) === 'mark' ? 'mark' : 'last';
+    const dir = side === 'long' ? 1 : -1;
+    const haciaArriba = (tipo === 'tp') === (dir === 1);
+    if (src === 'mark') {
+      const a = Math.min(candle.open, candle.close), b = Math.max(candle.open, candle.close);
+      return haciaArriba ? b >= nivel : a <= nivel;
+    }
+    return haciaArriba ? candle.high >= nivel : candle.low <= nivel;
+  };
+
+  /**
+   * Ejecución del nivel disparado, con la `slOrderType` / `tpOrderType` de la API (F7):
+   *  · MARKET  → se cierra al precio de relleno de la vela (el comportamiento de siempre).
+   *  · LIMIT   → al disparar se COLOCA una orden de cierre con `reduceOnly` en su precio de
+   *    ejecución, y esa orden puede no rellenarse nunca: la posición sigue abierta. Es el aviso
+   *    que la documentación repite («más control sobre el precio, puede no ejecutarse»).
+   */
+  TE._ejecutaNivel = function (p, tipo, candle) {
+    const nivel = tipo === 'sl' ? p.sl : p.tp;
+    const exec = (tipo === 'sl' ? p.slExec : p.tpExec) === 'limit' ? 'limit' : 'market';
+    const precioLimite = +((tipo === 'sl' ? p.slExecPrice : p.tpExecPrice) || 0);
+    if (exec === 'market' || !(precioLimite > 0)) {
+      const fill = TE._fillPrice(candle, nivel, p.side, tipo === 'sl');
+      return TE.closePosition(fill, tipo, candle.time);
+    }
+    const yaPuesta = tipo === 'sl' ? p._slLimitPlaced : p._tpLimitPlaced;
+    if (yaPuesta) return null;                 // no se inunda el libro de órdenes vela tras vela
+    if (tipo === 'sl') p._slLimitPlaced = true; else p._tpLimitPlaced = true;
+    // Mover el nivel REEMPLAZA la orden de cierre que hubiera puesto el disparo anterior: la API de
+    // Bitunix tiene `modify_order` («modificar una orden pendiente, como su TP/SL y/o precio») justo
+    // para eso, así que acumular dos órdenes de cierre del mismo nivel sería un estado imposible en
+    // el exchange (cerraría el doble de la posición).
+    const st = TE.state;
+    const antes = st.pending.length;
+    st.pending = st.pending.filter((o) => o.motivo !== tipo);
+    if (st.pending.length !== antes) {
+      U.log(`🧹 La orden de cierre ${tipo.toUpperCase()} anterior se retira y se sustituye por la nueva (${antes - st.pending.length} sustituida).`, 'sys');
+    }
+    TE.placeLimit(p.side === 'long' ? 'short' : 'long', {
+      limitPrice: precioLimite, mode: 'pct', size: 100, leverage: p.leverage,
+      reduceOnly: true, efecto: 'GTC', time: candle.time, motivo: tipo,
+    });
+    U.log(`🧷 ${tipo.toUpperCase()} disparado en ${U.fmtPrice(nivel)}: se ha colocado una orden LÍMITE `
+          + `de cierre en ${U.fmtPrice(precioLimite)} (reduce-only). Con ejecución límite puede no rellenarse.`, 'warn');
+    return null;
+  };
+
   TE._hitStop = function (candle, stop, p) {
     const fill = TE._fillPrice(candle, stop.price, p.side, true);
-    if (!stop.trail) return TE.closePosition(fill, 'sl', candle.time);
+    if (!stop.trail) return TE._ejecutaNivel(p, 'sl', candle);
     const t = p.trail;
     const dir = p.side === 'long' ? 1 : -1;
     U.log(`🌀 Trailing stop: el precio retrocedió un ${U.num(t.pct, 2)} % desde el pico ` +

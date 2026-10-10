@@ -845,8 +845,8 @@
           </select></label>
         <label class="field"><span class="field-label">Velas de contexto iniciales</span>
           <input type="number" id="setWarmup" value="150" min="0" max="2000" step="10"></label>
-        <label class="field"><span class="field-label">Comisión de financiación (≈%)</span>
-          <input type="number" id="setFunding" value="0" min="0" step="0.001" title="Coste opcional aplicado por vela a las posiciones abiertas (simula funding de perpetuos)"></label>
+        <label class="field"><span class="field-label">Funding (% sobre nocional, cada 8 h)</span>
+          <input type="number" id="setFunding" value="0" min="-1" max="1" step="0.001" title="Tasa de financiación que Bitunix cobra cada 8 h en 00:00/08:00/16:00 UTC (hay contratos horarios: ajústelo en el motor). Se aplica sobre el nocional, no sobre el margen. Positiva: pagan los LARGOS y cobran los cortos. Negativa: al revés. Se cobra también en las velas que cruzan varias liquidaciones."></label>
         <label class="field full"><span class="field-label">Modo de simulación de SL/TP en la misma vela</span>
           <select id="setSlFirst">
             <option value="worst" selected>Pesimista (si toca SL y TP en la misma vela, ejecuta el SL)</option>

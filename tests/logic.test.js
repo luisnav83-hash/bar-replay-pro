@@ -262,18 +262,34 @@ pos = TE.openPosition('short', { mode: 'pct', size: 50, entryPrice: 100, sl: 105
 near(pos.notional, 10000, 1e-9, 'SHORT al 50% con 2x → notional = capital');
 near(pos.qty, 100, 1e-9, 'cantidad del SHORT');
 near(TE.marginUsed(), 5000, 1e-9, 'margen bloqueado = notional / apalancamiento');
-// La liquidación depende ahora del MODO DE MARGEN (Cruzado/Aislado, como en el
-// panel de futuros): en aislado solo respalda el margen de la posición y se
-// recupera la fórmula clásica entrada·(1 + 1/lev); en cruzado entra además el
-// margen libre, así que el precio de liquidación queda MÁS lejos.
+// La liquidación depende del MODO DE MARGEN (Cruzado/Aislado, como en el panel de futuros) y,
+// desde el estudio de Bitunix (docs/estudio-futuros-bitunix.md §2), del MARGEN DE MANTENIMIENTO:
+// F6 dice «Maintenance Margin = Open Price · Size · MMR» y «se liquida cuando Available Margin =
+// Initial Margin − PnL cae por debajo de ese MM». Despejado el precio:
+//     aislado:  liq = entrada · (1 + 1/lev − MMR)          (short)
+//     cruzado:  liq = entrada + (margen + libre − entrada·tamaño·MMR) / tamaño
+// El nivel (y su MMR) se mira sobre el notional de ENTRADA, que es la misma base que usa la fórmula
+// de Bitunix («Open Price · Size»), no sobre el notional actual.
+const MMR1 = 0.004;                              // nivel 1 de la tabla de get_position_tiers
 TE.state.marginMode = 'isolated';
-near(TE.liquidationPrice(pos), 150, 1e-9, 'liquidación AISLADA (2x short) = entrada·(1 + 1/lev)');
+near(TE.liquidationPrice(pos), 100 * (1 + 1 / 2 - MMR1), 1e-9,
+   `liquidación AISLADA (2x short) = entrada·(1 + 1/lev − MMR) = ${(100 * (1 + 0.5 - MMR1)).toFixed(2)}`);
+// El modelo viejo (sin margen de mantenimiento) sigue siendo un CASO PARTICULAR, no algo perdido:
+TE.configure({ niveles: null });
+near(TE.liquidationPrice(pos), 150, 1e-9, 'con niveles:null vuelve la fórmula clásica entrada·(1 + 1/lev)');
+TE.configure({ niveles: [{ level: 1, startValue: 0, endValue: 50000, leverage: 125, maintenanceMarginRate: MMR1 },
+                         { level: 2, startValue: 50000, endValue: 200000, leverage: 100, maintenanceMarginRate: 0.005 }] });
 TE.state.marginMode = 'cross';
 {
   const liqCruzada = TE.liquidationPrice(pos);
-  const esperadoCruzada = 100 + (5000 + (TE.state.balance - 5000)) / 100;
-  near(liqCruzada, esperadoCruzada, 1e-6, 'liquidación CRUZADA (2x short) = entrada + (margen + libre)/qty');
-  ok(liqCruzada > 150, `el cruzado aleja la liquidación del short (${liqCruzada.toFixed(2)} > 150)`);
+  const mm = 100 * 100 * MMR1;                   // margen de mantenimiento de esta posición
+  const esperadoCruzada = 100 + (5000 + (TE.state.balance - 5000) - mm) / 100;
+  near(liqCruzada, esperadoCruzada, 1e-6,
+    `liquidación CRUZADA (2x short) = entrada + (margen + libre − MM)/qty, con MM = 100·100·${MMR1} = ${mm}`);
+  ok(liqCruzada > TE.liquidationPrice(Object.assign({}, pos)) || liqCruzada > 149,
+    `el cruzado aleja la liquidación del short (${liqCruzada.toFixed(2)} > 149,6 de aislado)`);
+  ok(mm > 0 && Math.abs((esperadoCruzada - (100 + (5000 + (TE.state.balance - 5000)) / 100))) < 1,
+    'el margen de mantenimiento acerca la liquidación (menos precio de referencia), no la aleja');
 }
 TE.state.marginMode = 'cross';
 closed = TE.onCandle({ time: 2000, open: 100, high: 101, low: 89, close: 91, volume: 1 });
@@ -285,11 +301,25 @@ near(TE.state.balance, 10000 + 981, 1e-9, 'balance tras el SHORT en TP');
 TE.resetAccount(10000);
 pos = TE.openPosition('long', { mode: 'pct', size: 100, entryPrice: 100, sl: null, tp: null, leverage: 10, feePct: 0.1, time: 1000 });
 const liq = TE.liquidationPrice(pos);
-near(liq, 90, 1e-9, 'liquidación a 1/apalancamiento de distancia');
+// notional 100 000 ⇒ NIVEL 2 de la tabla (50 000…200 000, MMR 0,005, apalancamiento máx 100):
+//   liq = 100 − (10 000 + libre − 100·1000·0,005)/1000
+const MMR2 = 0.005, mm2 = 100 * 1000 * MMR2;
+const libreEn10x = Math.max(0, TE.freeMargin());
+near(liq, 100 - (10000 + libreEn10x - mm2) / 1000, 1e-6,
+   `liquidación a 10x con el MMR del NIVEL 2 (${liq.toFixed(2)}): entrada − (margen + libre − ${mm2})/qty`);
+ok(TE.liqInfo(pos).nivel === 2 && TE.liqInfo(pos).apalancamientoMax === 100,
+   `y la carta sabe en qué nivel está la posición (nivel ${TE.liqInfo(pos).nivel}, apalancamiento máx ${TE.liqInfo(pos).apalancamientoMax})`);
+ok(TE.apalancamientoPermitido(100000, 200).leverage === 100 && TE.apalancamientoPermitido(100000, 200).recortado,
+   'pedir 200x en el nivel 2 se RECORTA a 100x: el apalancamiento pedido es un techo, no un derecho');
 closed = TE.onCandle({ time: 2000, open: 95, high: 96, low: 85, close: 86, volume: 1 });
 eq(closed.reason, 'liq', 'se cierra por liquidación al tocar el nivel');
-near(closed.pnl, -10000, 1e-9, 'en una liquidación se pierde como máximo el margen comprometido');
-near(TE.state.balance, 0, 1e-9, 'el balance queda a cero tras liquidar todo el capital');
+// Y aquí está la diferencia de fondo con el modelo viejo: al liquidar se pierde hasta el MARGEN DE
+// MANTENIMIENTO, no hasta cero. Eso es lo que dice F6 («Available Margin < Maintenance Margin») y
+// lo que hace que queden restos en la cuenta.
+const perdida = (100 - liq) * 1000;
+near(closed.pnl, -perdida - 100 - liq * 1000 * 0.001, 1e-4,
+   'PnL de la liquidación = −(distancia·tamaño) − comisiones de ida y vuelta (no −margen entero)');
+ok(TE.state.balance > 0, `al liquidar queda margen en la cuenta (${TE.state.balance.toFixed(2)} > 0): se liquida AL tocar el mantenimiento, no al vaciar el capital`);
 
 // Checkpoints: retroceder restaura el estado exacto
 TE.resetAccount(10000);
@@ -345,13 +375,33 @@ for (let i = 0; i < 5; i++) TE.onCandle({ time: 2000 + i * 3600, open: 100 + i, 
 eq(TE.state.balance, balanceAfterAdvance, 'rewind: reavanzar reproduce el mismo balance');
 eq(TE.state.position.bars, barsAfterAdvance, 'rewind: reavanzar reproduce el mismo contador');
 
-// Financiación
+// FUNDING (estudio §3): cada 8 h, en las horas UTC 00/08/16, sobre el notional, y con el signo del
+// lado. El modelo viejo —un % por vela, igual para long y short— no existe en ningún perpetuo:
+// medía de más en temporalidades pequeñas, de menos en las grandes, y cobraba a los dos lados.
 TE.configure({ fundingPct: 0.01 });
 TE.resetAccount(10000);
-TE.openPosition('long', { mode: 'pct', size: 100, entryPrice: 100, leverage: 1, feePct: 0, time: 0 });
-const balPreFunding = TE.state.balance;
-TE.onCandle({ time: 3600, open: 100, high: 101, low: 99, close: 100, volume: 1 });
-near(balPreFunding - TE.state.balance, 10000 * 0.0001, 1e-9, 'la financiación se cobra por vela sobre el notional');
+const H = 3600000;                                // las velas del motor van en milisegundos
+const t0 = Date.UTC(2026, 0, 1, 0, 0, 0);        // medianoche UTC: hay liquidación a las 8 h
+TE.openPosition('long', { mode: 'pct', size: 100, entryPrice: 100, leverage: 1, feePct: 0, time: t0 });
+const balLargo = TE.state.balance;
+TE.onCandle({ time: t0 + 7 * H, open: 100, high: 101, low: 99, close: 100, volume: 1 });
+near(TE.state.balance, balLargo, 1e-9, 'antes de la hora de liquidación NO se cobra funding (ni una vela antes)');
+TE.onCandle({ time: t0 + 8 * H, open: 100, high: 101, low: 99, close: 100, volume: 1 });
+near(balLargo - TE.state.balance, 10000 * 0.0001, 1e-9,
+   'a las 08:00 UTC el LARGO PAGA el funding sobre el notional (10 000 × 0,01 % = 1 USDT)');
+TE.resetAccount(10000);
+TE.openPosition('short', { mode: 'pct', size: 100, entryPrice: 100, leverage: 1, feePct: 0, time: t0 });
+const balCorto = TE.state.balance;
+TE.onCandle({ time: t0 + 8 * H, open: 100, high: 101, low: 99, close: 100, volume: 1 });
+near(TE.state.balance - balCorto, 10000 * 0.0001, 1e-9,
+   'y el CORTO LO COBRA con tasa positiva: el mismo importe, signo contrario (así se paga el funding, no es un coste)');
+// Dos liquidaciones en una vela grande (diaria): se pagan las DOS, no una.
+TE.resetAccount(10000);
+TE.openPosition('long', { mode: 'pct', size: 100, entryPrice: 100, leverage: 1, feePct: 0, time: t0 });
+const balDos = TE.state.balance;
+TE.onCandle({ time: t0 + 24 * H, open: 100, high: 101, low: 99, close: 100, volume: 1 });
+near(balDos - TE.state.balance, 3 * 10000 * 0.0001, 1e-9,
+   'una vela de 1 día cruza las TRES liquidaciones del día (00/08/16 UTC) y se cobran las tres');
 TE.configure({ fundingPct: 0 });
 
 /* ============================== ESTADÍSTICAS ============================== */
