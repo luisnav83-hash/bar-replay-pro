@@ -366,7 +366,18 @@
        forma de que el solape sea 0 sin depender de cuántos píxeles redondea el navegador. */
     const filaReal = Math.floor(parseFloat(getComputedStyle(area).gridTemplateRows.split(' ')[1] || '0') || 0);
     if (filaReal && alto(wrap) > filaReal) {
-      const s = Math.max(SUELO_MIN, filaReal) + 'px';
+      /* EL CLAMP VA HACIA ABAJO, no hacia arriba. Estaba escrito
+         `Math.max(SUELO_MIN, filaReal)` y así la frase de arriba («se le baja el suelo a esa
+         fila —solo hacia abajo, nunca hacia arriba—») NO se cumplía: con una fila de 36 px el
+         `min-height` volvía a 90, la caja seguía midiendo 90 y el gráfico seguí desbordando su
+         fila —medido en 900×560 con RSI + MACD abiertos: caja 90 dentro de una fila de 36, y
+         idéntico sobre lo publicado, o sea preexistente—. `Math.min` es lo que dice el
+         comentario: por debajo de la fila no hay nada que sostener, porque sostenerlo pinta
+         ENCIMA de los paneles, que es precisamente lo que esta función promete que no pasa.
+         36 px de velas son inútiles pero honestos; el usuario los arregla cerrando un panel, y
+         la app NO puede cerrárselo por él (ver `_plieguePnL`: ocultar lo que alguien acaba de
+         abrir es peor que verlo bajo). */
+      const s = Math.min(SUELO_MIN, filaReal) + 'px';
       if (wrap.style.minHeight !== s) { wrap.style.minHeight = s; void pa.offsetHeight; movido = true; }
     }
     if (movido) {

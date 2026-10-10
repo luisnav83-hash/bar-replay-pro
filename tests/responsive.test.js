@@ -181,6 +181,59 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
        + ` valor ${m.sliderEscala ? m.sliderEscala[2] : '?'} a ${m.sliderCoherente} del que pide el replay)`);
   }
 
+  /* ═══════════ LA FRANJA ULTRAJOVEN: ≤1000 DE ANCHO CON ≤600 DE ALTO ═══════════
+     Estas cuatro tallas NO estaban en ninguna lista (el bucle de arriba prueba 1400×560, que
+     es columna, no tira) y por eso sobrevivió un defecto viejo: con RSI + MACD abiertos el
+     gráfico se quedaba en una fila de 36 px mientras su suelo de 90 le hacía desbordar la
+     fila —pintando encima de los paneles, lo que las suites prohíben en cualquier otra
+     talla—. Dos cosas lo arreglan, y las dos se comprueban aquí:
+       · `PC.comprimeEscalera()` ya baja el suelo A LA FILA (antes `Math.max(SUELO_MIN, fila)`
+         no dejaba bajar de 90: el clamp estaba invertido respecto a su propio comentario);
+       · la franja de ese tier cede alto al gráfico (`--tira` 122 → 102, cuerpo 82 → 68).
+     Se mide con la escalera POR DEFECTO (lo que ve quien abre la ventana en esa talla) y en
+     el PEOR caso, que es donde estaba el fallo. */
+  console.log('\n▸ La franja ultrabaja (≤1000 × ≤600): el gráfico no desborda su fila');
+  for (const [w, h] of [[900, 560], [1000, 560], [1000, 600], [860, 540]]) {
+    await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
+    await wait(420);
+    for (const peor of [false, true]) {
+      await page.evaluate((abrir) => {
+        App.indicators.rsi.on = abrir; App.indicators.macd.on = abrir;
+        App.applyIndicators(App.indicators, true);
+      }, peor);
+      await wait(700);
+      const U = await page.evaluate(() => {
+        const g = (id) => document.getElementById(id), cs = (e) => getComputedStyle(e);
+        const area = g('chartArea'), wrap = g('chartWrap'), pa = g('paneArea'), sb = g('sidebar');
+        const bk = g('bookCard'), body = bk.querySelector('.card-body'), bb = body.getBoundingClientRect();
+        const h2 = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
+        const vis = (c) => { let n = 0; for (const f of c.children) { const q = f.getBoundingClientRect();
+          const iv = Math.min(bb.bottom, q.bottom) - Math.max(bb.top, q.top);
+          if (q.height > 0 && iv >= q.height * 0.95) n++; } return n; };
+        const frac = bk.querySelector('.bf-book-frac');
+        return { esTira: cs(sb).flexDirection === 'row', tira: h2(sb),
+          chart: h2(wrap), fila: Math.round(parseFloat(cs(area).gridTemplateRows.split(' ')[1] || '0')),
+          solape: Math.max(0, h2(pa) - pa.clientHeight), sobrePaneles: Math.max(0, wrap.bottom - (pa ? pa.top : 1e9)),
+          caja: Math.round(bb.height), fuera: Math.max(0, body.scrollHeight - body.clientHeight),
+          precio: (() => { const q = bk.querySelector('.bf-book-last').getBoundingClientRect();
+            return q.top >= bb.top - 0.5 && q.bottom <= bb.bottom + 0.5; })(),
+          banda: cs(frac).display === 'none' ? 'oculta' : 'visible',
+          asks: vis(g('bookAsks')), bids: vis(g('bookBids')),
+          ovx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth) };
+      });
+      const q2 = peor ? 'PEOR (RSI+MACD)' : 'por defecto   ';
+      ok(U.esTira, `${w}×${h} · ${q2}: es TIRA (fila horizontal), no columna —si esto cambia, los dos asserts de abajo ya no dicen nada en esta talla`);
+      ok(U.chart === U.fila && U.sobrePaneles <= 0 && U.ovx === 0,
+         `${w}×${h} · ${q2}: el gráfico mide ${U.chart} px DENTRO de su fila de ${U.fila} px (caja == fila: ni desborda ni pinta sobre la escalera; el defecto era 90 de caja en 36 de fila) y sin desborde horizontal (${U.ovx} px)`);
+      ok(U.chart >= (peor ? 30 : 100),
+         `${w}×${h} · ${q2}: y conserva alto útil para lo que da la talla (${U.chart} px; el suelo de la etiqueta es ${peor ? 30 : 100} —con dos paneles abiertos en 540-600 px de alto no hay 120, y fingirlo era el desbordamiento—)`);
+      ok(U.fuera === 0 && U.precio === true && U.banda === 'oculta' && U.asks >= 1 && U.bids >= 1,
+         `${w}×${h} · ${q2}: el libro de la franja baja también cabe (${U.caja} de caja, ${U.fuera} fuera, precio dentro, ${U.asks}+${U.bids} filas por lado) y su banda long/short está OCULTA A PROPÓSITO (${U.banda}): en 102 px de franja se sacrifica el gráfico de porcentajes, no se recorta a medias`);
+    }
+  }
+  await page.evaluate(() => { App.indicators.rsi.on = false; App.indicators.macd.on = false; App.applyIndicators(App.indicators, true); });
+  await wait(420);
+
   /* ═══════════ LA BARRA SUPERIOR DEL TELÉFONO: 135 → 90 px, y al gráfico ═══════════
      Con el formulario de órdenes ya compactado, lo único que separaba al gráfico de
      200 px en el teléfono era el andamio de arriba: 38 (marca + iconos) + 51 (par,

@@ -1247,7 +1247,7 @@ bar-replay-app/
   mientras el libro pedía 169 en una tira de 164 el gráfico perdía su sitio. Resultado medido:
   4 filas por lado de 20 px en el teléfono (1098 px de contenido en 390 de caja), 2 en
   900×700, 7 en escritorio, 0 px de recorte y banda y precio dentro de la caja en las ocho
-  tallas, con la suite de adaptables de 145 a 168 comprobaciones y la de Pages bitunix de 131
+  tallas, con la suite de adaptables de 145 a 200 comprobaciones y la de Pages bitunix de 131
   a 139. Y tres lecciones de *sonda*, porque el culpable a veces era mi medición: comparar cajas
   con `Math.round` en los dos lados del filtro daba «0 filas visibles» cuando eran cuatro;
   preguntar a `elementFromPoint` por la fila del libro en reposo decía «no se puede pinchar»
@@ -1255,23 +1255,37 @@ bar-replay-app/
   deslizar primero y luego mirar); y exigir «en reposo el formulario entra entero» justo después
   del bloque que abre «Avanzado» acusaba 64 px que el propio test había metido.
 
-- **Queda abierto (medido hoy, y NO es de la tira): las franjas ultrabajas con dos paneles de
-  indicadores.** Al comprobar la tira en 900×560, 1000×560, 1000×600 y 860×540 con RSI + MACD
-  abiertos —el peor caso de la escalera—, el gráfico acaba en **90 px de caja dentro de una
-  fila de 36 (70 en 1000×600, 16 en 860×540)**: `PC.comprimeEscalera()` aprieta los paneles
-  hasta su `MIN_PANE` y baja el `min-height` del gráfico hasta lo que da la fila, pero con el
-  suelo duro de 90 px la caja no puede caber en 36 de fila y **desborda su propia fila**, que es
-  lo que los contratos de `test:layout` (`caja === fila`, `solape === 0`) no dejan pasar en
-  ninguna otra talla. Es preexistente: medido hoy sobre lo publicado (que todavía no lleva este
-  incremento) da **exactamente 90/36 en las mismas tallas**, y la franja mide 116 antes y
-  después —el libro, en cambio, sí mejoró ahí: 82 de caja con 130 de contenido (48 px fuera y
-  **cero filas de compras visibles**) antes, 82/82 con una fila por lado después—. Ninguna suite
-  lo veía porque ninguna lista de tamaños incluye una franja ≤1000 de ANCHO con ≤600 de ALTO:
-  `responsive.test.js` prueba 1400×560, que es columna, no tira. No se ha relajado el assert
-  para «arreglarlo»: hace falta una decisión en el subsistema de compresión (dejar que la
-  franja ceda alto al gráfico en esas tallas, o bajar `MIN_PANE`, o admitir que con dos paneles
-  abiertos en 540 px de alto el libro no cabe y hay que plegar algo), y eso es un incremento
-  entero, no una línea.
+- **Las franjas ultrabajas (≤1000 de ancho × ≤600 de alto) con dos paneles abiertos
+  (2026-10-10; encontrado y cerrado el mismo día).** Al comprobar la tira en 900×560, 1000×560,
+  1000×600 y 860×540 apareció un defecto que **no era de la tira** —medido sobre lo publicado,
+  daba idéntico antes del incremento—: con RSI + MACD abiertos el gráfico acababa con **90 px de
+  caja dentro de una fila de 36** (70 en 1000×600, 16 en 860×540), es decir desbordando su fila y
+  pintando sobre la escalera, que es lo que `test:layout` prohíbe en cualquier otra talla. Dos
+  causas, y la gorda es la primera:
+  · **El clamp estaba invertido.** `PC.comprimeEscalera()` cierra con una corrección «con la
+    geometría ya escrita: si el gráfico aún rebasa su fila, se le baja el suelo a esa fila —solo
+    hacia abajo, nunca hacia arriba—», y el código decía `Math.max(SUELO_MIN, filaReal)` →
+    `Math.max(90, 36)` = 90: **no podía bajar de su propio suelo**, así que el comentario mentía
+    desde que se escribió. Es `Math.min(SUELO_MIN, filaReal)`. Un comentario que describe una
+    intención y un `max` que la contradice es el defecto que no encuentra ningún test: lo que
+    había que comprobar era la *desigualdad* (caja ≤ fila), no el valor.
+  · **La franja no cedía nada.** En ese tier el cuerpo de tarjeta topeaba en 82 px y la tira en
+    122; con `--cuerpo: 68` y `--tira: 102` el gráfico pasa de 116 a 130 px *por defecto* en
+    900×560 y de 36 a 50 en el peor caso (84 en 1000×600, 110/30 en 860×540). El libro sigue
+    cuadrando al píxel: 34 de precio + 2×17 de filas = 68 = el tope, con una fila por lado y la
+    banda long/short **oculta a propósito** (en 102 px de franja se sacrifica el gráfico de
+    porcentajes; recortarlo a medias era el defecto viejo). Y `--tira` es 102, no 101: 33 de
+    cabecera + 68 de cuerpo + 1 de hilo —con 101 el cuerpo medía 67 y el libro desbordaba un
+    píxel, medido en el primer intento, y un píxel de 68 es el 1,5 % de su alto—.
+  Por qué ninguna suite lo veía: **ninguna lista de tamaños tenía una franja ≤1000 de ancho con
+  ≤600 de alto** (`responsive.test.js` probaba 1400×560, que es columna, no tira). Ahora ese
+  bloque existe: mide las dos variantes (por defecto y con dos paneles) y fija `caja === fila`,
+  `sobrePaneles === 0`, `chart ≥ 100/30` según el caso y el reparto del libro, 32 comprobaciones
+  nuevas. **El suelo de 120 px del gráfico NO se rebajó para «pasar» el test**: en 540-600 px de
+  alto con barra de dibujo, barra de replay, franja, registro y dos paneles no hay 120, y
+  prometerlos *era* el desbordamiento. La otra salida era cerrar un indicador que la persona
+  acaba de abrir, y eso ya está decidido en contra (`_plieguePnL`).
+
 - **Funciona dentro de la sandbox de vista previa**: probado en un iframe con
   `sandbox="allow-scripts"` con internet externo bloqueado — la app carga **datos reales
   de Binance vía el proxy del mismo origen** de `server.js` (`captura-09-preview-sandbox.png`).

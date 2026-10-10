@@ -1093,9 +1093,21 @@ kbd {
   #sidebar > .card > .card-body { max-height: 130px; overflow-y: auto; --cuerpo: 130px; }
 }
 @media (max-width:1000px) and (max-height:640px) {
-  #sidebar { --tira: 122px; max-height: var(--tira); }
+  /* LA FRANJA CEDE ALTO AL GRÁFICO. En esta talla el gráfico solo tenía una fila de 36 px
+     con dos paneles de indicadores abiertos (y el suelo de 90 se lo desbordaba por encima).
+     El tope del cuerpo de tarjeta manda sobre las TRES tarjetas de la tira, así que bajarlo de
+     82 a 68 le devuelve alto al gráfico de golpe sin tocar el de las velas por arriba.
+     El formulario y los paneles se aprietan con su propio deslizador —en esta franja baja ya
+     deslizaban de serie: el contrato de «en reposo entra entero» es del teléfono, que va por
+     su bloque aparte— y el libro cuadra al píxel: `--cuerpo` 68 = precio 34 + dos columnas de
+     17, que es el suelo de una fila entera (el `max(17px, …)` de abajo).
+     Y `--tira` 102, no 101: 33 de cabecera + 68 de cuerpo + 1 de hilo. Con 101 la caja del
+     cuerpo se quedaba en 67 y el libro desbordaba un píxel —el primer intento, medido:
+     «caja 67 / contenido 68, fuera 1»—. Un píxel de recorte en un libro de 68 px es el 1,5 %
+     de su alto, y es exactamente el tipo de redondeo que estas suites persiguen. */
+  #sidebar { --tira: 102px; max-height: var(--tira); }
 
-  #sidebar > .card > .card-body { max-height: 82px; overflow-y: auto; --cuerpo: 82px; }
+  #sidebar > .card > .card-body { max-height: 68px; overflow-y: auto; --cuerpo: 68px; }
   /* En la franja de 122 no da para precio + banda + una fila: se queda el precio, que es lo que
      se mira, y la banda long/short se oculta DEL TODO —a propósito, no por recorte— con un
      selector de dos IDs: con `#bookCard .bf-book-frac { display:none }` el tema la volvía a
