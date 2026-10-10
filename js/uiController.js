@@ -1184,6 +1184,51 @@
       App.averagePosition(size, { reaim: !!(chk && chk.checked) });
     });
 
+  /** Pinta el conmutador de modo y el de papel de la orden según el estado real de la cuenta. */
+  UI.syncPosModo = function () {
+    const modo = TE.state.modoPosicion || 'ONE_WAY';
+    const seg = document.getElementById('segPosMode');
+    if (seg) [...seg.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.pmode === modo));
+    const lado = document.getElementById('segTradeSide');
+    if (lado) {
+      // «Cerrar» no significa nada en ONE-WAY (allí la orden contraria ya reduce), así que solo
+      // se ofrece en hedge: un control que no cambia nada es ruido en un formulario de órdenes.
+      lado.style.display = modo === 'HEDGE' ? '' : 'none';
+      [...lado.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.tside === (App.tradeSide || 'open')));
+    }
+  };
+
+  (function () {
+    const seg = document.getElementById('segPosMode');
+    if (seg) seg.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pmode]');
+      if (!b) return;
+      App.setPosicionModo(b.dataset.pmode);
+      UI.refreshAll();
+    });
+    const ts = document.getElementById('segTradeSide');
+    if (ts) ts.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tside]');
+      if (!b) return;
+      App.tradeSide = b.dataset.tside === 'close' ? 'close' : 'open';
+      UI.syncPosModo();
+      U.toast(App.tradeSide === 'close'
+        ? 'Este formulario CERRARÁ la posición del lado contrario (no puede abrir en contra)'
+        : 'Este formulario ABRIRÁ posición en su propio lado', 'info', 3000);
+    });
+    const lado = document.getElementById('segPosLado');
+    if (lado) lado.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-lado]');
+      if (!b) return;
+      App.posLado = b.dataset.lado;
+      UI.refreshPosition();
+      // La tarjeta cambia de lado, pero las líneas del gráfico son de las DOS: esconder los
+      // niveles de la posición no mostrada invitaría a creer que no tiene SL.
+      UI.syncPositionGraphics(App.posicionActiva());
+      if (global.CM && CM.setPositionLines) CM.setPositionLines(TE.posiciones());
+    });
+  })();
+
     const card = $('positionCard');
     if (card) card.addEventListener('click', (e) => {
       const partial = e.target.closest('[data-partial]');
@@ -1300,11 +1345,36 @@
   };
 
   UI.refreshPosition = function () {
-    const p = TE.state.position;
+    const vivas = TE.posiciones();
+    // En HEDGE puede haber dos direcciones vivas y la tarjeta enseña una. Si la elegada ya no
+    // existe (se cerró mientras estaba seleccionada) se vuelve a la principal: dejar el panel
+    // pintando una posición muerta es de los errores que cuestan dinero de verdad.
+    if (App.posLado && !TE.posicionDe(App.posLado)) App.posLado = null;
+    const p = (App.posLado && TE.posicionDe(App.posLado)) || TE.state.position;
     const price = App.currentPrice();
     const tag = document.getElementById('posSide');
     if (global.PC && PC.place) PC.place();   // la etiqueta va pegada al precio actual
-    setText('tabPosCount', p ? '1' : '0');   // aviso en la pestaña «Posiciones»
+    setText('tabPosCount', String(vivas.length));   // aviso en la pestaña «Posiciones»: 0, 1 o 2
+    UI.syncPosModo();
+    const segLado = document.getElementById('segPosLado');
+    if (segLado) {
+      segLado.style.display = vivas.length > 1 ? '' : 'none';
+      [...segLado.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', !!p && b.dataset.lado === p.side));
+    }
+    // La dirección NO mostrada se resume en una línea: con el modo hedge activo no puede quedar
+    // ninguna posición invisible, aunque el panel sea de una sola.
+    const otra = vivas.length > 1 ? (vivas[0] === p ? vivas[1] : vivas[0]) : null;
+    const otraLinea = document.getElementById('posOtroLado');
+    if (otraLinea) {
+      if (otra) {
+        const dir = otra.side === 'long' ? 1 : -1;
+        const u = Number.isFinite(price) ? (price - otra.entryPrice) * otra.qty * dir : 0;
+        otraLinea.style.display = '';
+        otraLinea.innerHTML = `<span>La otra dirección (${otra.side === 'long' ? 'LONG' : 'SHORT'} no mostrada)</span>`
+          + `<b class="pnl ${u >= 0 ? 'up' : 'down'}">`
+          + `${U.fmtPrice(otra.entryPrice)} · ${U.num(otra.qty, 6)} u · ${U.fmtMoney(u, true)}</b>`;
+      } else otraLinea.style.display = 'none';
+    }
     UI.syncPositionGraphics(p);
     if (!p) {
       tag.textContent = 'FLAT';

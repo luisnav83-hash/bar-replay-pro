@@ -59,7 +59,9 @@
     makerFeePct: null,
     slFirst: 'worst',        // 'worst' | 'best'
     averaging: true,         // permitir AÑADIR a una posición abierta (promediar entrada)
-    position: null,          // posición abierta
+    position: null,          // acceso a la posición «principal» (se redefine más abajo)
+    posiciones: { long: null, short: null },   // modo HEDGE: una posición por dirección
+    modoPosicion: 'ONE_WAY',                   // 'ONE_WAY' | 'HEDGE' (change_position_mode)
     pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
@@ -67,6 +69,53 @@
     lastPrice: null,
     lastTime: null,
     seq: 0,
+  };
+
+  /* ------------------------ Posiciones y modo de posición ------------------------
+     `state.position` sigue siendo lo que lee casi toda la interfaz, pero es un ACCESO a la
+     posición «principal» (la larga si la hay); el sitio de verdad es `state.posiciones`, una
+     ranura por dirección, que es lo que devuelve Bitunix en modo hedge (filas con
+     `positionSide` LONG/SHORT y su `positionId`). Escribir `state.position = p` cae en la
+     ranura de su lado; escribir `null` limpia las dos, que es lo que hacen `resetAccount` y la
+     importación de partidas. Así el modo hedge no obliga a reescribir 40 lecturas. */
+  Object.defineProperty(TE.state, 'position', {
+    configurable: true,
+    get() { return this.posiciones.long || this.posiciones.short || null; },
+    set(v) {
+      if (v && v.side) this.posiciones[v.side] = v;
+      else { this.posiciones.long = null; this.posiciones.short = null; }
+    },
+  });
+
+  TE.posiciones = function () { const q = TE.state.posiciones; return [q.long, q.short].filter(Boolean); };
+  TE.posicionDe = function (side) { return TE.state.posiciones[side === 'short' ? 'short' : 'long'] || null; };
+  /** La posición que una orden `side` puede REDUCIR: siempre la del lado contrario. */
+  TE.posicionEncontra = function (side) { return TE.state.posiciones[side === 'long' ? 'short' : 'long'] || null; };
+  TE._quitaPosicion = function (p) { if (p && p.side) TE.state.posiciones[p.side] = null; };
+
+  /**
+   * Cambio de modo de posición. La regla está medida en el estudio (§13): la API rechaza
+   * `change_position_mode` con `200014` si hay posiciones u órdenes abiertas, así que aquí se
+   * reproduce el rechazo en vez de permitir un cambio que dejaría pendientes huérfanas (una
+   * orden límite colocada como OPEN en one-way no tiene sentido en hedge, donde OPEN y CLOSE
+   * son papeles distintos).
+   */
+  TE.setPosicionModo = function (modo) {
+    const s = TE.state;
+    const m = String(modo || '').toUpperCase() === 'HEDGE' ? 'HEDGE' : 'ONE_WAY';
+    if (s.modoPosicion === m) return { ok: true, modo: m, igual: true };
+    const vivas = TE.posiciones();
+    if (vivas.length || s.pending.length) {
+      return { ok: false, code: 200014, modo: s.modoPosicion,
+        hay: vivas.length ? 'posición' : 'orden',
+        msg: 'No se puede cambiar el modo de posición con posiciones u órdenes abiertas (200014 en la API).' };
+    }
+    s.modoPosicion = m;
+    U.log('🔀 Modo de posición: ' + (m === 'HEDGE'
+      ? 'HEDGE — LONG y SHORT conviven, cada una con su margen, su SL/TP y su liquidación'
+      : 'ONE-WAY — una sola posición; la orden contraria la reduce'), 'info');
+    TE._emit();
+    return { ok: true, modo: m };
   };
 
   /* ---------------------------- Configuración ---------------------------- */
@@ -104,15 +153,21 @@
   /* ------------------------------ Utilidades ------------------------------ */
 
   TE.unrealized = function (price) {
-    const p = TE.state.position;
-    if (!p || price === null || price === undefined) return 0;
-    const dir = p.side === 'long' ? 1 : -1;
-    return (price - p.entryPrice) * p.qty * dir;
+    if (price === null || price === undefined) return 0;
+    let u = 0;
+    // En modo hedge hay dos posiciones vivas y el PnL del capital es la suma: cada lado
+    // gana o pierde por su cuenta (en Bitunix el Long PnL y el Short PnL son columnas distintas).
+    for (const p of TE.posiciones()) {
+      const dir = p.side === 'long' ? 1 : -1;
+      u += (price - p.entryPrice) * p.qty * dir;
+    }
+    return u;
   };
 
   TE.marginUsed = function () {
-    const p = TE.state.position;
-    return p ? p.notional / p.leverage : 0;
+    let m = 0;
+    for (const p of TE.posiciones()) m += p.notional / p.leverage;
+    return m;
   };
 
   /** Margen libre: balance realizado menos lo inmovilizado (respaldo del cruzado). */
@@ -264,14 +319,18 @@
    * ejecución límite se apoya en este camino (es un cierre, no una apertura contraria).
    */
   TE._reduceOnly = function (side, params) {
-    const s = TE.state, p = s.position;
+    const s = TE.state, p = TE.posicionEncontra(side);
     if (!p) {
+      // `p` es por construcción la posición del lado CONTRARIO, así que no haberla significa una
+      // de dos cosas, y se dicen aparte porque el usuario necesita saber cuál: que no hay nada que
+      // cerrar, o que lo que hay está en su mismo lado (y una reduce-only nunca aumenta).
+      const principal = s.position;
+      if (principal && principal.side === side) {
+        U.log('🚫 Orden reduce-only descartada: en el mismo lado AUMENTARÍA la posición.', 'warn');
+        return null;
+      }
       U.log('🚫 Orden reduce-only descartada: no hay posición abierta que reducir.', 'warn');
       U.toast('Reduce-only: no hay posición que cerrar', 'warn', 3200);
-      return null;
-    }
-    if (p.side === side) {
-      U.log('🚫 Orden reduce-only descartada: en el mismo lado AUMENTARÍA la posición.', 'warn');
       return null;
     }
     let frac = 1;
@@ -282,14 +341,26 @@
     frac = Math.min(1, Math.max(0, frac));
     if (!(frac > 0)) return null;
     const price = Number.isFinite(+params.entryPrice) ? +params.entryPrice : (s.lastPrice || p.entryPrice);
-    if (frac >= 0.999) return TE.closePosition(price, params.reason || 'manual', params.time);
-    return TE.reducePosition(frac, price, params.time, params.reason || 'parcial');
+    if (frac >= 0.999) return TE.closePosition(price, params.reason || 'manual', params.time, p);
+    return TE.reducePosition(frac, price, params.time, params.reason || 'parcial', p);
   };
 
   TE.openPosition = function (side, params) {
     const s = TE.state;
-    if (params && params.reduceOnly) return TE._reduceOnly(side, params);
-    if (s.position) {
+    params = params || {};
+    if (params.reduceOnly) return TE._reduceOnly(side, params);
+    // En HEDGE, `Abrir` y `Cerrar` son papeles distintos (la API lo dice con `tradeSide` y
+    // exigiendo `positionId` en CLOSE): una orden al otro lado NO toca la posición existente,
+    // abre la suya. Con «Cerrar» pedido, en cambio, sí reduce la contraria.
+    if (s.modoPosicion === 'HEDGE' && params.tradeSide === 'close') {
+      if (!TE.posicionEncontra(side)) {
+        U.toast('No hay posición en el lado contrario que cerrar', 'warn', 3200);
+        return null;
+      }
+      return TE._reduceOnly(side, Object.assign({}, params, { reduceOnly: true }));
+    }
+    const misma = s.modoPosicion === 'HEDGE' ? TE.posicionDe(side) : s.position;
+    if (misma) {
       // MISMO LADO con el promediado activo → se AÑADE a la posición abierta, como
       // el «Add position» de Bitunix: precio medio ponderado, tamaño y margen
       // sumados, y los niveles de TP/SL de la posición se conservan.
@@ -406,9 +477,9 @@
    * @param {string} reason 'manual' | 'sl' | 'tp' | 'liq' | 'reset' | 'end'
    * @param {number} time
    */
-  TE.closePosition = function (price, reason = 'manual', time) {
+  TE.closePosition = function (price, reason = 'manual', time, pos) {
     const s = TE.state;
-    const p = s.position;
+    const p = pos || s.position;
     if (!p) return null;
 
     const dir = p.side === 'long' ? 1 : -1;
@@ -443,7 +514,7 @@
     p.reason = reason;
     p.bars = p.bars || 0;
 
-    s.position = null;
+    TE._quitaPosicion(p);          // solo la suya: la otra dirección sigue viva en modo hedge
     s.lastPrice = price;
 
     const won = p.pnl > 0;
@@ -592,7 +663,8 @@
    */
   TE.setTrailing = function (params, opts) {
     const s = TE.state;
-    const p = s.position;
+    const pr0 = params || {};
+    const p = (pr0.side && TE.posicionDe(pr0.side)) || s.position;
     if (!p) { U.toast('Abre una posición antes de activar el trailing', 'warn'); return null; }
     const pr = params || {};
     const o = opts || {};
@@ -639,7 +711,7 @@
 
   /** Quita el trailing stop de la posición abierta. */
   TE.removeTrailing = function (opts) {
-    const p = TE.state.position;
+    const p = (opts && opts.side && TE.posicionDe(opts.side)) || TE.state.position;
     if (!p || !p.trail) return false;
     p.trail = null;
     const sil = !!(opts && opts.silent);
@@ -653,8 +725,8 @@
    * activación y, una vez armado, sube (LONG) o baja (SHORT) el pico con el
    * extremo favorable de la vela. Devuelve 'armado' | 'movido' | null.
    */
-  TE._updateTrailing = function (candle) {
-    const p = TE.state.position;
+  TE._updateTrailing = function (candle, pos) {
+    const p = pos || TE.state.position;
     if (!p || !p.trail || !candle) return null;
     const t = p.trail;
     const dir = p.side === 'long' ? 1 : -1;
@@ -707,7 +779,9 @@
    */
   TE.addToPosition = function (side, params) {
     const s = TE.state;
-    const p = s.position;
+    // La posición del LADO que se pide, no «la que haya»: en modo hedge hay dos y promediar una
+    // no puede caer sobre la contraria.
+    const p = (params && params.pos) || TE.posicionDe(side) || s.position;
     if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
     if (p.side !== side) {
       U.toast('Promediar solo añade a la posición en SU misma dirección; para invertir usa el lado contrario', 'warn', 4200);
@@ -806,13 +880,13 @@
    * resultados sigue cuadrando con el balance.
    * @returns {object|null} el registro cerrado (o la posición cerrada si frac ≥ 1)
    */
-  TE.reducePosition = function (frac, price, time, reason = 'parcial') {
+  TE.reducePosition = function (frac, price, time, reason = 'parcial', pos) {
     const s = TE.state;
-    const p = s.position;
+    const p = pos || s.position;
     if (!p) { U.toast('No hay posición abierta', 'warn'); return null; }
     const f = +frac;
     if (!Number.isFinite(f) || f <= 0) return null;
-    if (f >= 0.999) return TE.closePosition(price, reason === 'parcial' ? 'manual' : reason, time);
+    if (f >= 0.999) return TE.closePosition(price, reason === 'parcial' ? 'manual' : reason, time, p);
 
     const dir = p.side === 'long' ? 1 : -1;
     const qtyClose = p.qty * f;
@@ -922,11 +996,13 @@
    * fracción. Se ejecutan todos los que quepan en la vela (de menos a más
    * favorable), que es lo que harían las órdenes condicionales del bróker.
    */
-  TE._checkTpLevels = function (candle) {
+  TE._checkTpLevels = function (candle, pos) {
     const s = TE.state;
     let hits = 0;
     for (;;) {
-      const p = s.position;
+      // Con `pos` se recorre el escalonado de ESA posición (modo hedge: hay dos vivas y cada una
+      // tiene sus niveles). Sin ella, se mira la posición principal, que es lo que hacía antes.
+      const p = pos || s.position;
       if (!p || !p.tpLevels || !p.tpLevels.length) break;
       const dir = p.side === 'long' ? 1 : -1;
       let i = -1;
@@ -937,8 +1013,8 @@
       if (i < 0) break;
       const lv = p.tpLevels.splice(i, 1)[0];
       const antes = p.qty;
-      TE.reducePosition(lv.pct, TE._fillPrice(candle, lv.price, p.side, false), candle.time, 'parcial');
-      if (!s.position || s.position.qty === antes) break;   // cerró todo o no hubo cambios
+      TE.reducePosition(lv.pct, TE._fillPrice(candle, lv.price, p.side, false), candle.time, 'parcial', p);
+      if (!TE.posicionDe(p.side) || p.qty === antes) break;   // cerró todo o no hubo cambios
       hits++;
     }
     if (hits) U.log(`🎯 ${hits} nivel${hits > 1 ? 'es' : ''} de TP escalonado ejecutado${hits > 1 ? 's' : ''}`, 'ok');
@@ -966,6 +1042,10 @@
    * @returns {object|null} la orden creada (o null si se ejecutó al instante por error)
    */
   TE.placeLimit = function (side, params) {
+    // En HEDGE, «Cerrar» es una orden que solo puede REDUCIR la posición contraria —igual que el
+    // `tradeSide: CLOSE` de la API, que exige posición—. Se traduce a reduce-only en vez de
+    // abrir un camino nuevo: así reutiliza la regla que ya impide aumentar por accidente.
+    if (params && params.tradeSide === 'close' && TE.state.modoPosicion === 'HEDGE') params.reduceOnly = true;
     const s = TE.state;
     const limitPrice = +params.limitPrice;
     if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
@@ -1066,6 +1146,7 @@
    *    o **límite** (se COLOCA un límite, que puede no rellenarse nunca).
    */
   TE.placeTrigger = function (side, params) {
+    if (params && params.tradeSide === 'close' && TE.state.modoPosicion === 'HEDGE') params.reduceOnly = true;
     const s = TE.state;
     const p = params || {};
     const trig = +p.triggerPrice;
@@ -1204,7 +1285,9 @@
     const s = TE.state;
     const i = (s.pending || []).findIndex((o) => o.id === id);
     if (i < 0) return null;
-    if (s.position) return null;          // una posición a la vez: sigue en espera
+    // En ONE-WAY solo hay una posición a la vez, así que un ejecución anticipada espera a que se
+    // cierre. En HEDGE la orden del lado contrario abre SU posición: no hay nada que esperar.
+    if (s.position && s.modoPosicion !== 'HEDGE') return null;   // una posición a la vez: sigue en espera
     const ref = s.lastPrice;
     if (!Number.isFinite(ref) || ref <= 0) return null;
     const o = s.pending[i];
@@ -1296,7 +1379,7 @@
       // lado y el promediado esté activo: en ese caso se ejecutan y AÑADEN a la
       // posición (así funciona «Add position» con orden límite en Bitunix).
       const promedia = !!(s.averaging && s.position && s.position.side === o.side);
-      if (s.position && !promedia && !o.reduceOnly) break;
+      if (s.position && !promedia && !o.reduceOnly && !(s.modoPosicion === 'HEDGE' && s.position.side !== o.side)) break;
       const alcanzada = o.side === 'long' ? candle.low <= o.limitPrice : candle.high >= o.limitPrice;
       if (!alcanzada) continue;
 
@@ -1355,6 +1438,106 @@
     return (+desde || 0) + cada * 3600000;              // horario imposible: cae al ritmo, sin horas
   };
 
+  /**
+   * Evalúa UNA posición dentro de la vela: barras, MFE/MAE, funding, liquidación, SL/TP,
+   * trailing y TP escalonado. Devuelve el resultado de la acción ejecutada (cierre o nivel) o
+   * null si en esta vela no le ha pasado nada. `p` entra por parámetro porque en modo hedge hay
+   * dos y cada una se juzga por sus propios niveles.
+   */
+  TE._revisaPosicion = function (candle, p) {
+    const s = TE.state;
+    if (!p) return null;
+      p.bars++;
+
+    // Una posición recién ejecutada por un límite no se evalúa en su misma
+    // vela: ignoramos el orden real de los precios dentro de ella.
+    if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
+      TE.updateEquity(candle.close, candle.time);
+      TE._emit();
+      return null;
+    }
+
+    // Excursiones máximas durante la vela
+    const dir = p.side === 'long' ? 1 : -1;
+    const favPrice = dir === 1 ? candle.high : candle.low;
+    const advPrice = dir === 1 ? candle.low : candle.high;
+    p.mfe = Math.max(p.mfe, (favPrice - p.entryPrice) * p.qty * dir);
+    p.mae = Math.min(p.mae, (advPrice - p.entryPrice) * p.qty * dir);
+
+    // FUNDING a lo Bitunix: se paga/recibe en las horas de liquidación, no en cada vela, y con
+    // el signo del lado. Las velas de 1 h o 4 h ven pasar la marca; las de 1 d pueden ver pasar
+    // tres, así que se recorre la agenda en bucle en vez de «¿esta vela es de liquidación?».
+    if (s.fundingPct > 0) {
+      if (!(p.pagoFundingEn > 0)) p.pagoFundingEn = TE._siguienteFunding(p.entryTime || candle.time);
+      let pagado = 0, hits = 0;
+      while (candle.time >= p.pagoFundingEn) {
+        const dir = p.side === 'long' ? 1 : -1;
+        pagado -= dir * p.notional * (s.fundingPct / 100);
+        hits++;
+        p.pagoFundingEn = TE._siguienteFunding(p.pagoFundingEn);
+        if (hits > 1000) break;                     // reloj roto: no colgar la pestaña
+      }
+      if (hits) {
+        s.balance += pagado; s.feesPaid += Math.abs(pagado);
+        p.fees += Math.abs(pagado);
+        p.funding = (p.funding || 0) + pagado;
+        U.log(`💱 Funding de ${hits} liquidacion(es) ${pagado < 0 ? 'pagado' : 'recibido'}: `
+              + `${U.num(Math.abs(pagado), 4)} USDT sobre ${U.num(p.notional, 2)} de notional a `
+              + `${U.num(s.fundingPct, 4)} % · posición ${p.side === 'long' ? 'LARGA' : 'CORTA'}`,
+              pagado < 0 ? 'warn' : 'ok');
+      }
+    }
+
+    const liq = TE.liquidationPrice(p);
+
+    // --- 1) Liquidación (prioridad máxima) ---
+    if (liq !== null && ((p.side === 'long' && candle.low <= liq) || (p.side === 'short' && candle.high >= liq))) {
+      U.log('💀 Precio de liquidación alcanzado: la posición se cierra por margen', 'bad');
+      return TE.closePosition(liq, 'liq', candle.time, p);
+    }
+
+    // --- 2) SL / TP ---
+    const slHit = p.sl !== null && TE._alcanza(p.sl, p.side, 'sl', candle, p);
+    const tpHit = p.tp !== null && TE._alcanza(p.tp, p.side, 'tp', candle, p);
+
+    // El TRAILING también es un stop: si SL fijo y trailing están tocados en la
+    // misma vela, ejecuta el que esté MÁS CERCA del precio (en un LONG, el nivel
+    // más alto; en un SHORT, el más bajo), que es lo que haría el bróker.
+    const trailLevel = TE.trailingPrice(p);
+    const trailHit = trailLevel !== null && (dir === 1 ? candle.low <= trailLevel : candle.high >= trailLevel);
+    let stop = null;
+    if (slHit || trailHit) {
+      const slPrecio = slHit ? p.sl : null;
+      const trPrecio = trailHit ? trailLevel : null;
+      const elegido = slPrecio === null ? trPrecio
+        : trPrecio === null ? slPrecio
+          : (dir === 1 ? Math.max(slPrecio, trPrecio) : Math.min(slPrecio, trPrecio));
+      stop = { price: elegido, trail: trailHit && elegido === trailLevel };
+    }
+
+    if (slHit && tpHit) {
+      const first = s.slFirst === 'best' ? 'tp' : 'sl';
+      if (first === 'sl') return TE._hitStop(candle, stop, p);
+      return TE._ejecutaNivel(p, 'tp', candle);
+    }
+    if (stop) return TE._hitStop(candle, stop, p);
+
+    // 2b) TP ESCALONADO (Partial TP/SL): cada nivel tocado cierra su fracción y
+    //     deja el resto de la posición vivo con su SL intacto.
+    if (p.tpLevels && p.tpLevels.length) {
+      TE._checkTpLevels(candle, p);
+      if (!TE.posicionDe(p.side)) { return null; }   // el escalonado la cerró entera
+    }
+
+    if (tpHit) return TE._ejecutaNivel(p, 'tp', candle);
+
+    // --- 3) El trailing sigue al precio: se arma/mueve al CERRAR la vela (ver
+    //     comentario de la sección TRAILING STOP: el pico no se actualiza antes
+    //     de evaluar el disparo, para no inventarse el orden intra-vela). ---
+    TE._updateTrailing(candle, p);
+    return null;
+  };
+
   TE.onCandle = function (candle) {
     const s = TE.state;
     s.lastPrice = candle.close;
@@ -1364,97 +1547,21 @@
     //        precio entra en el nivel la orden se ejecuta DENTRO de esta vela.
     TE._checkPending(candle);
 
-    const p = s.position;
-    if (p) {
-      p.bars++;
-
-      // Una posición recién ejecutada por un límite no se evalúa en su misma
-      // vela: ignoramos el orden real de los precios dentro de ella.
-      if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
-        TE.updateEquity(candle.close, candle.time);
-        TE._emit();
-        return null;
-      }
-
-      // Excursiones máximas durante la vela
-      const dir = p.side === 'long' ? 1 : -1;
-      const favPrice = dir === 1 ? candle.high : candle.low;
-      const advPrice = dir === 1 ? candle.low : candle.high;
-      p.mfe = Math.max(p.mfe, (favPrice - p.entryPrice) * p.qty * dir);
-      p.mae = Math.min(p.mae, (advPrice - p.entryPrice) * p.qty * dir);
-
-      // FUNDING a lo Bitunix: se paga/recibe en las horas de liquidación, no en cada vela, y con
-      // el signo del lado. Las velas de 1 h o 4 h ven pasar la marca; las de 1 d pueden ver pasar
-      // tres, así que se recorre la agenda en bucle en vez de «¿esta vela es de liquidación?».
-      if (s.fundingPct > 0) {
-        if (!(p.pagoFundingEn > 0)) p.pagoFundingEn = TE._siguienteFunding(p.entryTime || candle.time);
-        let pagado = 0, hits = 0;
-        while (candle.time >= p.pagoFundingEn) {
-          const dir = p.side === 'long' ? 1 : -1;
-          pagado -= dir * p.notional * (s.fundingPct / 100);
-          hits++;
-          p.pagoFundingEn = TE._siguienteFunding(p.pagoFundingEn);
-          if (hits > 1000) break;                     // reloj roto: no colgar la pestaña
-        }
-        if (hits) {
-          s.balance += pagado; s.feesPaid += Math.abs(pagado);
-          p.fees += Math.abs(pagado);
-          p.funding = (p.funding || 0) + pagado;
-          U.log(`💱 Funding de ${hits} liquidacion(es) ${pagado < 0 ? 'pagado' : 'recibido'}: `
-                + `${U.num(Math.abs(pagado), 4)} USDT sobre ${U.num(p.notional, 2)} de notional a `
-                + `${U.num(s.fundingPct, 4)} % · posición ${p.side === 'long' ? 'LARGA' : 'CORTA'}`,
-                pagado < 0 ? 'warn' : 'ok');
-        }
-      }
-
-      const liq = TE.liquidationPrice(p);
-
-      // --- 1) Liquidación (prioridad máxima) ---
-      if (liq !== null && ((p.side === 'long' && candle.low <= liq) || (p.side === 'short' && candle.high >= liq))) {
-        U.log('💀 Precio de liquidación alcanzado: la posición se cierra por margen', 'bad');
-        return TE.closePosition(liq, 'liq', candle.time);
-      }
-
-      // --- 2) SL / TP ---
-      const slHit = p.sl !== null && TE._alcanza(p.sl, p.side, 'sl', candle, p);
-      const tpHit = p.tp !== null && TE._alcanza(p.tp, p.side, 'tp', candle, p);
-
-      // El TRAILING también es un stop: si SL fijo y trailing están tocados en la
-      // misma vela, ejecuta el que esté MÁS CERCA del precio (en un LONG, el nivel
-      // más alto; en un SHORT, el más bajo), que es lo que haría el bróker.
-      const trailLevel = TE.trailingPrice(p);
-      const trailHit = trailLevel !== null && (dir === 1 ? candle.low <= trailLevel : candle.high >= trailLevel);
-      let stop = null;
-      if (slHit || trailHit) {
-        const slPrecio = slHit ? p.sl : null;
-        const trPrecio = trailHit ? trailLevel : null;
-        const elegido = slPrecio === null ? trPrecio
-          : trPrecio === null ? slPrecio
-            : (dir === 1 ? Math.max(slPrecio, trPrecio) : Math.min(slPrecio, trPrecio));
-        stop = { price: elegido, trail: trailHit && elegido === trailLevel };
-      }
-
-      if (slHit && tpHit) {
-        const first = s.slFirst === 'best' ? 'tp' : 'sl';
-        if (first === 'sl') return TE._hitStop(candle, stop, p);
-        return TE._ejecutaNivel(p, 'tp', candle);
-      }
-      if (stop) return TE._hitStop(candle, stop, p);
-
-      // 2b) TP ESCALONADO (Partial TP/SL): cada nivel tocado cierra su fracción y
-      //     deja el resto de la posición vivo con su SL intacto.
-      if (p.tpLevels && p.tpLevels.length) {
-        TE._checkTpLevels(candle);
-        if (!s.position) { TE.updateEquity(candle.close, candle.time); TE._emit(); return null; }
-      }
-
-      if (tpHit) return TE._ejecutaNivel(p, 'tp', candle);
-
-      // --- 3) El trailing sigue al precio: se arma/mueve al CERRAR la vela (ver
-      //     comentario de la sección TRAILING STOP: el pico no se actualiza antes
-      //     de evaluar el disparo, para no inventarse el orden intra-vela). ---
-      TE._updateTrailing(candle);
+    // Cada dirección se evalúa por su cuenta: en modo hedge hay dos posiciones vivas y lo que
+    // les pasa no se puede mezclar (un LONG tocando su TP no toca el SHORT, y cada una tiene su
+    // liquidación, su funding y su trailing). El orden long→short solo importa si las dos se
+    // disparan en la MISMA vela: la simulación permite una acción por vela y por posición, y las
+    // dos posiciones la obtienen, cosa que con un solo `if (p)` habría dejado a la segunda sin
+    // evaluar hasta la vela siguiente.
+    let accion = null;
+    for (const p of TE.posiciones()) {
+      const r = TE._revisaPosicion(candle, p);
+      if (r !== null && r !== undefined && accion === null) accion = r;
     }
+    // Como antes: si hubo cierre/nivel, ESO es lo que devuelve `onCandle` (el propio cierre ya
+    // refresca la interfaz; meter aquí un updateEquity extra duplicaría un punto de la curva de
+    // capital y descolocaría las pruebas que la cuentan vela a vela).
+    if (accion !== null) return accion;
 
     TE.updateEquity(candle.close, candle.time);
     TE._emit();
@@ -1498,7 +1605,7 @@
     const precioLimite = +((tipo === 'sl' ? p.slExecPrice : p.tpExecPrice) || 0);
     if (exec === 'market' || !(precioLimite > 0)) {
       const fill = TE._fillPrice(candle, nivel, p.side, tipo === 'sl');
-      return TE.closePosition(fill, tipo, candle.time);
+      return TE.closePosition(fill, tipo, candle.time, p);
     }
     const yaPuesta = tipo === 'sl' ? p._slLimitPlaced : p._tpLimitPlaced;
     if (yaPuesta) return null;                 // no se inunda el libro de órdenes vela tras vela
@@ -1529,8 +1636,8 @@
     const dir = p.side === 'long' ? 1 : -1;
     U.log(`🌀 Trailing stop: el precio retrocedió un ${U.num(t.pct, 2)} % desde el pico ` +
           `${U.fmtPrice(t.peak)} y se cierra ${U.num(t.frac * 100, 0)} % en ${U.fmtPrice(fill)}`, 'warn');
-    if (t.frac >= 0.999) return TE.closePosition(fill, 'trail', candle.time);
-    return TE.reducePosition(t.frac, fill, candle.time, 'trail');
+    if (t.frac >= 0.999) return TE.closePosition(fill, 'trail', candle.time, p);
+    return TE.reducePosition(t.frac, fill, candle.time, 'trail', p);
   };
 
   /**
@@ -1639,6 +1746,8 @@
       exposure: s.balance > 0 ? (TE.marginUsed() / s.balance) * 100 : 0,
       fees: s.feesPaid,
       position: s.position,
+      posiciones: TE.posiciones(),
+      modoPosicion: s.modoPosicion,
     };
   };
 
@@ -1655,12 +1764,17 @@
         fundingPct: TE.state.fundingPct,
         slFirst: TE.state.slFirst,
         averaging: TE.state.averaging,
+        // El modo de posición es estado de la cuenta, no del gráfico: si no viaja aquí, al
+        // restaurar una partida en hedge la segunda dirección se caía (y el modo volvía a
+        // ONE-WAY con dos posiciones colgando).
+        modoPosicion: TE.state.modoPosicion,
         feesPaid: TE.state.feesPaid,
         lastPrice: TE.state.lastPrice,
         lastTime: TE.state.lastTime,
         seq: TE.state.seq,
       },
       position: TE.state.position,
+      posiciones: TE.posiciones(),
       pending: TE.state.pending,
       trades: TE.state.trades,
       equitySeries: TE.state.equitySeries.slice(-5000),
@@ -1670,7 +1784,16 @@
   TE.restore = function (data) {
     if (!data) return;
     Object.assign(TE.state, data.state || {});
-    TE.state.position = data.position || null;
+    // Primero el modo (un restore de una partida en hedge no puede caer en one-way con dos
+    // posiciones: la segunda se perdería), luego las dos ranuras; `position` se queda con la
+    // principal solo para partidas antiguas que no tenían `posiciones`.
+    if (data.state && data.state.modoPosicion) TE.state.modoPosicion = data.state.modoPosicion;
+    if (Array.isArray(data.posiciones) && data.posiciones.length) {
+      TE.state.posiciones.long = null; TE.state.posiciones.short = null;
+      data.posiciones.forEach((x) => { if (x && x.side) TE.state.posiciones[x.side] = x; });
+    } else {
+      TE.state.position = data.position || null;
+    }
     TE.state.pending = data.pending || [];
     TE.state.trades = data.trades || [];
     TE.state.equitySeries = data.equitySeries || [];
@@ -1679,8 +1802,9 @@
     // distintas: sin este re-enlace, cerrar después de cargar una sesión dejaba
     // una fila «abierta» fantasma en la hoja y el PnL nunca aparecía (y el balance
     // dejaba de cuadrar). Se vuelve a apuntar la fila a la posición restaurada.
-    const p = TE.state.position;
-    if (p) {
+    // Cada posición restaurada vuelve a apuntar a SU fila del historial (ver el comentario de
+    // arriba): en modo hedge son dos filas y dos re-enlaces.
+    for (const p of TE.posiciones()) {
       const k = TE.state.trades.findIndex((t) => t && t.id === p.id);
       if (k >= 0) TE.state.trades[k] = p;
       else TE.state.trades.push(p);

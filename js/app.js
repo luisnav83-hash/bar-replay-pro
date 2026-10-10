@@ -37,6 +37,31 @@
   /* Opciones del tipo TRIGGER, separadas como en la API: `src` decide CONTRA QUÉ se comprueba el
      nivel (MARK_PRICE | LAST_PRICE) y `exec` decide QUÉ se hace al disparar (mercado o límite). */
   App.trigOrder = { src: 'last', exec: 'market' };
+  /* Papel de la orden en modo HEDGE (`tradeSide`) y dirección que enseña la tarjeta de posición.
+     Son preferencias del formulario, como App.riesgo: el estado del motor vive en TE. */
+  App.tradeSide = 'open';
+  App.posLado = null;
+
+  /** La posición sobre la que actúan los botones de gestión: la enseñada, o la principal. */
+  App.posicionActiva = function () {
+    const pedida = App.posLado && TE.posicionDe(App.posLado);
+    return pedida || TE.state.position || null;
+  };
+
+  /**
+   * Cambio de modo de posición. Si el motor lo rechaza (200014: hay posición u orden abierta) el
+   * conmutador tiene que VOLVER a su sitio: un segmentado que se queda marcando un modo que la
+   * cuenta no tiene es peor que no tenerlo, porque el usuario operaría creyendo que está en hedge.
+   */
+  App.setPosicionModo = function (modo) {
+    const r = TE.setPosicionModo(modo);
+    if (!r.ok) {
+      U.log('🚫 ' + r.msg + ' Mientras haya ' + r.hay + ' abierta no se puede cambiar.', 'warn');
+      U.toast('No se puede cambiar el modo con una ' + r.hay + ' abierta', 'warn', 5000);
+    }
+    if (UI.syncPosModo) UI.syncPosModo();
+    return r;
+  };
   App.interval = '1h';
   // Ancla temporal exacta entre cambios de serie: la fecha en la que está el
   // replay. Se conserva mientras no se mueva el cursor, de modo que encadenar
@@ -756,14 +781,20 @@
     // INVERTIR: pedir el lado contrario con una posición abierta la cierra a
     // mercado y abre la nueva. Antes el motor la rechazaba con un aviso y quien
     // pulsaba LONG/SHORT «para girar» veía que no pasaba nada más.
-    const abierta = TE.state.position;
-    if (abierta && abierta.side !== side) {
-      U.log(`🔄 Inversión: se cierra la ${abierta.side.toUpperCase()} para abrir ${side.toUpperCase()}`, 'sys');
+    // En HEDGE no se invierte: el lado contrario tiene su propia posición, y si lo que se quería
+    // era cerrar ya está pedido con el papel «Cerrar» del formulario. Sin este guard, pulsar SHORT
+    // con una LONG viva cerraba la larga en vez de abrir la corta, y el modo hedge quedaba
+    // inoperable desde la interfaz aunque el motor supiera hacerlo (así lo cazó hedge.test.js).
+    const contraria = TE.posicionEncontra(side);
+    const misma = TE.posicionDe(side);
+    const abriendoEnHedge = TE.state.modoPosicion === 'HEDGE' && App.tradeSide !== 'close';
+    if (!abriendoEnHedge && contraria) {
+      U.log(`🔄 Inversión: se cierra la ${contraria.side.toUpperCase()} para abrir ${side.toUpperCase()}`, 'sys');
       App.flatten('inversion');
     }
     // Mismo lado con posición abierta y promediado activo → NO es una apertura
     // nueva: es una entrada que se suma (TE.openPosition deriva a addToPosition).
-    const esPromediado = !!(abierta && abierta.side === side && TE.state.averaging);
+    const esPromediado = !!(misma && TE.state.averaging);
 
     // SL / TP: de nivel introducido → distancia → nivel según la dirección
     const dir = side === 'long' ? 1 : -1;
@@ -775,6 +806,7 @@
     const tp = tpDist !== null ? price * (1 + dir * tpDist) : null;
 
     const pos = TE.openPosition(side, {
+      tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       mode: App.sizeMode,
       size: sizeVal,
       entryPrice: price,
@@ -838,6 +870,7 @@
     const ef = document.getElementById('ordEffect');
 
     const orden = TE.placeTrigger(side, {
+      tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       triggerPrice: trig,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
       exec,
@@ -890,6 +923,7 @@
     const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
 
     const orden = TE.placeLimit(side, {
+      tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       limitPrice: limite,
       mode: App.sizeMode,
       size: sizeVal,
@@ -933,7 +967,7 @@
   /** Redibuja las líneas de las órdenes límite pendientes. */
   App.refreshOrderLines = function () {
     CM.setPendingLines(TE.state.pending || []);
-    CM.setPositionLines(TE.state.position);
+    CM.setPositionLines(TE.posiciones());
     // Pestañas arrastrables sobre cada límite (la misma mecánica que SL/TP)
     if (global.DT && DT.setPendingHandles) DT.setPendingHandles(TE.state.pending || []);
   };
@@ -1002,9 +1036,13 @@
    *        cierra para abrir la contraria; queda anotado en el historial.
    */
   App.flatten = function (reason = 'manual') {
-    if (!TE.state.position) { U.toast('No hay ninguna posición abierta', 'warn', 1500); return; }
+    const vivas = TE.posiciones();
+    if (!vivas.length) { U.toast('No hay ninguna posición abierta', 'warn', 1500); return; }
     const price = App.currentPrice();
-    TE.closePosition(price, reason, App.currentTime());
+    // «Cerrar todo» cierra TODO: en modo hedge son dos posiciones, cada una con su PnL, su
+    // comisión y su fila en el historial. Cerrar solo la principal dejaría una SHORT olvidada en
+    // el libro, que es justo lo que este botón promete que no pasa.
+    for (const p of vivas) TE.closePosition(price, reason, App.currentTime(), p);
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
     App.refreshOrderLines();
     DT.setTradeHandles(null);
@@ -1028,7 +1066,7 @@
    * @param {object} [opts]  { reaim:boolean, sl, tp, mode }
    */
   App.averagePosition = function (sizeVal, opts) {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
     const o = opts || {};
     const mediaAntes = p.entryPrice;
@@ -1058,7 +1096,7 @@
    * @param {number} pct 1..100
    */
   App.partialClose = function (pct) {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
     const f = U.clamp(+pct || 0, 1, 100) / 100;
     const row = TE.reducePosition(f, App.currentPrice(), App.currentTime(), 'parcial');
@@ -1073,7 +1111,7 @@
 
   /** SL al break-even (precio medio + comisiones), no al precio de entrada. */
   App.slToBreakEven = function () {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return false; }
     const be = TE.breakEvenPrice(p);
     if (be === null) { U.toast('No se puede calcular el break-even', 'err'); return false; }
@@ -1098,7 +1136,7 @@
 
   /** Añade un nivel de TP escalonado desde los campos de la tarjeta. */
   App.addTpLevelFromForm = function () {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('Abre una posición antes de fijar TP escalonado', 'warn'); return null; }
     const precio = parseFloat((document.getElementById('tpLvlPrice') || {}).value);
     const pct = parseFloat(((document.getElementById('tpLvlPct') || {}).value) || '50');
@@ -1123,7 +1161,7 @@
    * @param {number} [frac]     % de la posición que cierra (100 = entera)
    */
   App.setTrailing = function (pct, act, frac) {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
     const t = TE.setTrailing({ pct, activation: act, frac });
     if (!t) return null;
@@ -1137,7 +1175,7 @@
 
   /** Desactiva el trailing stop de la posición abierta. */
   App.trailingOff = function () {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p || !p.trail) { U.toast('No hay ningún trailing activo que quitar', 'info', 1800); return false; }
     if (!TE.removeTrailing()) return false;
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
@@ -1152,7 +1190,7 @@
    * haya escrito en la tarjeta (por defecto 0.50 % y sin precio de activación).
    */
   App.toggleTrailing = function () {
-    const p = TE.state.position;
+    const p = App.posicionActiva();
     if (!p) { U.toast('Abre una posición para usar el trailing (V)', 'warn', 2200); return false; }
     if (p.trail) return App.trailingOff();
     const $ = (id) => document.getElementById(id);
@@ -1167,7 +1205,7 @@
   App.removeTpLevel = function (i) {
     if (!TE.removeTpLevel(i)) return false;
     App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
-    UI.syncPositionGraphics(TE.state.position);
+    UI.syncPositionGraphics(App.posicionActiva());
     UI.refreshAll();
     return true;
   };

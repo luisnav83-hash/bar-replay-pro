@@ -506,6 +506,13 @@
   /** Dibuja (o redibuja) las líneas de entrada / SL / TP / liquidación. */
   CM.setPositionLines = function (pos) {
     CM.clearPositionLines();
+    // Acepta UNA posición o la LISTA de vivas (modo hedge): si no, la segunda dirección se queda
+    // sin sus niveles en el gráfico, y arrastrar esas líneas es la forma normal de mover un SL.
+    const lista = Array.isArray(pos) ? pos.filter(Boolean) : [pos].filter(Boolean);
+    lista.forEach((p) => CM._lineasDePosicion(p));
+    return;
+  };
+  CM._lineasDePosicion = function (pos) {
     if (!pos) return;
     const mk = (price, color, title, style) => {
       const line = CM.series.candles.createPriceLine({

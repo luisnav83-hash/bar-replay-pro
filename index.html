@@ -537,6 +537,27 @@
              hay ninguna regla que oculte estas tres filas, así que en escritorio se ven
              siempre y el botón ni aparece. -->
         <div class="ord-adv" id="orderAvanzado">
+        <!-- MODO DE POSICIÓN y papel de la orden. Fiel a la API: `change_position_mode` admite
+             ONE_WAY|HEDGE y se RECHAZA con 200014 si hay posiciones u órdenes abiertas, y en hedge
+             cada orden declara su papel con `tradeSide` OPEN|CLOSE.
+             Vive DENTRO de «Avanzado» por dos razones: en Bitunix es un ajuste de la cuenta (está en
+             el menú del panel, no entre el precio y el tamaño) y el contrato del teléfono exige que
+             el formulario en reposo se vea entero sin deslizar —29 px de fila aquí ya lo rompían;
+             medido en tests/responsive.test.js—, y «Avanzado» es justamente el sitio que se pliega. --> Fiel a la API: `change_position_mode` admite
+             ONE_WAY|HEDGE y se RECHAZA con 200014 si hay posiciones u órdenes abiertas (por eso el
+             conmutador está aquí, a la vista, y no enterrado en Ajustes), y en hedge cada orden
+             declara su papel con `tradeSide` OPEN|CLOSE. -->
+        <div class="ord-segs" id="posModeRow">
+          <div class="seg seg-order" id="segPosMode" role="group" aria-label="Modo de posición">
+            <button class="seg-btn active" data-pmode="ONE_WAY" title="Una sola posición: una orden al otro lado la reduce">ONE-WAY</button>
+            <button class="seg-btn" data-pmode="HEDGE" title="LONG y SHORT a la vez, cada una con su margen, su SL/TP y su liquidación">HEDGE</button>
+          </div>
+          <div class="seg" id="segTradeSide" role="group" aria-label="Papel de la orden" style="display:none">
+            <button class="seg-btn active" data-tside="open" title="Abre posición en su propio lado">Abrir</button>
+            <button class="seg-btn" data-tside="close" title="Cierra la posición del lado contrario; no puede abrirla en contra (CLOSE pide posición en la API)">Cerrar</button>
+          </div>
+        </div>
+
 
         <div class="grid-2 bf-fee-row">
           <!-- Control HEREDADO del tema anterior: sigue existiendo porque
@@ -655,9 +676,17 @@
 
     <div class="card" id="positionCard">
           <div class="card-head"><span class="card-title">Posición abierta</span>
+            <!-- En HEDGE puede haber dos direcciones vivas y la tarjeta muestra una. Este
+                 conmutador es la única forma de llegar a la otra sin cerrar la primera, así que
+                 aparece SOLO cuando hay dos (si no, estorba). -->
+            <span class="seg" id="segPosLado" role="group" aria-label="Dirección mostrada" style="display:none">
+              <button class="seg-btn active" data-lado="long" title="Enseñar la posición larga">LONG</button>
+              <button class="seg-btn" data-lado="short" title="Enseñar la posición corta">SHORT</button>
+            </span>
             <span class="tag" id="posSide">FLAT</span>
           </div>
           <div class="card-body">
+            <div class="kv small" id="posOtroLado" style="display:none"></div>
             <div class="kv big"><span>PnL no realizado</span><b id="posPnl" class="pnl">$0.00</b></div>
             <!-- Mini-PnL: el mismo recorrido que enseña el panel del gráfico, en 26 px,
                  para no tener que levantar la vista. Lo dibuja PC.paintMini(). -->
