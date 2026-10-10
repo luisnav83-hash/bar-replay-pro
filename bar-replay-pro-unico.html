@@ -1589,6 +1589,7 @@ kbd {
   #orderCard .bf-margin-row { min-height: 22px; }
   #orderCard #segOrderType .ic { display: none; }
   #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
+  #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
   #orderCard .field { min-height: 26px; }
   #orderCard .field input { height: 24px; }
@@ -2122,10 +2123,42 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
             <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
             <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
+            <button class="seg-btn" data-mode="riesgo" title="Riesgo fijo (223/225): el tamaño no se escribe, se deduce de la pérdida máxima y del stop-loss. La orden sigue siendo límite o a mercado, con el stop adjunto.">Riesgo</button>
           </div>
         </div>
 
         <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
+        <!-- RIESGO FIJO (223/225). Solo tres campos: el tamaño se deduce y se pinta abajo. -->
+        <div id="riesgoRow" style="display:none">
+          <div class="grid-2-min">
+            <label class="field">
+              <span class="field-label">Stop-loss (precio)</span>
+              <input type="number" id="riesgoSlInput" step="any" placeholder="ej. 58000">
+            </label>
+            <label class="field">
+              <span class="field-label">Pérdida máxima (USDT)</span>
+              <input type="number" id="riesgoMaxInput" step="any" min="0" placeholder="obligatorio · ej. 50">
+            </label>
+          </div>
+          <div class="grid-2-min">
+            <div class="field">
+              <span class="field-label">R:R del take-profit</span>
+              <div class="seg seg-sm" id="segRiesgoRr" role="group" aria-label="Ratio riesgo/beneficio del TP derivado">
+                <button class="seg-btn active" data-rr="1" title="TP a la misma distancia que el stop">1:1</button>
+                <button class="seg-btn" data-rr="2" title="TP al doble de la distancia del stop">1:2</button>
+                <button class="seg-btn" data-rr="3" title="TP al triple">1:3</button>
+                <button class="seg-btn" data-rr="4" title="TP al cuádruple">1:4</button>
+                <button class="seg-btn" data-rr="0" title="Solo dimensiona: no deriva ningún take-profit">—</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">Lado deducido del stop</span>
+              <div class="hint" id="riesgoLado">—</div>
+            </div>
+          </div>
+          <div class="hint" id="riesgoHint">Pérdida máxima ÷ distancia al stop = tamaño. Sin pérdida máxima no hay cálculo posible.</div>
+        </div>
+
         <div id="limitRow" style="display:none">
           <label class="field full">
             <span class="field-label">Precio límite</span>
@@ -5804,6 +5837,53 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
      vela que había abierto POR ENCIMA del nivel, cobrando 101,20 donde el stop estaba a 99,47—.
      Aquí el precio honesto es el nivel, y solo la apertura si la vela abrió más allá (hueco): en
      ese caso el stop se habría ejecutado en la apertura y no se le puede regalar el nivel. */
+  /* ═══════════ RIESGO FIJO (Fixed Risk Order · artículos 223 y 225) ═══════════
+     El intercambio lo describe así: NO es un tipo de orden nuevo, es una capa de cálculo. «Based
+     on this predefined loss amount, the system automatically calculates an appropriate position
+     size»; «the final order is still a standard limit order or market order, while automatically
+     attaching a corresponding stop-loss condition». Tres datos definen todo: precio de entrada,
+     precio de salida del stop y pérdida máxima admitida. De ahí
+         qty = pérdidaMáxima / |entrada − stop|        (el apalancamiento NO entra en la fórmula)
+     y el tamaño en USD es qty·entrada. La pérdida máxima es campo OBLIGATORIO: «Max Risk is a
+     required field. If left empty, position calculation and chart preview will not be available».
+
+     El lado no se pregunta: se deduce de dónde está el stop. Una compra pierde si el precio BAJA,
+     así que su stop vive por debajo; si el usuario lo pone por encima, lo que está describiendo es
+     una venta. Es exactamente lo que hace el panel del gráfico al arrastrar la caja desde el precio.
+  */
+  TE.sizePorRiesgo = function (opts) {
+    const o = opts || {};
+    const entry = +o.entryPrice, sl = +o.slPrice, max = +o.maxLoss;
+    const mal = (motivo) => ({ ok: false, motivo, qty: 0, notional: 0, margen: 0, dist: 0, distPct: 0 });
+    if (!Number.isFinite(entry) || entry <= 0) return mal('falta el precio de entrada');
+    if (!Number.isFinite(sl) || sl <= 0) return mal('falta el precio de stop-loss');
+    if (!Number.isFinite(max) || max <= 0) return mal('falta la pérdida máxima (campo obligatorio)');
+    if (Math.abs(entry - sl) < entry * 1e-9) return mal('entrada y stop coinciden: no hay distancia que convertir en riesgo');
+    const dir = sl < entry ? 1 : -1;
+    const dist = Math.abs(entry - sl);
+    const lev = Number.isFinite(+o.leverage) && +o.leverage > 0 ? +o.leverage : (TE.state.leverage || 1);
+    let qty = max / dist, notional = qty * entry, margen = notional / lev;
+    // La guía no dice qué pasa cuando el tamaño deducido no cabe en el margen libre. Recortar el
+    // riesgo no es una regla de Bitunix, es una decisión local: la otra opción (rechazar en seco)
+    // deja al usuario sin saber qué número sí cabía, y aquí se opera con una máquina que responde
+    // por margen. Se avisa SIEMPRE que ocurre y `riesgo` refleja lo que de verdad se asume.
+    const libre = TE.freeMargin();
+    const excede = margen > libre + 1e-9;
+    let factor = 1;
+    if (excede && margen > 0) {
+      factor = libre / margen;
+      qty *= factor; notional *= factor; margen *= factor;
+    }
+    return {
+      ok: true, side: dir === 1 ? 'long' : 'short', dir, entry, sl,
+      dist, distPct: (dist / entry) * 100, qty, notional, margen,
+      // `riesgo` es lo que de verdad se asume: si el tamaño tuvo que recortarse, el riesgo ya no
+      // es el pedido. Pintar el pedido como si estuviera intacto sería mentir en la cifra que
+      // importa. `pedido` se guarda aparte para poder decir «querías X, cabe Y».
+      pedido: max, riesgo: qty * dist, excede, factor,
+    };
+  };
+
   TE._fillTrailing = function (candle, nivel, side) {
     return side === 'long' ? Math.min(nivel, candle.open) : Math.max(nivel, candle.open);
   };
@@ -10347,14 +10427,46 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     U.$$('#segSize .seg-btn').forEach((b) => b.addEventListener('click', () => {
       U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
       App.sizeMode = b.dataset.mode;
-      const labels = { pct: ['Tamaño (% del equity)', '%'], notional: ['Tamaño en USD (exposición)', 'USD'], qty: ['Cantidad de monedas', ''] };
+      const labels = UI.SIZE_LABELS;
       setText('sizeLabel', labels[App.sizeMode][0]);
       setText('sizeSuffix', labels[App.sizeMode][1]);
       if (App.sizeMode === 'qty') document.getElementById('sizeInput').value = 1;
+      /* Entrar en Riesgo ESCRIBE el tamaño deducido en `#sizeInput` (es su salida). Al salir hay que
+         devolver el número anterior: si no, los 2 500 USD deducidos se releerían como «2 500 % del
+         equity» y la orden siguiente se rechazaría por margen sin ninguna explicación —ese fallo lo
+         encontró la suite de riesgo, no este comentario: estaba aquí desde el primer día—. */
+      {
+        const si = document.getElementById('sizeInput');
+        if (App.sizeMode === 'riesgo') { if (App._sizeAntesRiesgo === undefined) App._sizeAntesRiesgo = si.value; }
+        else if (App._sizeAntesRiesgo !== undefined) { si.value = App._sizeAntesRiesgo; App._sizeAntesRiesgo = undefined; }
+      }
+      UI.syncRiesgo();
       UI.updateOrderHint();
     }));
 
     document.getElementById('sizeInput').addEventListener('input', UI.updateOrderHint);
+    /* Riesgo fijo: cualquier cambio recalcula el tamaño deducido y los niveles adjuntos. El SL del
+       formulario y el del bloque de riesgo son el MISMO número visto desde dos sitios, así que se
+       sincronizan en los dos sentidos (escribir por programa no dispara 'input', no hay bucle). */
+    ['riesgoSlInput', 'riesgoMaxInput'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => App.riesgoAplica());
+    });
+    {
+      const seg = document.getElementById('segRiesgoRr');
+      if (seg) seg.addEventListener('click', (e) => {
+        const b = e.target.closest ? e.target.closest('[data-rr]') : null;
+        if (!b) return;
+        seg.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+        App.riesgoAplica();
+      });
+      const sl = document.getElementById('slInput');
+      if (sl) sl.addEventListener('input', () => {
+        if (App.sizeMode !== 'riesgo') return;
+        const v = document.getElementById('riesgoSlInput');
+        if (v) { v.value = sl.value; App.riesgoAplica(); }
+      });
+    }
     // Deslizador de fracción 0 / 25 / 50 / 75 / 100 (como el panel de órdenes
     // de Bitunix): fija el tamaño sobre la unidad activa (% | USD | Qty).
     U.$$('#quickSize [data-pct]').forEach((c) => c.addEventListener('click', () => {
@@ -12190,8 +12302,38 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ------------------------------ Cura de inputs ------------------------------ */
 
+  /* Cuatro unidades para el tamaño: % del equity, USD, Qty y RIESGO. La cuarta no es una unidad
+     de entrada sino de cálculo —el tamaño se deduce del stop y de la pérdida máxima (223/225)—,
+     así que lleva fila propia y convierte el campo de tamaño en salida. La tabla vive en UI para
+     que el clic, el atajo y las plantillas pinten exactamente los mismos rótulos. */
+  UI.SIZE_LABELS = {
+    pct: ['Tamaño (% del equity)', '%'],
+    notional: ['Tamaño en USD (exposición)', 'USD'],
+    qty: ['Cantidad de monedas', ''],
+    riesgo: ['Tamaño deducido (USD)', 'USD'],
+  };
+
   UI.setSizeMode = function (mode) {
     U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x.dataset.mode === mode));
+    const labels = UI.SIZE_LABELS;
+    if (labels[mode]) {
+      const lb = document.getElementById('sizeLabel'), sf = document.getElementById('sizeSuffix');
+      if (lb) lb.textContent = labels[mode][0];
+      if (sf) sf.textContent = labels[mode][1];
+    }
+    UI.syncRiesgo();
+  };
+
+  /* Hay tres caminos para llegar al modo Riesgo (clic en el segmentado, `setSizeMode` desde una
+     plantilla o desde el estado guardado), así que la visibilidad de su fila y el bloqueo del
+     campo de tamaño se aplican en un solo sitio. */
+  UI.syncRiesgo = function () {
+    const esRiesgo = App.sizeMode === 'riesgo';
+    const row = document.getElementById('riesgoRow');
+    if (row) row.style.display = esRiesgo ? '' : 'none';
+    const si = document.getElementById('sizeInput');
+    if (si) si.disabled = esRiesgo;
+    if (esRiesgo) App.riesgoAplica();
   };
 
   UI.setSpeedButtons = function () {
@@ -13195,10 +13337,113 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   App.baseAsset = function () { return (App.pair || '').replace(/USDT$|BUSD$|USDC$/, '') || 'BTC'; };
 
+  /* El motor no conoce el modo «riesgo»: es un modo del FORMULARIO (dimensiona, no ejecuta). Lo
+     que le llega siempre es un tamaño en USD, que es lo que se dedujo del triángulo
+     entrada-stop-pérdida. Sin este puente, 'riesgo' caería en la rama de `qty` y volvería a
+     multiplicar por el precio, dando un tamaño miles de veces mayor. */
+  App.sizeParams = function () {
+    const v = parseFloat(document.getElementById('sizeInput').value) || 0;
+    return App.sizeMode === 'riesgo' ? { mode: 'notional', size: v } : { mode: App.sizeMode, size: v };
+  };
+
+  /* La entrada no es siempre el precio actual: si el tipo de orden fija el precio (límite o el
+     disparo de una trigger/trailing), el riesgo se mide desde ESE precio, que es donde la posición
+     se abriría de verdad. En mercado no hay precio que escribir —«only the maximum loss needs to
+     be specified», 225— y se toma el actual. */
+  App.riesgoEntrada = function () {
+    if (App.orderType === 'limite') {
+      const v = parseFloat((document.getElementById('limitInput') || {}).value);
+      if (Number.isFinite(v) && v > 0) return v;
+    } else if (App.orderType === 'trigger' || App.orderType === 'trailing') {
+      const v = parseFloat((document.getElementById('trigInput') || {}).value);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    return App.currentPrice();
+  };
+
+  App.riesgoRr = function () {
+    const b = document.querySelector('#segRiesgoRr .seg-btn.active');
+    return b ? +b.dataset.rr : 1;
+  };
+
+  /** El triángulo completo: tamaño deducido + TP derivado por el ratio elegido (1:1…1:4). */
+  App.riesgoCalcula = function () {
+    const r = TE.sizePorRiesgo({
+      entryPrice: App.riesgoEntrada(),
+      slPrice: parseFloat((document.getElementById('riesgoSlInput') || {}).value),
+      maxLoss: parseFloat((document.getElementById('riesgoMaxInput') || {}).value),
+      leverage: TE.state.leverage,
+    });
+    r.rr = App.riesgoRr();
+    if (r.ok) {
+      r.tp = r.rr > 0 ? r.entry + r.dir * r.dist * r.rr : null;
+    }
+    return r;
+  };
+
+  /** Sincroniza el formulario con lo deducido: tamaño, stop adjunto y TP del ratio. */
+  App.riesgoAplica = function () {
+    if (App.sizeMode !== 'riesgo') return null;
+    const r = App.riesgoCalcula();
+    const hint = document.getElementById('riesgoHint');
+    const lado = document.getElementById('riesgoLado');
+    const si = document.getElementById('sizeInput');
+    const slIn = document.getElementById('slInput'), tpIn = document.getElementById('tpInput');
+    if (!r.ok) {
+      if (hint) hint.textContent = 'Riesgo fijo · ' + r.motivo + '. Sin pérdida máxima no hay tamaño que calcular '
+        + 'ni vista previa en el gráfico: en Bitunix es un campo obligatorio.';
+      if (lado) lado.textContent = '—';
+      if (si) si.value = '';
+      if (tpIn) tpIn.value = '';
+      UI.updateOrderHint();
+      return r;
+    }
+    if (si) si.value = +r.notional.toFixed(2);
+    // El stop «se adjunta»: en 223 la orden resultante es una límite/mercado normal con su
+    // condición de stop-loss puesta, así que el campo de SL del formulario deja de ser opcional:
+    // es la copia visible del stop que dimensionó la orden.
+    if (slIn) slIn.value = r.sl;
+    if (tpIn) tpIn.value = r.tp !== null ? +r.tp.toFixed(6) : '';
+    if (lado) lado.textContent = r.side === 'long'
+      ? '▲ COMPRA (el stop está por debajo de la entrada)'
+      : '▼ VENTA (el stop está por encima de la entrada)';
+    if (hint) {
+      let txt = `tamaño ${U.num(r.notional, 2)} USD · ${U.num(r.qty, 6)} uds · margen ${U.num(r.margen, 2)} USD `
+        + `· pérdida ${U.num(r.riesgo, 2)} USDT si el precio va de ${U.fmtPrice(r.entry)} a ${U.fmtPrice(r.sl)} (${U.num(r.distPct, 2)} %)`;
+      if (r.tp !== null) txt += ` · TP ${r.rr}:1 en ${U.fmtPrice(r.tp)}`;
+      if (r.excede) txt += ` · recortado a ${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)}): el margen libre no daba para más`;
+      hint.textContent = txt;
+      hint.className = 'hint' + (r.excede ? ' warn' : '');
+    }
+    UI.updateOrderHint();
+    return r;
+  };
+
+  /* Antes de colocar cualquier orden en modo Riesgo: si falta un campo obligatorio o el stop
+     describe el lado contrario al botón pulsado, se para aquí con el motivo. Un stop puesto «al
+     revés» no es un ardid de estilo: comprar con el stop por encima de la entrada no tiene
+     pérdida máxima que calcular, y dimensionar con la cifra equivocada es peor que no operar. */
+  App.riesgoGuardia = function (side) {
+    if (App.sizeMode !== 'riesgo') return true;
+    const r = App.riesgoCalcula();
+    if (!r.ok) { U.toast('Riesgo fijo · ' + r.motivo, 'err', 4800); return false; }
+    if (r.side !== side) {
+      U.toast(`Riesgo fijo: entrada ${U.fmtPrice(r.entry)} con stop en ${U.fmtPrice(r.sl)} define una `
+        + `${r.side === 'long' ? 'COMPRA' : 'VENTA'}, no una ${side === 'long' ? 'compra' : 'venta'}. `
+        + 'Mueve el stop al otro lado o usa el otro botón.', 'err', 5600);
+      return false;
+    }
+    if (r.excede) U.toast(`Riesgo fijo · el tamaño pedido no cabía en el margen libre: se ha recortado a `
+      + `${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)})`, 'warn', 5600);
+    return true;
+  };
+
   /** Calcula el tamaño de la orden a partir del formulario. */
   App.estimateSize = function (price) {
     const v = parseFloat(document.getElementById('sizeInput').value) || 0;
     const lev = TE.state.leverage;
+    // En Riesgo el tamaño no se lee: se deduce, y lo deducido YA está escrito en `sizeInput`
+    // (App.riesgoAplica lo mantiene al día), así que se usa la rama de USD sin duplicar la cuenta.
     let notional = 0;
     if (App.sizeMode === 'pct') notional = TE.state.balance * (v / 100) * lev;
     else if (App.sizeMode === 'notional') notional = v;
@@ -13251,10 +13496,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const sl = slDist !== null ? price * (1 - dir * slDist) : null;
     const tp = tpDist !== null ? price * (1 + dir * tpDist) : null;
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const pos = TE.openPosition(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       entryPrice: price,
       sl, tp,
       leverage: TE.state.leverage,
@@ -13304,10 +13551,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
     const ro = document.getElementById('ordReduceOnly');
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeTrailing(side, {
       activation: act, callbackPct: pct,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
-      mode: App.sizeMode, size: sizeVal,
+      mode: sp.mode, size: sp.size,
       leverage: TE.state.leverage, feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       time: App.currentTime(),
@@ -13350,14 +13599,16 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const ro = document.getElementById('ordReduceOnly');
     const ef = document.getElementById('ordEffect');
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeTrigger(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       triggerPrice: trig,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
       exec,
       limitPrice: exec === 'limit' ? lim : null,
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
       tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
       leverage: TE.state.leverage,
@@ -13403,11 +13654,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
     const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeLimit(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       limitPrice: limite,
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       sl, tp,
       leverage: TE.state.leverage,
       feePct: TE.state.feePct,
@@ -13550,6 +13803,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
     const o = opts || {};
+    // El riesgo fijo dimensiona UNA orden nueva (223). En el promediado no hay triángulo que
+    // valga: la entrada de referencia sería el precio medio y el stop ya está puesto. Se rechaza
+    // con motivo en vez de reinterpretar un % como USD, que daría un tamaño sin relación con la
+    // posición ni con el riesgo.
+    if ((o.mode || App.sizeMode) === 'riesgo') {
+      U.toast('Riesgo fijo · dimensiona la orden nueva, no el promediado: usa un tamaño explícito '
+        + '(% | USD | Qty) para añadir a la posición', 'warn', 5200);
+      return null;
+    }
     const mediaAntes = p.entryPrice;
     const nuevo = TE.addToPosition(p.side, {
       mode: o.mode || App.sizeMode,

@@ -443,10 +443,42 @@
             <button class="seg-btn active" data-mode="pct" title="Tamaño como % del equity">% equity</button>
             <button class="seg-btn" data-mode="notional" title="Tamaño en USD de exposición">USD</button>
             <button class="seg-btn" data-mode="qty" title="Cantidad de monedas">Qty</button>
+            <button class="seg-btn" data-mode="riesgo" title="Riesgo fijo (223/225): el tamaño no se escribe, se deduce de la pérdida máxima y del stop-loss. La orden sigue siendo límite o a mercado, con el stop adjunto.">Riesgo</button>
           </div>
         </div>
 
         <!-- PRECIO LÍMITE: solo visible en modo «Límite» -->
+        <!-- RIESGO FIJO (223/225). Solo tres campos: el tamaño se deduce y se pinta abajo. -->
+        <div id="riesgoRow" style="display:none">
+          <div class="grid-2-min">
+            <label class="field">
+              <span class="field-label">Stop-loss (precio)</span>
+              <input type="number" id="riesgoSlInput" step="any" placeholder="ej. 58000">
+            </label>
+            <label class="field">
+              <span class="field-label">Pérdida máxima (USDT)</span>
+              <input type="number" id="riesgoMaxInput" step="any" min="0" placeholder="obligatorio · ej. 50">
+            </label>
+          </div>
+          <div class="grid-2-min">
+            <div class="field">
+              <span class="field-label">R:R del take-profit</span>
+              <div class="seg seg-sm" id="segRiesgoRr" role="group" aria-label="Ratio riesgo/beneficio del TP derivado">
+                <button class="seg-btn active" data-rr="1" title="TP a la misma distancia que el stop">1:1</button>
+                <button class="seg-btn" data-rr="2" title="TP al doble de la distancia del stop">1:2</button>
+                <button class="seg-btn" data-rr="3" title="TP al triple">1:3</button>
+                <button class="seg-btn" data-rr="4" title="TP al cuádruple">1:4</button>
+                <button class="seg-btn" data-rr="0" title="Solo dimensiona: no deriva ningún take-profit">—</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">Lado deducido del stop</span>
+              <div class="hint" id="riesgoLado">—</div>
+            </div>
+          </div>
+          <div class="hint" id="riesgoHint">Pérdida máxima ÷ distancia al stop = tamaño. Sin pérdida máxima no hay cálculo posible.</div>
+        </div>
+
         <div id="limitRow" style="display:none">
           <label class="field full">
             <span class="field-label">Precio límite</span>

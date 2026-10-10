@@ -1397,6 +1397,9 @@ kbd {
      sigue estando en `textContent`, así que las pruebas que comparan rótulos no se enteran. */
   #orderCard #segOrderType .ic { display: none; }
   #orderCard #segOrderType .seg-btn { padding: 0 2px; font-size: 9px; letter-spacing: -.1px; }
+  /* Lo mismo con el CUARTO modo de tamaño («Riesgo», 223/225): cuatro unidades en la misma línea
+     compartida con el segmentado de tipos desbordaban 21 px más. */
+  #orderCard #segSize .seg-btn { padding: 0 3px; font-size: 9px; letter-spacing: -.1px; }
   #orderCard .bf-margin-row .seg-btn, #orderCard .ord-segs .seg-btn { height: 24px; padding: 0 7px; font-size: 10.5px; }
   #orderCard .field { min-height: 26px; }
   #orderCard .field input { height: 24px; }

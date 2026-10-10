@@ -1449,6 +1449,53 @@
      vela que había abierto POR ENCIMA del nivel, cobrando 101,20 donde el stop estaba a 99,47—.
      Aquí el precio honesto es el nivel, y solo la apertura si la vela abrió más allá (hueco): en
      ese caso el stop se habría ejecutado en la apertura y no se le puede regalar el nivel. */
+  /* ═══════════ RIESGO FIJO (Fixed Risk Order · artículos 223 y 225) ═══════════
+     El intercambio lo describe así: NO es un tipo de orden nuevo, es una capa de cálculo. «Based
+     on this predefined loss amount, the system automatically calculates an appropriate position
+     size»; «the final order is still a standard limit order or market order, while automatically
+     attaching a corresponding stop-loss condition». Tres datos definen todo: precio de entrada,
+     precio de salida del stop y pérdida máxima admitida. De ahí
+         qty = pérdidaMáxima / |entrada − stop|        (el apalancamiento NO entra en la fórmula)
+     y el tamaño en USD es qty·entrada. La pérdida máxima es campo OBLIGATORIO: «Max Risk is a
+     required field. If left empty, position calculation and chart preview will not be available».
+
+     El lado no se pregunta: se deduce de dónde está el stop. Una compra pierde si el precio BAJA,
+     así que su stop vive por debajo; si el usuario lo pone por encima, lo que está describiendo es
+     una venta. Es exactamente lo que hace el panel del gráfico al arrastrar la caja desde el precio.
+  */
+  TE.sizePorRiesgo = function (opts) {
+    const o = opts || {};
+    const entry = +o.entryPrice, sl = +o.slPrice, max = +o.maxLoss;
+    const mal = (motivo) => ({ ok: false, motivo, qty: 0, notional: 0, margen: 0, dist: 0, distPct: 0 });
+    if (!Number.isFinite(entry) || entry <= 0) return mal('falta el precio de entrada');
+    if (!Number.isFinite(sl) || sl <= 0) return mal('falta el precio de stop-loss');
+    if (!Number.isFinite(max) || max <= 0) return mal('falta la pérdida máxima (campo obligatorio)');
+    if (Math.abs(entry - sl) < entry * 1e-9) return mal('entrada y stop coinciden: no hay distancia que convertir en riesgo');
+    const dir = sl < entry ? 1 : -1;
+    const dist = Math.abs(entry - sl);
+    const lev = Number.isFinite(+o.leverage) && +o.leverage > 0 ? +o.leverage : (TE.state.leverage || 1);
+    let qty = max / dist, notional = qty * entry, margen = notional / lev;
+    // La guía no dice qué pasa cuando el tamaño deducido no cabe en el margen libre. Recortar el
+    // riesgo no es una regla de Bitunix, es una decisión local: la otra opción (rechazar en seco)
+    // deja al usuario sin saber qué número sí cabía, y aquí se opera con una máquina que responde
+    // por margen. Se avisa SIEMPRE que ocurre y `riesgo` refleja lo que de verdad se asume.
+    const libre = TE.freeMargin();
+    const excede = margen > libre + 1e-9;
+    let factor = 1;
+    if (excede && margen > 0) {
+      factor = libre / margen;
+      qty *= factor; notional *= factor; margen *= factor;
+    }
+    return {
+      ok: true, side: dir === 1 ? 'long' : 'short', dir, entry, sl,
+      dist, distPct: (dist / entry) * 100, qty, notional, margen,
+      // `riesgo` es lo que de verdad se asume: si el tamaño tuvo que recortarse, el riesgo ya no
+      // es el pedido. Pintar el pedido como si estuviera intacto sería mentir en la cifra que
+      // importa. `pedido` se guarda aparte para poder decir «querías X, cabe Y».
+      pedido: max, riesgo: qty * dist, excede, factor,
+    };
+  };
+
   TE._fillTrailing = function (candle, nivel, side) {
     return side === 'long' ? Math.min(nivel, candle.open) : Math.max(nivel, candle.open);
   };

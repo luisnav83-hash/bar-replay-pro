@@ -185,14 +185,46 @@
     U.$$('#segSize .seg-btn').forEach((b) => b.addEventListener('click', () => {
       U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
       App.sizeMode = b.dataset.mode;
-      const labels = { pct: ['Tamaño (% del equity)', '%'], notional: ['Tamaño en USD (exposición)', 'USD'], qty: ['Cantidad de monedas', ''] };
+      const labels = UI.SIZE_LABELS;
       setText('sizeLabel', labels[App.sizeMode][0]);
       setText('sizeSuffix', labels[App.sizeMode][1]);
       if (App.sizeMode === 'qty') document.getElementById('sizeInput').value = 1;
+      /* Entrar en Riesgo ESCRIBE el tamaño deducido en `#sizeInput` (es su salida). Al salir hay que
+         devolver el número anterior: si no, los 2 500 USD deducidos se releerían como «2 500 % del
+         equity» y la orden siguiente se rechazaría por margen sin ninguna explicación —ese fallo lo
+         encontró la suite de riesgo, no este comentario: estaba aquí desde el primer día—. */
+      {
+        const si = document.getElementById('sizeInput');
+        if (App.sizeMode === 'riesgo') { if (App._sizeAntesRiesgo === undefined) App._sizeAntesRiesgo = si.value; }
+        else if (App._sizeAntesRiesgo !== undefined) { si.value = App._sizeAntesRiesgo; App._sizeAntesRiesgo = undefined; }
+      }
+      UI.syncRiesgo();
       UI.updateOrderHint();
     }));
 
     document.getElementById('sizeInput').addEventListener('input', UI.updateOrderHint);
+    /* Riesgo fijo: cualquier cambio recalcula el tamaño deducido y los niveles adjuntos. El SL del
+       formulario y el del bloque de riesgo son el MISMO número visto desde dos sitios, así que se
+       sincronizan en los dos sentidos (escribir por programa no dispara 'input', no hay bucle). */
+    ['riesgoSlInput', 'riesgoMaxInput'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => App.riesgoAplica());
+    });
+    {
+      const seg = document.getElementById('segRiesgoRr');
+      if (seg) seg.addEventListener('click', (e) => {
+        const b = e.target.closest ? e.target.closest('[data-rr]') : null;
+        if (!b) return;
+        seg.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+        App.riesgoAplica();
+      });
+      const sl = document.getElementById('slInput');
+      if (sl) sl.addEventListener('input', () => {
+        if (App.sizeMode !== 'riesgo') return;
+        const v = document.getElementById('riesgoSlInput');
+        if (v) { v.value = sl.value; App.riesgoAplica(); }
+      });
+    }
     // Deslizador de fracción 0 / 25 / 50 / 75 / 100 (como el panel de órdenes
     // de Bitunix): fija el tamaño sobre la unidad activa (% | USD | Qty).
     U.$$('#quickSize [data-pct]').forEach((c) => c.addEventListener('click', () => {
@@ -2028,8 +2060,38 @@
 
   /* ------------------------------ Cura de inputs ------------------------------ */
 
+  /* Cuatro unidades para el tamaño: % del equity, USD, Qty y RIESGO. La cuarta no es una unidad
+     de entrada sino de cálculo —el tamaño se deduce del stop y de la pérdida máxima (223/225)—,
+     así que lleva fila propia y convierte el campo de tamaño en salida. La tabla vive en UI para
+     que el clic, el atajo y las plantillas pinten exactamente los mismos rótulos. */
+  UI.SIZE_LABELS = {
+    pct: ['Tamaño (% del equity)', '%'],
+    notional: ['Tamaño en USD (exposición)', 'USD'],
+    qty: ['Cantidad de monedas', ''],
+    riesgo: ['Tamaño deducido (USD)', 'USD'],
+  };
+
   UI.setSizeMode = function (mode) {
     U.$$('#segSize .seg-btn').forEach((x) => x.classList.toggle('active', x.dataset.mode === mode));
+    const labels = UI.SIZE_LABELS;
+    if (labels[mode]) {
+      const lb = document.getElementById('sizeLabel'), sf = document.getElementById('sizeSuffix');
+      if (lb) lb.textContent = labels[mode][0];
+      if (sf) sf.textContent = labels[mode][1];
+    }
+    UI.syncRiesgo();
+  };
+
+  /* Hay tres caminos para llegar al modo Riesgo (clic en el segmentado, `setSizeMode` desde una
+     plantilla o desde el estado guardado), así que la visibilidad de su fila y el bloqueo del
+     campo de tamaño se aplican en un solo sitio. */
+  UI.syncRiesgo = function () {
+    const esRiesgo = App.sizeMode === 'riesgo';
+    const row = document.getElementById('riesgoRow');
+    if (row) row.style.display = esRiesgo ? '' : 'none';
+    const si = document.getElementById('sizeInput');
+    if (si) si.disabled = esRiesgo;
+    if (esRiesgo) App.riesgoAplica();
   };
 
   UI.setSpeedButtons = function () {

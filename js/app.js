@@ -750,10 +750,113 @@
 
   App.baseAsset = function () { return (App.pair || '').replace(/USDT$|BUSD$|USDC$/, '') || 'BTC'; };
 
+  /* El motor no conoce el modo «riesgo»: es un modo del FORMULARIO (dimensiona, no ejecuta). Lo
+     que le llega siempre es un tamaño en USD, que es lo que se dedujo del triángulo
+     entrada-stop-pérdida. Sin este puente, 'riesgo' caería en la rama de `qty` y volvería a
+     multiplicar por el precio, dando un tamaño miles de veces mayor. */
+  App.sizeParams = function () {
+    const v = parseFloat(document.getElementById('sizeInput').value) || 0;
+    return App.sizeMode === 'riesgo' ? { mode: 'notional', size: v } : { mode: App.sizeMode, size: v };
+  };
+
+  /* La entrada no es siempre el precio actual: si el tipo de orden fija el precio (límite o el
+     disparo de una trigger/trailing), el riesgo se mide desde ESE precio, que es donde la posición
+     se abriría de verdad. En mercado no hay precio que escribir —«only the maximum loss needs to
+     be specified», 225— y se toma el actual. */
+  App.riesgoEntrada = function () {
+    if (App.orderType === 'limite') {
+      const v = parseFloat((document.getElementById('limitInput') || {}).value);
+      if (Number.isFinite(v) && v > 0) return v;
+    } else if (App.orderType === 'trigger' || App.orderType === 'trailing') {
+      const v = parseFloat((document.getElementById('trigInput') || {}).value);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    return App.currentPrice();
+  };
+
+  App.riesgoRr = function () {
+    const b = document.querySelector('#segRiesgoRr .seg-btn.active');
+    return b ? +b.dataset.rr : 1;
+  };
+
+  /** El triángulo completo: tamaño deducido + TP derivado por el ratio elegido (1:1…1:4). */
+  App.riesgoCalcula = function () {
+    const r = TE.sizePorRiesgo({
+      entryPrice: App.riesgoEntrada(),
+      slPrice: parseFloat((document.getElementById('riesgoSlInput') || {}).value),
+      maxLoss: parseFloat((document.getElementById('riesgoMaxInput') || {}).value),
+      leverage: TE.state.leverage,
+    });
+    r.rr = App.riesgoRr();
+    if (r.ok) {
+      r.tp = r.rr > 0 ? r.entry + r.dir * r.dist * r.rr : null;
+    }
+    return r;
+  };
+
+  /** Sincroniza el formulario con lo deducido: tamaño, stop adjunto y TP del ratio. */
+  App.riesgoAplica = function () {
+    if (App.sizeMode !== 'riesgo') return null;
+    const r = App.riesgoCalcula();
+    const hint = document.getElementById('riesgoHint');
+    const lado = document.getElementById('riesgoLado');
+    const si = document.getElementById('sizeInput');
+    const slIn = document.getElementById('slInput'), tpIn = document.getElementById('tpInput');
+    if (!r.ok) {
+      if (hint) hint.textContent = 'Riesgo fijo · ' + r.motivo + '. Sin pérdida máxima no hay tamaño que calcular '
+        + 'ni vista previa en el gráfico: en Bitunix es un campo obligatorio.';
+      if (lado) lado.textContent = '—';
+      if (si) si.value = '';
+      if (tpIn) tpIn.value = '';
+      UI.updateOrderHint();
+      return r;
+    }
+    if (si) si.value = +r.notional.toFixed(2);
+    // El stop «se adjunta»: en 223 la orden resultante es una límite/mercado normal con su
+    // condición de stop-loss puesta, así que el campo de SL del formulario deja de ser opcional:
+    // es la copia visible del stop que dimensionó la orden.
+    if (slIn) slIn.value = r.sl;
+    if (tpIn) tpIn.value = r.tp !== null ? +r.tp.toFixed(6) : '';
+    if (lado) lado.textContent = r.side === 'long'
+      ? '▲ COMPRA (el stop está por debajo de la entrada)'
+      : '▼ VENTA (el stop está por encima de la entrada)';
+    if (hint) {
+      let txt = `tamaño ${U.num(r.notional, 2)} USD · ${U.num(r.qty, 6)} uds · margen ${U.num(r.margen, 2)} USD `
+        + `· pérdida ${U.num(r.riesgo, 2)} USDT si el precio va de ${U.fmtPrice(r.entry)} a ${U.fmtPrice(r.sl)} (${U.num(r.distPct, 2)} %)`;
+      if (r.tp !== null) txt += ` · TP ${r.rr}:1 en ${U.fmtPrice(r.tp)}`;
+      if (r.excede) txt += ` · recortado a ${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)}): el margen libre no daba para más`;
+      hint.textContent = txt;
+      hint.className = 'hint' + (r.excede ? ' warn' : '');
+    }
+    UI.updateOrderHint();
+    return r;
+  };
+
+  /* Antes de colocar cualquier orden en modo Riesgo: si falta un campo obligatorio o el stop
+     describe el lado contrario al botón pulsado, se para aquí con el motivo. Un stop puesto «al
+     revés» no es un ardid de estilo: comprar con el stop por encima de la entrada no tiene
+     pérdida máxima que calcular, y dimensionar con la cifra equivocada es peor que no operar. */
+  App.riesgoGuardia = function (side) {
+    if (App.sizeMode !== 'riesgo') return true;
+    const r = App.riesgoCalcula();
+    if (!r.ok) { U.toast('Riesgo fijo · ' + r.motivo, 'err', 4800); return false; }
+    if (r.side !== side) {
+      U.toast(`Riesgo fijo: entrada ${U.fmtPrice(r.entry)} con stop en ${U.fmtPrice(r.sl)} define una `
+        + `${r.side === 'long' ? 'COMPRA' : 'VENTA'}, no una ${side === 'long' ? 'compra' : 'venta'}. `
+        + 'Mueve el stop al otro lado o usa el otro botón.', 'err', 5600);
+      return false;
+    }
+    if (r.excede) U.toast(`Riesgo fijo · el tamaño pedido no cabía en el margen libre: se ha recortado a `
+      + `${U.num(r.riesgo, 2)} USDT de riesgo (pediste ${U.num(r.pedido, 2)})`, 'warn', 5600);
+    return true;
+  };
+
   /** Calcula el tamaño de la orden a partir del formulario. */
   App.estimateSize = function (price) {
     const v = parseFloat(document.getElementById('sizeInput').value) || 0;
     const lev = TE.state.leverage;
+    // En Riesgo el tamaño no se lee: se deduce, y lo deducido YA está escrito en `sizeInput`
+    // (App.riesgoAplica lo mantiene al día), así que se usa la rama de USD sin duplicar la cuenta.
     let notional = 0;
     if (App.sizeMode === 'pct') notional = TE.state.balance * (v / 100) * lev;
     else if (App.sizeMode === 'notional') notional = v;
@@ -806,10 +909,12 @@
     const sl = slDist !== null ? price * (1 - dir * slDist) : null;
     const tp = tpDist !== null ? price * (1 + dir * tpDist) : null;
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const pos = TE.openPosition(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       entryPrice: price,
       sl, tp,
       leverage: TE.state.leverage,
@@ -859,10 +964,12 @@
     const sizeVal = parseFloat(document.getElementById('sizeInput').value) || 0;
     if (sizeVal <= 0) { U.toast('Define un tamaño de posición mayor que 0', 'err'); return null; }
     const ro = document.getElementById('ordReduceOnly');
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeTrailing(side, {
       activation: act, callbackPct: pct,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
-      mode: App.sizeMode, size: sizeVal,
+      mode: sp.mode, size: sp.size,
       leverage: TE.state.leverage, feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       time: App.currentTime(),
@@ -905,14 +1012,16 @@
     const ro = document.getElementById('ordReduceOnly');
     const ef = document.getElementById('ordEffect');
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeTrigger(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       triggerPrice: trig,
       src: (App.trigOrder && App.trigOrder.src === 'mark') ? 'mark' : 'last',
       exec,
       limitPrice: exec === 'limit' ? lim : null,
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       sl: Number.isFinite(slIn) && slIn > 0 ? slIn : null,
       tp: Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null,
       leverage: TE.state.leverage,
@@ -958,11 +1067,13 @@
     const sl = Number.isFinite(slIn) && slIn > 0 ? slIn : null;
     const tp = Number.isFinite(tpIn) && tpIn > 0 ? tpIn : null;
 
+    if (App.riesgoGuardia(side) === false) return null;
+    const sp = App.sizeParams();
     const orden = TE.placeLimit(side, {
       tradeSide: TE.state.modoPosicion === 'HEDGE' ? App.tradeSide : 'open',
       limitPrice: limite,
-      mode: App.sizeMode,
-      size: sizeVal,
+      mode: sp.mode,
+      size: sp.size,
       sl, tp,
       leverage: TE.state.leverage,
       feePct: TE.state.feePct,
@@ -1105,6 +1216,15 @@
     const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta que promediar', 'warn'); return null; }
     const o = opts || {};
+    // El riesgo fijo dimensiona UNA orden nueva (223). En el promediado no hay triángulo que
+    // valga: la entrada de referencia sería el precio medio y el stop ya está puesto. Se rechaza
+    // con motivo en vez de reinterpretar un % como USD, que daría un tamaño sin relación con la
+    // posición ni con el riesgo.
+    if ((o.mode || App.sizeMode) === 'riesgo') {
+      U.toast('Riesgo fijo · dimensiona la orden nueva, no el promediado: usa un tamaño explícito '
+        + '(% | USD | Qty) para añadir a la posición', 'warn', 5200);
+      return null;
+    }
     const mediaAntes = p.entryPrice;
     const nuevo = TE.addToPosition(p.side, {
       mode: o.mode || App.sizeMode,

@@ -18,6 +18,7 @@
 | F7 | [`place_order` (API)](https://www.bitunix.com/api-docs/futures/trade/place_order.html) · [`modify_order`](https://www.bitunix.com/api-docs/futures/trade/modify_order.html) · [`get_order_detail`](https://www.bitunix.com/api-docs/futures/trade/get_order_detail.html) | el contrato exacto: parámetros, valores posibles, estados |
 | F8 | [`get_pending_positions`](https://www.bitunix.com/api-docs/futures/position/get_pending_positions.html) · [`get_position_tiers`](https://www.bitunix.com/api-docs/futures/position/get_position_tiers.html) | campos de la posición y tabla de niveles/riesgo |
 | F9 | [Panel rápido del gráfico](https://www.bitunix.com/hub/helpcenter/article/quick-panel-order-placement-guide?id=194) · [Plantillas de trading](https://www.bitunix.com/hub/helpcenter/article/chart-trading-custom-trading-templates?id=195) | qué se pone desde el gráfico y qué se guarda |
+| F10 | [Riesgo fijo en el panel (223)](https://www.bitunix.com/hub/helpcenter/article/how-to-use-the-fixed-risk-position-feature-web?id=223) · [Riesgo fijo en el gráfico (225)](https://www.bitunix.com/hub/helpcenter/article/how-to-use-the-fixed-risk-feature-in-chart-trading?id=225) | el tamaño se DEDUCE de la pérdida máxima y el stop; ratios 1:1…1:4 |
 
 ---
 
@@ -173,7 +174,7 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
   de la posición se cierra en ese nivel.
 * Existen **plantillas de trading** (artículo 195: lo que ya se implementó aquí) y **plantillas de
   dibujo** (245), **TP/SL parcial vinculado** (304), **control por lotes de TP/SL** (253),
-  **riesgo fijo** (225 y 223: el tamaño se deriva del riesgo admitido) y **escalera de órdenes**
+  **riesgo fijo** (225 y 223: **hecho**, §18 —el tamaño se deriva del riesgo admitido—) y **escalera de órdenes**
   (*scaled order*, 229/240) y **bloqueo de posición** (266).
 
 ## 9 · Brechas con este terminal, y decisión
@@ -214,9 +215,11 @@ ratio vs maintenance margin: caer por debajo de mantenimiento dispara la liquida
   retroceso en %, persiguiendo el pico de las velas cerradas. **✅ Implementada: `tests/trailing-orden.test.js`,
   77 comprobaciones de motor y de navegador. Ver §17.**
 4. **Capa 3 — los cuatro TP/SL completos y riesgo fijo.** Account TP/SL (umbral de cuenta por importe
-  o %) y sizing por riesgo admitido (F223/225), apalancamiento por dirección. **✅ Hecho el Account
-  TP/SL** (`tests/cuenta-tpsl.test.js`, 66 comprobaciones; ver §16). Queda el *sizing* por riesgo
-  (F223/225), que es otra pieza: el formulario hoy deriva el tamaño del capital, no del riesgo.
+  o %) y sizing por riesgo admitido (F10: artículos 223 y 225), apalancamiento por dirección.
+  **✅ Hechas las dos piezas de tamaño**: Account TP/SL (`tests/cuenta-tpsl.test.js`, 66
+  comprobaciones; §16) y **riesgo fijo** (`tests/riesgo-fijo.test.js`, 59; §18). Falta solo el
+  apalancamiento **por dirección** (long y short con niveles distintos en la misma carta), que en la
+  API es un campo de la orden y aquí es un solo valor de cuenta.
 5. **Capa 4 — modo de posición.** `ONE_WAY` ⇄ `HEDGE` con `tradeSide`/`positionId`, lo que obliga a
   cambiar el modelo de «una posición» a «posiciones por lado» en motor, cartas, historial y PnL.
   **✅ Implementada: `tests/hedge.test.js`, 74 comprobaciones de motor y de navegador. Ver §15.**
@@ -447,3 +450,66 @@ Arnés: `tests/trailing-orden.test.js` — 56 comprobaciones de motor (vm, sin n
 interfaz sobre el archivo único, disparando el relleno con ▶▶ y datos reales en lugar de llamando al
 motor desde el test. Batería completa tras este bloque: **29 suites · 1599 comprobaciones · 0 fallidas ·
 0 omitidas** (la única sin contador propio es `test:single`, por diseño).
+
+## 18 · Riesgo fijo: el tamaño se deduce, no se escribe (F10 · 223 y 225)
+
+Leído el par de artículos del intercambio (antes solo había una línea de resumen en §8, y con eso no
+se implementa: estaba la duda razonable de si el apalancamiento entraba o no en la fórmula).
+
+**Qué dice Bitunix, literal.** «Fixed Risk Order is **not** a standalone order type · it still relies
+on limited orders or market orders», y lo que genera es «a standard limit or market order, **while
+automatically attaching a corresponding stop-loss condition**» (223). En el gráfico (225) se abre con
+el «+» del eje de precio o con clic derecho, pide pérdida máxima y un **ratio 1:1 · 1:2 · 1:3 · 1:4**
+(editables), y «**Max Risk is a required field.** If left empty, position calculation and chart
+preview will not be available». La entrada no siempre se pregunta: con orden a mercado «only the
+maximum loss needs to be specified».
+
+**Qué se implementó.**
+
+* `TE.sizePorRiesgo({ entryPrice, slPrice, maxLoss, leverage })` → `{ qty, notional, margen, dist,
+  distPct, side, dir, riesgo, pedido, excede, factor }` con `qty = maxLoss / |entrada − stop|`.
+  **El apalancamiento no entra en la qty**: solo decide cuánto margen exige el tamaño deducido
+  (comprobado en la suite: a 10× y a 50× la misma pérdida y la misma distancia dan la misma cantidad).
+* **El lado se deduce del stop**, no se pregunta: stop por debajo de la entrada = COMPRA, por encima =
+  VENTA. Es lo que hace el panel del gráfico al arrastrar la caja desde el precio, y quita un control
+  inútil del formulario. Si el triángulo describe una venta y se pulsa COMPRAR, **no se coloca nada**
+  y el aviso dice qué lado define el stop y qué dos caminos hay (mover el stop o cambiar de botón).
+* **El ratio deriva el TP** (`entrada + dir·dist·rr`) y se adjunta a la orden junto con el stop; el
+  campo `#slInput` del formulario pasa a ser la copia visible del stop que dimensionó la orden, así
+  que no hay dos números que se contradigan. Cambiar el ratio **después** de colocar no reescribe la
+  orden ya en el libro (el TP se fija al colocar, como en la API).
+* **El modo `riesgo` es del formulario, no del motor.** `App.sizeParams()` traduce a
+  `{ mode: 'notional', size: <USD deducido> }`; si el modo llegara a `openPosition` como `'riesgo'`
+  caería en la rama de `qty` y volvería a multiplicar por el precio (un tamaño miles de veces mayor).
+  Lo mismo en el promediado: `App.averagePosition` rechaza con motivo en vez de reinterpretar un %.
+* **La entrada usada es la del tipo de orden**, no la última cuota: con Límite se dimensiona desde el
+  precio límite, con Trigger/Trailing desde el de activación (medido en la suite: 9 960 USD desde la
+  entrada real frente a 3 390 desde el precio actual, con los mismos 400 USDT de riesgo).
+
+**Dos decisiones que NO son de Bitunix y por eso se dicen.**
+
+1. *Recorte por margen.* Las guías no especifican qué pasa cuando el tamaño deducido no cabe. Aquí se
+   recorta al margen libre **y se avisa**, devolviendo `riesgo` (lo que de verdad se asume) separado de
+   `pedido` (lo que se tecleó): pintar el pedido como intacto mentiría en la cifra que importa. La
+   alternativa —rechazar en seco— deja al usuario sin saber qué número sí cabía.
+2. *Restaurar el tamaño al salir del modo.* El campo de tamaño es la **salida** del cálculo; si al
+   volver a «% del equity» se quedara el USD deducido (p. ej. 2 500), la carta lo leería como
+   «2 500 %» y la orden se rechazaría por margen sin explicación. Esto no lo contó ninguna guía: lo
+   encontró la propia suite, y el arreglo está en el manejador del segmentado.
+
+**Formulario.** Cuarto botón en `#segSize` («% equity · USD · Qty · **Riesgo**»), `#riesgoRow` con
+stop, pérdida máxima, `#segRiesgoRr` con los cinco botones (1:1…1:4 y «—» para dimensionar sin TP) y
+una línea que reescribe en vivo `tamaño · qty · margen · pérdida … si el precio va de X a Y · TP 4:1
+en Z` (y añade «recortado a … (pediste …)» cuando toca). `#sizeInput` pasa a `disabled` y el rótulo
+pide «Tamaño deducido (USD)». En el teléfono el segmentado de unidades necesitó la misma pauta que el
+de tipos (`padding: 0 3px; font-size: 9px`), porque la línea comparte sitio.
+
+**Lo que se deja fuera, dicho claro.** La **vista previa en el gráfico** de 225 (arrastrar la caja de
+riesgo con «Preview» pintando entrada/TP/SL) no está implementada: los tres números ya se ven en la
+carta y en la línea de resumen, y dibujar una caja arrastrable sobre el lienzo es una pieza de UI que
+no cambia ninguna regla de ejecución. Tampoco está el acceso por clic derecho del gráfico, que aquí ya
+tiene su propio menú de dibujos.
+
+Arnés: `tests/riesgo-fijo.test.js` — 28 comprobaciones de motor (vm, sin navegador) y 31 de interfaz
+sobre el archivo único. Batería tras este bloque: **30 suites · 1658 comprobaciones · 0 fallidas ·
+0 omitidas** (sin contador propio solo `test:single`, por diseño).
