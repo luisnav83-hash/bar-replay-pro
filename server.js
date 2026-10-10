@@ -393,6 +393,11 @@ const handler = (req, res) => {
     proxyMarket(pathname, parsed.query, res, ['limit']);
     return;
   }
+  // La cinta de «Operaciones de mercado» del libro (mismo espejo, misma política)
+  if (pathname === '/api/v3/aggTrades') {
+    proxyMarket(pathname, parsed.query, res, ['limit']);
+    return;
+  }
   if (pathname === '/api/v3/ticker/24hr') {
     proxyMarket(pathname, parsed.query, res, []);
     return;
@@ -430,6 +435,7 @@ try {
   app.get('/api/v3/exchangeInfo', (req, res) => proxyExchangeInfo(res));
   app.get('/api/v3/time', (req, res) => res.json({ serverTime: Date.now() }));
   app.get('/api/v3/depth', (req, res) => proxyMarket('/api/v3/depth', req.query, res, ['limit']));
+  app.get('/api/v3/aggTrades', (req, res) => proxyMarket('/api/v3/aggTrades', req.query, res, ['limit']));
   app.get('/api/v3/ticker/24hr', (req, res) => proxyMarket('/api/v3/ticker/24hr', req.query, res, []));
   app.get('/api/market/futures-ticker', (req, res) => proxyFuturesTicker(req.query, res));
   app.get('/api/market/funding', (req, res) => proxyBitget('/api/v2/mix/market/current-fund-rate', req.query, res));

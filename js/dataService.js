@@ -608,6 +608,15 @@
       return { asks: f(r.asks), bids: f(r.bids), id: +r.lastUpdateId || 0 };
     },
 
+    /** Últimos negocios agregados del espejo spot: la cinta de «Operaciones de mercado».
+        `m` (buyer is maker) vale true cuando el que atacó fue el vendedor ⇒ la cinta lo pinta
+        en rojo. Se devuelve de RECIENTE a ANTIGUO, que es el orden en que se lee una cinta. */
+    async aggTrades(symbol, limit = 40) {
+      const r = await DS.MARKET.binance(`/api/v3/aggTrades?symbol=${symbol}&limit=${limit}`, 2500);
+      if (!Array.isArray(r) || !r.length) throw new Error('cinta vacía');
+      return r.map((a) => ({ t: +a.T, p: +a.p, q: +a.q, buy: a.m !== true })).reverse();
+    },
+
     /** Estadísticas de 24 h del espejo spot. */
     async ticker24(symbol) {
       const r = await DS.MARKET.binance(`/api/v3/ticker/24hr?symbol=${symbol}`, 15000);

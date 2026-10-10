@@ -431,19 +431,53 @@
        derivan de las velas del replay (js/orderBook.js lo etiqueta).
        ============================================================= -->
   <div class="card bf-book" id="bookCard">
-    <div class="card-head">
-      <span class="card-title">Libro de órdenes</span>
+    <!-- LAS DOS PESTAÑAS DEL LIBRO (ítem §5.3 del registro; 11-oct, medido en su DOM a 1600×900).
+         Él tiene `Libro de órdenes | Operaciones de mercado` a 14 px / peso 500: la activa en
+         blanco con un subrayado de 2 px y la inactiva en `#919499`, sin fondo ni radio. Esas dos
+         etiquetas miden 110 + 165 = 275 px dentro de una carta de 305, así que EN SU PÁGINA la
+         segunda sale RECORTADA («Operacio», capturado con `tools/captura-bitunix.js`). Aquí se ven
+         `Libro | Mercado` y el nombre completo vive en el `title`: copiar los rótulos enteros
+         habría dejado la segunda pestaña fuera de la vista, y una pestaña que no se ve no se puede
+         pulsar. Con los rótulos cortos caben además el `0,1 ▾` de agregación, el cartel del origen
+         de los datos y «fijar» en la MISMA línea -una fila propia para esas tres cosas le costaba
+         20-32 px al gráfico en las franjas de panel bajo, y ahí manda `tests/responsive.test.js`—.
+         El `0,1 ▾` tampoco cuelga de la fila de cabeceras del libro: a ≤1024 px de alto esa fila
+         está oculta a propósito y el selector habría desaparecido con ella. -->
+    <div class="card-head bf-book-head">
+      <div class="bf-tabs" id="bookTabs" role="tablist" aria-label="Contenido del libro">
+        <button class="bf-tab active" data-btab="book" role="tab" aria-selected="true" title="Libro de órdenes: los precios pendientes de ejecutar, con su barra de profundidad">Libro</button>
+        <button class="bf-tab" data-btab="tape" role="tab" aria-selected="false" title="Operaciones de mercado: los negocios que van pasando, uno por línea">Mercado</button>
+      </div>
+      <label class="bf-agreg" title="Agrupación de precios: cuántos niveles del libro se funden en uno. Cambia las filas que se pintan, no es un adorno -el valor sale de la granularidad real del libro que esté llegando—.">
+        <select id="bookAgreg" aria-label="Agrupación de precios del libro"></select><i>▾</i>
+      </label>
       <span class="tag tag-muted" id="bookSrc">—</span>
       <button class="mini-btn" id="btnBookLive" title="Con red: libro real del espejo de Binance. Sin red o en mitad del replay: derivado de las velas. Pulsa para fijarlo al precio del replay">fijar</button>
     </div>
     <div class="card-body">
-      <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cantidad (BTC)</span><span>Total</span></div>
+      <!-- EL LIBRO NO LLEVA ENVOLTORIO ALREDEDOR (lo intenté con un `#bookBody`, y fuera): en las
+           franjas de tira media docena de reglas del tipo `#sidebar > #bookCard > .card-body >
+           .bf-asks` hacen la aritmética real del cajón -`max(17px, (--cuerpo - --marco) / 2)` por
+           lado, con el marco fijo 24+24+29 declarado en la propia regla—; meter los hijos dentro
+           de un `div` las dejaba sin casar, las cajas caían al tope genérico del tier (118/102/68),
+           la tira de alto automático medía 32 px más y el gráfico se quedaba en 111 contra su
+           suelo de 120 -lo cantaron las anclas de `tests/responsive.test.js`—. Las dos vistas se
+           valen con una clase en la carta (`.modo-tape`) y `display:none` en lo que toca esconder. -->
+      <div class="bf-book-cols"><span>Precio (USDT)</span><span>Cant. (BTC)</span><span class="t">Total (USDT)</span></div>
       <div class="bf-asks" id="bookAsks"></div>
       <div class="bf-book-last"><span class="v" id="bookLast">—</span><span class="a" id="bookArrow">·</span></div>
       <div class="bf-bids" id="bookBids"></div>
       <div class="bf-book-frac">
         <div class="bf-frac-bar"><i class="up" id="bookBidBar"></i><i class="dn" id="bookAskBar"></i></div>
-        <div class="bf-frac-lab"><span class="up" id="bookBidPct">B —</span><span class="dn" id="bookAskPct">S —</span></div>
+        <div class="bf-frac-lab"><span class="up" id="bookBidPct">B—</span><span class="dn" id="bookAskPct">S—</span></div>
+      </div>
+      <!-- LA CINTA (segunda pestaña). Con red son los negocios agregados del espejo
+           (`/api/v3/aggTrades`); sin ella se DERIVAN de la vela del cursor, con el mismo cartel
+           «derivado» que el libro -inventarse una cinta en 2021 sería mentira, y disimularla
+           también—. -->
+      <div id="tapeBody" hidden>
+        <div class="bf-book-cols bf-tape-cols"><span>Hora</span><span>Precio (USDT)</span><span class="t">Tamaño (BTC)</span></div>
+        <div class="bf-tape" id="bookTape"></div>
       </div>
     </div>
   </aside>

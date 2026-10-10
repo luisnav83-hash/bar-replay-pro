@@ -171,7 +171,7 @@ const n0 = (x) => { const m = String(x).match(new RegExp(NUMRX)); return m ? par
   /* ═══════════════ C) Libro de órdenes ═══════════════ */
   console.log('\n▸ C) Libro de órdenes');
   const C = await E();
-  ok(C.asks.length === 10 && C.bids.length === 10, `${C.asks.length} niveles de venta y ${C.bids.length} de compra`);
+  ok(C.asks.length === C.bids.length && C.asks.length >= 5 && C.asks.length <= 14, `${C.asks.length} niveles de venta y ${C.bids.length} de compra (las dos mitades iguales)`);
   ok(C.asks.every((r, i) => r.p > C.precio), 'todas las ventas están POR ENCIMA del último precio');
   ok(C.bids.every((r, i) => r.p < C.precio), 'todas las compras están POR DEBAJO del último precio');
   ok(C.asks.every((r, i, a) => i === 0 || a[i - 1].p >= r.p), 'las ventas van de mayor a menor precio (la mejor, pegada al último)');

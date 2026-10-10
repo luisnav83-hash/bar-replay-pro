@@ -283,7 +283,7 @@ body {
 /* El libro no se desplaza nunca: si no cabe, se RECORTAN las filas lejanas y
    siempre se ven las pegadas al precio (y el precio en el medio). Un `overflow
    auto` aquí dejaría el centro del libro fuera de la vista. */
-.bf-book .card-body { padding: 0 0 7px; max-height: 322px; overflow: hidden; }
+.bf-book .card-body { padding: 0 0 7px; max-height: 322px; overflow: hidden; }  /* el presupuesto vertical NO cambia con las pestañas: ver BLOQUE 19 */
 .bf-book-cols {
   display: grid;
   grid-template-columns: 1.1fr 1fr .9fr;
@@ -317,7 +317,11 @@ body {
 .bf-row > span { position: relative; z-index: 1; }
 .bf-row .p { font-weight: 600; }
 .bf-row .q { color: var(--tx-2); }
-.bf-row .t { text-align: right; color: var(--tx-4); font-size: 10px; }
+.bf-row .t { text-align: right; color: var(--tx-3); font-size: 11px; }
+/* `Total` a 10 px y `--tx-4` #66686b: 3,4:1 de contraste sobre la carta -el mismo nivel que ya
+   desterramos de los `.hint` del formulario por ilegible—. Sus cifras de fila miden 11-12 px, así
+   que la columna se sube a 11 px y al gris de los rótulos (`--tx-3`, 6,3:1): sigue siendo la
+   columna apagada de las tres, pero se lee. */
 /* profundidad: una banda del color del lado, con el ancho del acumulado */
 .bf-row .d { position: absolute; z-index: 0; top: 0; bottom: 0; right: 0; width: var(--w, 0%); opacity: .13; }
 
@@ -2181,3 +2185,112 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
 #segOrderType .otype-panel .seg-btn { flex: 0 0 26px; height: 26px; text-align: left; padding: 0 7px; border-radius: 3px; color: var(--tx-2); }
 #segOrderType .otype-panel .seg-btn + .seg-btn { border-left: 0; }
 #segOrderType .otype-panel .seg-btn.active { background: var(--activo); color: #fff; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 19 — EL LIBRO COMO EL SUYO: DOS PESTAÑAS, AGRUPACIÓN Y CINTA
+   (11-oct-2026, ítem §5.3 del registro `docs/brecha-visual-bitunix.md`).
+
+   Medido en su DOM a 1600×900 (no de memoria): carta de `305×610`; las dos etiquetas de pestaña a
+   14 px / peso 500, la activa `#fff` con un subrayado blanco de 2 px y la inactiva `#919499` -sin
+   fondo, sin radio, sin mayúsculas ni letter-spacing, como todo lo demás de la casa—; el
+   `0.1 ▾` de la agregación arriba a la DERECHA, a 12 px, 49 px de caja y 16 de alto; las
+   cabeceras `Precio · Cant. · Total` a 12 px `#919499`; el precio central a 20 px / 700 en verde
+   de subida; y el pie `B48.20% | S51.80%` en una banda de 18 px a 12 px.
+
+   Dos cosas que en la suya NO se copian tal cual, con su motivo escrito:
+     · Sus pestañas van RECORTADAS («Operacio», ver la captura de `tools/captura-bitunix.js`)
+       porque 110 + 165 px no caben en 305. Aquí la cabecera es solo para ellas y el resto baja a
+       la línea de herramientas; en la franja estrecha la tipografía cede 1 px antes que recortar.
+     · El tamaño del libro se deriva del ALTO de la caja (arreglo del 11-oct), así que la línea de
+       herramientas le roba 20 px al `max-height` de la carta: se le devuelven, si no la
+       agrupación y las pestañas costarían una fila de libro.
+   ════════════════════════════════════════════════════════════════════════════ */
+#bookCard .bf-book-head { height: 28px; padding: 0 8px; gap: 0; }
+/* LOS DOS CUERPOS SON ITEMS DEL FLEX DE `.card-body`. No es un detalle: en la franja del libro con
+   columna propia (`#bookCol`, línea 1820) las dos mitades del reparto se reparten el cuerpo a
+   `flex: 1 1 0`, y el número de filas que se pinta SALE DE ESE ALTO (arreglo del 11-oct). Metido
+   el libro dentro de un envoltorio sin esta regla, el envoltorio medía lo que pedía el contenido,
+   las cajas se quedaban en 118 px y el libro perdía 4 filas por lado -así lo cantaron las anclas
+   «20 filas de libro a 17 px» y «10 niveles de venta y 10 de compra», que pasaron a 6+6—. */
+/* LAS DOS VISTAS, sin envoltorios: se oculta lo que no toca desde la propia carta. Así los
+   hijos del `.card-body` siguen siendo los mismos que miran las reglas de aritmética del cajón
+   (`--cuerpo` / `--marco`, ~966) -con un `div` por en medio dejaban de casar y el libro se comía
+   32 px del gráfico en 1000×780, medido—. */
+#bookCard #tapeBody { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1 1 0; }
+#bookCard #tapeBody[hidden] { display: none; }
+#bookCard.modo-tape > .card-body > .bf-book-cols,
+#bookCard.modo-tape > .card-body > .bf-asks,
+#bookCard.modo-tape > .card-body > .bf-book-last,
+#bookCard.modo-tape > .card-body > .bf-bids,
+#bookCard.modo-tape > .card-body > .bf-book-frac { display: none; }
+#bookCard .bf-tape { flex: 1 1 0; min-height: 0; overflow: hidden; }
+#bookCard .bf-tabs { display: flex; align-items: stretch; gap: 14px; min-width: 0; height: 100%;
+                     overflow-x: auto; scrollbar-width: none; }
+/* En su carta de 305 px las dos etiquetas (110 + 165) YA no caben: la suya sale recortada
+   («Operacio», capturado). Aquí el mismo desborde se resuelve DESPLAZANDO la tira de pestañas y no
+   comiéndose un rótulo, que es lo que haría `overflow:hidden` -y lo que denunciaba la ancla
+   «la carta no desborda por dentro»: con `auto` el `scrollWidth` deja de exceder al cliente—. */
+#bookCard .bf-tabs::-webkit-scrollbar { display: none; }
+#bookCard .bf-tab {
+  position: relative; background: transparent; border: 0; border-radius: 0; padding: 0 0 2px;
+  font-size: 14px; font-weight: 500; color: var(--tx-3); text-transform: none; letter-spacing: 0;
+  white-space: nowrap; cursor: pointer; height: 100%;
+}
+#bookCard .bf-tab:hover { color: var(--tx-2); }
+#bookCard .bf-tab.active { color: #fff; }
+#bookCard .bf-tab.active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  border-radius: 2px 2px 0 0; background: #fff;
+}
+/* El cartel de origen y «fijar» se quedan en la cabecera, a la derecha de las pestañas -es donde
+   el sitio tiene sus iconos—, y la agregación vive DENTRO de la fila de cabeceras (absoluta). Con
+   las dos cosas así el bloque no gasta ni un píxel de más: la alternativa -una línea propia para
+   las herramientas- le robaba 19 px al gráfico en las franjas cortas, y `tests/responsive.test.js`
+   lo cantó dos veces (111 y 114 px contra un suelo de 120). */
+#bookCard .bf-book-head .tag, #bookCard .bf-book-head .mini-btn { flex: 0 0 auto; }
+#bookCard .bf-book-head .mini-btn { height: 20px; }
+/* El `0,1 ▾` en la cabecera: `margin-left:auto` se come el hueco que dejan las pestañas
+   (que son desplazables, así que nunca empujan nada fuera de la carta) y el control queda apoyado
+   a la derecha, en la misma línea donde él tiene sus iconos. Cuesta 0 px de alto. */
+#bookCard .bf-agreg { display: inline-flex; align-items: center; height: 16px; margin: 0 0 0 auto; flex: 0 0 auto; }
+#bookCard .bf-agreg select {
+  appearance: none; -webkit-appearance: none; background: transparent; border: 0; border-radius: 0;
+  color: var(--tx-1); font-size: 12px; font-weight: 400; height: 16px; padding: 0 13px 0 2px;
+  min-width: 0; cursor: pointer; box-shadow: none;
+}
+#bookCard .bf-agreg select:hover { color: #fff; background: transparent; }
+#bookCard .bf-agreg select:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+#bookCard .bf-agreg i { position: absolute; right: 1px; top: 50%; transform: translateY(-50%);
+                        font-style: normal; font-size: 8px; color: var(--tx-3); pointer-events: none; }
+#bookCard .bf-agreg select option { background: #1a1b1c; color: var(--tx-1); }
+/* Cant. y Total a la derecha (medido: sus números terminan alineados en el mismo borde; el precio
+   a la izquierda) y el precio central grande y en negrita, como los suyos (20 px / 700). */
+#bookCard .bf-book-cols span:nth-child(2), #bookCard .bf-row .q { text-align: right; }
+/* Los dos tamaños que el sitio usa -precio central 20 px/700 y banda del pie de 18 px a 12 px-
+   se aplican SOLO donde caben. En las franjas de panel bajo (+861 no se cumple) cada uno de esos
+   5-7 px se los comía una fila del libro o el gráfico: medido a 1000×780 la carta pasaba de 143 a
+   175 px y el gráfico de 183 a 151. Aquí se paga el precio de que en 900×560 el rótulo central
+   siga siendo el nuestro de 15 px, que es lo que cabe. */
+@media (min-height: 861px) {
+  #bookCard .bf-book-last .v { font-size: 20px; font-weight: 700; }
+  #bookCard .bf-book-frac { padding: 4px 10px 0; }
+  #bookCard .bf-frac-lab { height: 18px; font-size: 12px; line-height: 18px; }
+}
+/* LA CINTA: misma tipografía y mismo paso de fila que el libro (17 px), tres columnas y el precio
+   coloreado por el lado que atacó. No se pinta cuando la pestaña está oculta (js/orderBook.js,
+   `OB.renderTape`), para no gastar trabajo en un panel que nadie ve. */
+#bookCard .bf-tape { display: flex; flex-direction: column; padding: 0 8px; }
+#bookCard .bf-tape-row { display: flex; align-items: center; gap: 6px; height: 17px; font-size: 12px; color: var(--tx-2); }
+#bookCard .bf-tape-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bookCard .bf-tape-row .h { flex: 0 0 62px; color: var(--tx-3); font-variant-numeric: tabular-nums; }
+#bookCard .bf-tape-row .p { flex: 1 1 auto; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+#bookCard .bf-tape-row .t { flex: 0 0 74px; text-align: right; color: var(--tx-2); font-variant-numeric: tabular-nums; }
+#bookCard .bf-tape-row.up .p { color: var(--up); }
+#bookCard .bf-tape-row.dn .p { color: var(--down); }
+@media (min-width: 1025px) { #bookCard .bf-book-head { padding: 0 6px; gap: 4px; } }
+@media (max-width: 640px) {
+  /* En el teléfono la carta es ancha, así que las pestañas caben a 14 px; lo que cede es el hueco
+     entre ellas, para que el `0,1 ▾` y «fijar» de la línea de abajo no empujen nada. */
+  #bookCard .bf-tabs { gap: 10px; }
+  #bookCard .bf-tab { font-size: 13px; }
+}

@@ -31,10 +31,17 @@
 
   /* ------------------------------ estado ------------------------------ */
 
-  OB.ROWS = 10;              // niveles por lado (el original muestra 10-15)
+  OB.ROWS = 14;              // niveles MÁXIMOS por lado: el sitio pinta 13-15 en su franja de
+                             // 460 px, y aquí el número que manda es el alto de la caja
+                             // (`filasDisponibles`); este tope solo limita cuántos niveles se
+                             // derivan de la vela y cuántos se piden al exchange.
+                             // (Antes era 10 fijos: con la caja de 232 px quedaban 62 px de
+                             // hueco negro sobre las ventas, capturado el 11-oct.)
   OB.POLL_MS = 6000;         // ritmo de refresco cuando el modo live está activo
   OB.state = {
     pair: null,
+    pestana: 'book',        // 'book' | 'tape' (las dos pestañas de su libro)
+    paso: 0,                // agrupación de precios; 0 = la granularidad que traiga el libro
     live: false,             // false = valores del replay, true = exchange
     book: null,              // {asks:[[p,q]…], bids:[[p,q]…], src}
     t24: null,               // estadísticas de 24 h reales (spot)
@@ -176,7 +183,7 @@
   OB.filasDisponibles = function (boxA) {
     const alto = boxA ? boxA.clientHeight : 0;
     if (!alto) return OB.ROWS;
-    return Math.max(5, Math.min(12, Math.floor(alto / OB.ROW_H)));
+    return Math.max(5, Math.min(14, Math.floor(alto / OB.ROW_H)));
   };
 
   OB.renderBook = function () {
@@ -187,8 +194,17 @@
     if (!b) { boxA.innerHTML = ''; boxB.innerHTML = ''; return; }
     OB._observaCajon();
     const nF = OB.filasDisponibles(boxA);
-    const asks = b.asks.slice(0, nF);
-    const bids = b.bids.slice(0, nF);
+    /* AGRUPACIÓN (11-oct, §5.3). El suyo lleva `0.1 ▾` arriba a la derecha y eso NO es un
+       adorno: fusióna niveles. Aquí la lista de pasos sale de la granularidad REAL del libro que
+       esté llegando (`OB.pasosDe`), no de una tabla inventada -con el libro spot de Binance da
+       `0,01 · 0,1 · 1 · 10`, exactamente la familia que enseña él—. Se agrupa ANTES de recortar
+       por espacio: si no, cambiar la agrupación no cambiaría nada en las 10 filas de arriba. */
+    const pasos = OB.pasosDe(b, App.currentPrice());
+    OB.renderAgreg(pasos);
+    const paso = pasos.indexOf(OB.state.paso) >= 0 ? OB.state.paso : 0;
+    const libro = paso ? { asks: OB.agrupa(b.asks, paso, true), bids: OB.agrupa(b.bids, paso, false) } : b;
+    const asks = (libro.asks || []).slice(0, nF);
+    const bids = (libro.bids || []).slice(0, nF);
     /* El máximo de las barras de profundidad sale de la ÚLTIMA fila PINTADA, no de la última
        del array: si no, con el libro recortado a 6 filas la barra de la sexta mediría la mitad
        y parecería que falta liquidez donde solo falta espacio. */
@@ -223,8 +239,10 @@
     if (bar) bar.style.width = bidPct.toFixed(1) + '%';
     const askBar = el('bookAskBar');
     if (askBar) askBar.style.width = (100 - bidPct).toFixed(1) + '%';
-    setTxt('bookBidPct', 'B ' + U.num(bidPct, 2) + ' %');
-    setTxt('bookAskPct', 'S ' + U.num(100 - bidPct, 2) + ' %');
+    /* Pegado a la letra, como el suyo (`B48.20%` medido); el espacio SÍ se deja antes del `%`
+       porque es la regla tipográfica del español y así lo hace todo lo demás de la app. */
+    setTxt('bookBidPct', 'B' + U.num(bidPct, 2) + ' %');
+    setTxt('bookAskPct', 'S' + U.num(100 - bidPct, 2) + ' %');
     const srcTag = el('bookSrc');
     if (srcTag) {
       srcTag.textContent = b.src === 'derivado' ? 'derivado' : (b.src || 'real');
@@ -368,7 +386,7 @@
     if (obsOB || typeof window === 'undefined' || !('ResizeObserver' in window)) return;
     obsOB = true;
     const repinta = () => { if (pendOB) return; pendOB = requestAnimationFrame(() => { pendOB = 0; OB.renderBook(); }); };
-    for (const id of ['bookAsks', 'bookBids']) {
+    for (const id of ['bookAsks', 'bookBids', 'bookTape']) {
       const e = document.getElementById(id);
       if (e) new ResizeObserver(repinta).observe(e);
     }
@@ -377,7 +395,147 @@
   OB.render = function () {
     OB.state.renders++;
     OB.renderBook();
+    OB.renderTape();
     OB.renderStats();
+  };
+
+  /* ════════════════ AGRUPACIÓN, PESTAÑAS Y CINTA (ítem §5.3, 11-oct) ════════════════ */
+
+  /** Redondea a la escalera 1·2·5·10 típica de un paso de precio. */
+  OB.snapPaso = function (v) {
+    if (!(v > 0)) return 0.01;
+    const e = Math.pow(10, Math.floor(Math.log10(v)));
+    const r = v / e;
+    const s = r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10;
+    return +(s * e).toFixed(10);
+  };
+
+  /** Pasos de agrupación que tienen sentido para ESTE libro: el hueco mínimo real y sus ×10. */
+  OB.pasosDe = function (book, price) {
+    let min = Infinity;
+    const huecos = (a) => {
+      for (let i = 1; a && i < Math.min(a.length, 14); i++) {
+        const d = Math.abs(+a[i][0] - +a[i - 1][0]);
+        if (d > 1e-12 && d < min) min = d;
+      }
+    };
+    if (book) { huecos(book.asks); huecos(book.bids); }
+    if (!Number.isFinite(min) || min <= 0) min = OB.tickOf(price || 1);
+    const base = OB.snapPaso(min);
+    const out = [base];
+    for (const mul of [10, 100, 1000]) {
+      const v = +(base * mul).toFixed(10);
+      if (v > 0 && (!price || v <= price * 0.02) && out.indexOf(v) < 0) out.push(v);
+    }
+    return out;
+  };
+
+  /** Fusiona niveles hacia el precio PEOR (un ask nunca baja ni un bid sube al agrupar). */
+  OB.agrupa = function (rows, paso, ascendente) {
+    if (!rows || !rows.length) return rows || [];
+    if (!paso || paso <= 0) return rows;
+    const dec = Math.min(8, Math.max(OB.priceDecimals(paso), OB.priceDecimals(rows[0][0])));
+    const mapa = new Map();
+    for (const r of rows) {
+      const p = ascendente
+        ? Math.ceil(r[0] / paso - 1e-9) * paso
+        : Math.floor(r[0] / paso + 1e-9) * paso;
+      const k = p.toFixed(dec);
+      const cur = mapa.get(k);
+      if (cur) cur[1] += r[1]; else mapa.set(k, [p, r[1]]);
+    }
+    const arr = [...mapa.values()].sort((x, y) => (ascendente ? x[0] - y[0] : y[0] - x[0]));
+    let c = 0;
+    return arr.map((r) => { c += r[1]; return [+r[0].toFixed(dec), +r[1].toFixed(8), +c.toFixed(8)]; });
+  };
+
+  /** Rellena el selector solo cuando cambia la lista (es un `change` vivo: re-pintar cada vela
+      no debe rehacer el `<select>` ni comerse el foco si alguien lo tiene abierto). */
+  OB.renderAgreg = function (pasos) {
+    const sel = el('bookAgreg');
+    if (!sel) return;
+    if (!pasos.length) return;
+    if (!OB.state.paso || pasos.indexOf(OB.state.paso) < 0) OB.state.paso = pasos[0];
+    const clave = pasos.join(',');
+    if (sel.dataset.pasos !== clave) {
+      sel.dataset.pasos = clave;
+      sel.innerHTML = pasos.map((p) => `<option value="${p}">${String(p).replace('.', ',')}</option>`).join('');
+    }
+    if (sel.value !== String(OB.state.paso)) sel.value = String(OB.state.paso);
+  };
+
+  OB.setPaso = function (v) {
+    const n = parseFloat(v);
+    OB.state.paso = Number.isFinite(n) && n > 0 ? n : 0;
+    if (window.ST && ST.set) ST.set('libroPaso', String(OB.state.paso || ''));
+    OB.renderBook();
+  };
+
+  /** Las dos pestañas. Al cambiar hay que REPINTAR: la caja que estaba oculta medía 0 px de alto,
+      y el número de filas es función del alto (arreglo del 11-oct). */
+  OB.setTab = function (que) {
+    OB.state.pestana = que === 'tape' ? 'tape' : 'book';
+    const card = el('bookCard'), tb = el('tapeBody');
+    /* El cuerpo del libro se oculta por clase, no por `hidden`: su envoltorio es
+       `display: contents` (vea la piel, BLOQUE 19) y el atributo no le haría nada. */
+    if (card) card.classList.toggle('modo-tape', OB.state.pestana === 'tape');
+    if (tb) tb.hidden = OB.state.pestana !== 'tape';
+    for (const b of document.querySelectorAll('#bookTabs .bf-tab')) {
+      const on = b.dataset.btab === OB.state.pestana;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    if (window.ST && ST.set) ST.set('libroPestana', OB.state.pestana);
+    OB.renderBook();
+    OB.renderTape();
+  };
+
+  /** Hora local con dos dígitos (no `toLocaleTimeString`: en el navegador de pruebas la coma de
+      los segundos y el formato regional hacían bailotear el ancho de la columna). */
+  OB.fmtHora = function (t) {
+    const d = new Date(t);
+    const p = (n) => String(n).padStart(2, '0');
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  };
+
+  /** Cinta DERIVADA de la vela: determinista (misma vela, misma cinta), con el sesgo del cuerpo
+      y el volumen repartido entre las impresiones. Se etiqueta «derivado» en el cartel de arriba. */
+  OB.derivedTape = function (price, candle, symbol, n) {
+    n = n || 16;
+    const px = Number.isFinite(price) && price > 0 ? price : 1;
+    const dec = OB.priceDecimals(OB.tickOf(px));
+    const lo = (candle && candle.low > 0 ? candle.low : px * 0.9985);
+    const hi = (candle && candle.high > lo ? candle.high : px * 1.0015);
+    const body = hi > lo ? (candle.close - candle.open) / (hi - lo) : 0;
+    const vol = Number.isFinite(candle && candle.volume) ? candle.volume : 0;
+    const tf = (DS.TIMEFRAMES && DS.TIMEFRAMES[App.interval]) || { ms: 3600e3 };
+    const t0 = (candle && candle.time ? candle.time : 0) + tf.ms - 1000;
+    const rnd = rnd32(seedOf((symbol || '') + '|tape|' + Math.round(px * 100) + '|' + Math.round((candle && candle.time) || 0)));
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const deriva = (rnd() - 0.5) * 0.9 + (body - 0.5) * 0.4 * (1 - i / n);
+      const p = Math.min(hi, Math.max(lo, lo + (hi - lo) * (0.5 + deriva * 0.5)));
+      out.push({
+        t: t0 - i * (2 + Math.floor(rnd() * 26)) * 1000,
+        p: +p.toFixed(dec),
+        q: +(((vol ? vol / n : 0.6) * (0.25 + rnd() * 1.7))).toFixed(6),
+        buy: rnd() < 0.5 + body * 0.26,
+      });
+    }
+    return out;
+  };
+
+  OB.renderTape = function () {
+    const box = el('bookTape');
+    if (!box || OB.state.pestana !== 'tape') return;
+    const px = App.currentPrice();
+    const n = App.candles && App.candles.length ? App.candles[Math.min(BR.state.index, App.candles.length - 1)] : null;
+    let arr = OB.state.tape;
+    if (!OB.state.live || !arr || !arr.length) arr = OB.derivedTape(px, n, App.pair, Math.max(16, OB.ROWS * 3));
+    const nF = OB.filasDisponibles(box);
+    box.innerHTML = arr.slice(0, nF).map((x) => `<div class="bf-tape-row ${x.buy ? 'up' : 'dn'}">`
+      + `<span class="h">${OB.fmtHora(x.t)}</span><span class="p">${U.fmtPrice(x.p)}</span>`
+      + `<span class="t">${OB.fmtQty(x.q)}</span></div>`).join('');
   };
 
   /* ------------------------------- red ------------------------------- */
@@ -397,6 +555,8 @@
       OB.state.errors.push('libro: ' + (e && e.message || e));
       OB.state.book = null;
     }
+    try { OB.state.tape = await DS.MARKET.aggTrades(symbol, 40); }
+    catch (e) { OB.state.errors.push('negocios: ' + (e && e.message || e)); OB.state.tape = null; }
     try { OB.state.t24 = await DS.MARKET.ticker24(symbol); }
     catch (e) { OB.state.errors.push('24h: ' + (e && e.message || e)); }
     try { OB.state.meta = await DS.MARKET.futuresMeta(symbol); }
@@ -453,6 +613,18 @@
     OB.render();
     const btn = el('btnBookLive');
     if (btn) btn.addEventListener('click', () => OB.setLive(!OB.state.live));
+    /* Pestañas y agregación (§5.3): la pestaña y el paso sobreviven al recargar (`ST`), porque
+       el libro es un panel que se deja abierto toda la sesión. */
+    for (const b of document.querySelectorAll('#bookTabs .bf-tab')) {
+      b.addEventListener('click', () => OB.setTab(b.dataset.btab));
+    }
+    const ag = el('bookAgreg');
+    if (ag) ag.addEventListener('change', () => OB.setPaso(ag.value));
+    if (window.ST && ST.get) {
+      const p = parseFloat(ST.get('libroPaso', ''));
+      if (Number.isFinite(p) && p > 0) OB.state.paso = p;
+      if (ST.get('libroPestana', 'book') === 'tape') OB.setTab('tape');
+    }
     if (btn) { btn.classList.add('off'); btn.textContent = 'fijar'; }
 
     // pinchar una fila del libro prepara una orden límite a ese precio

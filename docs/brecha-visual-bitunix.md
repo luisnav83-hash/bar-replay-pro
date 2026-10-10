@@ -136,12 +136,37 @@ financiación · Activos · Bots(0)`; a la derecha `☐ Sólo actual · Cerrar t
 2. **Riel vertical de dibujo** a la izquierda del gráfico (34 px, iconos, radio 4) y **widget
    flotante de orden rápida** (312×66, `#131414`, borde `#292a2b`) encima de la esquina
    superior izquierda, con `Comprar precio / Por costo (USDT) ▾ / Vender precio` y ×.
-3. **Libro como el suyo**: pestañas `Libro de órdenes | Operaciones de mercado`, agregación
-   `0.1 ▾` arriba a la derecha, barra de profundidad **detrás** de Cant./Total alineada a la
-   derecha, precio del medio en grande con flecha, y la barra `B xx% / S xx%` de 18 px al
-   final. Esto arregla de paso el recorte de 68 px que midió `tools/barrido-graficos.js`
-   (10 filas de 17 px en una caja de 102 px): su libro cabe porque la caja es alta, no
-   porque pinten menos filas.
+3. ~~**Libro como el suyo**~~ — **HECHO el 11-oct (segunda capa del día)**, medido en su DOM a
+   1600×900 con un sonda nueva (`/tmp/medir-libro*.js`, los números van abajo) y no de memoria:
+   · Carta `299×612` (la suya `305×610`); en la cabecera, las dos pestañas con subrayado blanco de
+     2 px en la activa y `#919499` en la inactiva, 14 px / peso 500, sin fondo ni radio; a su
+     derecha, el `0,5 ▾` de agregación (12 px), el cartel del origen del dato y «fijar».
+   · **Los rótulos de las pestañas se acortan a `Libro | Mercado`** con el nombre completo en el
+     `title`: los suyos miden 110 + 165 = 275 px dentro de 305 y EN SU PÁGINA el segundo sale
+     recortado («Operacio», capturado), y una pestaña que no se ve no se puede pulsar.
+   · **La agregación hace de verdad**: `OB.pasosDe` deriva la lista del libro que esté llegando
+     (con el spot de Binance salen `0,01 · 0,1 · 1 · 10`, la familia que él enseña) y `OB.agrupa`
+     fusiona niveles hacia el precio PEOR (un ask nunca baja al agrupar) ANTES de recortar por
+     espacio. Anclado: con un paso grueso todos los precios pintados son múltiplos del paso.
+   · **Segunda pestaña = cinta de negocios** (`/api/v3/aggTrades` por el proxy del mismo origen,
+     con la misma política que el libro; ruta nueva en `server.js`). Sin red se DERIVA de la vela
+     del cursor, determinista, y el cartel de arriba lo dice: una cinta inventada en 2021 sería
+     mentira. Cabeceras `Hora · Precio (USDT) · Tamaño (BTC)`, 17 px por fila y el precio en el
+     color del que atacó.
+   · `Cant.` y `Total` alineadas a la derecha, precio central 20 px / 700 y banda del pie de 18 px
+     a 12 px -los dos últimos, SOLO a partir de 861 px de alto: medido, cada 5-7 px de esas filas
+     fijas se comía una fila del libro o 20-32 px del gráfico en 1000×780 y 900×700, por debajo del
+     suelo de 120 que vigila `test:responsive`—.
+   · `Total (USDT)` sube de 10 px / `--tx-4` (3,4:1) a 11 px / `--tx-3` (6,3:1): el mismo nivel que
+     ya desterramos de los `.hint`. Y `OB.ROWS` pasa de 10 a 14 con `filasDisponibles` en 5-14:
+     quedaban 62 px de hueco negro sobre las ventas con la caja de 232 px; ahora son 13 filas por
+     lado, como las ~13-15 suyas. Las anclas que decían «20 filas» miden ahora el invariante
+     (mitades iguales, dentro del tope) porque el número bueno depende del alto de la caja.
+   · **Regla que aprendió el día**: NO se puede envolver el cuerpo del libro en un `div`. Media
+     docena de reglas del tipo `#sidebar > #bookCard > .card-body > .bf-asks` hacen la aritmética
+     real del cajón (`max(17px, (--cuerpo − --marco) / 2)` por lado); con el envoltorio dejaban de
+     casar y el gráfico caía a 111 px. Las dos vistas se conmutan con una clase (`.modo-tape`) y
+     `display:none` en lo que toca esconder.
 4. **Pestañas del panel inferior** con su vocabulario y sus contadores, y `Sólo actual` +
    `Cerrar todo` a la derecha.
 5. **Cómo se tradea**: `Activador ▾` como desplegable que contiene Trigger/Trailing/Riesgo

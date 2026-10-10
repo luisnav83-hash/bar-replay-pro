@@ -333,6 +333,97 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       `y al volver a Mercado el rótulo del desplegable recupera su nombre neutro («${fila.vuelve.rotulo}») sin marcarse`);
   }
 
+  /* ─── LIBRO COMO EL SUYO: dos pestañas, agregación y cinta (ítem §5.3 del registro) ───
+     Medido en su DOM (1600×900, es-ES): pestañas a 14 px / peso 500, la activa blanca con
+     subrayado de 2 px y la inactiva `#919499`; `0.1 ▾` a la derecha; precio central 20 px / 700
+     verde; Cant. y Total alineadas a la derecha; pie `B48.20% | S51.80%` en 18 px. Lo que se
+     exige aquí es la forma Y que la agrupación haga algo: con un paso más grueso las filas
+     pintadas tienen que ser múltiplos del paso y tiene que haber menos niveles. */
+  {
+    const libro = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const R = (e) => e.getBoundingClientRect();
+      const cs = (e) => getComputedStyle(e);
+      const tab = (q) => document.querySelector('#bookTabs .bf-tab' + q);
+      const antes = {
+        tabs: [...document.querySelectorAll('#bookTabs .bf-tab')].map((b) => ({
+          t: b.textContent.trim(), ti: b.title, fs: Math.round(parseFloat(cs(b).fontSize)), fw: cs(b).fontWeight,
+          recortada: b.scrollWidth > b.clientWidth + 1 || (() => { const br = b.getBoundingClientRect(), hr = g('bookTabs').getBoundingClientRect(); return br.right > hr.right + 1; })(),
+          color: cs(b).color, tt: cs(b).textTransform, ls: cs(b).letterSpacing,
+          subrayado: (() => { const s = getComputedStyle(b, '::after'); return s.height === '2px' && s.backgroundColor !== 'rgba(0, 0, 0, 0)'; })(),
+        })),
+        centro: { fs: Math.round(parseFloat(cs(g('bookLast')).fontSize)), fw: cs(g('bookLast')).fontWeight, color: cs(g('bookLast')).color },
+        cantDerecha: cs(document.querySelector('#bookAsks .bf-row .q')).textAlign,
+        totalDerecha: cs(document.querySelector('#bookAsks .bf-row .t')).textAlign,
+        cabeceras: [...g('bookCard').querySelectorAll('.card-body > .bf-book-cols span')].map((s) => s.textContent.trim()),
+        pie: { txt: g('bookBidPct').textContent.trim(), alto: Math.round(R(g('bookBidPct')).height), fs: Math.round(parseFloat(cs(g('bookBidPct')).fontSize)) },
+        pasos: [...g('bookAgreg').options].map((o) => o.value),
+        elegida: g('bookAgreg').value,
+        nivelesAntes: g('bookAsks').children.length,
+        precioAntes: +document.querySelector('#bookAsks .bf-row').dataset.p,
+      };
+      /* paso grueso: 1000 veces el de arriba, y a ver qué pinta */
+      const grueso = antes.pasos[antes.pasos.length - 1];
+      g('bookAgreg').value = grueso;
+      g('bookAgreg').dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 240));
+      const despues = {
+        grueso: +grueso,
+        niveles: g('bookAsks').children.length,
+        precios: [...g('bookAsks').children].map((e) => +e.dataset.p),
+        escalon: (([...g('bookAsks').children].map((e) => +e.dataset.p).filter((p) => Math.abs(p % grueso) > 1e-6)).length),
+      };
+      g('bookAgreg').value = antes.pasos[0];
+      g('bookAgreg').dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 200));
+      const fino = g('bookAsks').children.length;
+      /* y la segunda pestaña, con su cinta */
+      tab('[data-btab=\"tape\"]').click();
+      await new Promise((r) => setTimeout(r, 300));
+      const cinta = {
+        libroOculto: g('bookCard').classList.contains('modo-tape') && g('bookAsks').getBoundingClientRect().height === 0,
+        filas: g('bookTape').children.length,
+        celdas: g('bookTape').children.length ? [...g('bookTape').children[0].children].map((c) => c.textContent.trim()) : [],
+        hora: g('bookTape').children.length ? /^\d{2}:\d{2}:\d{2}$/.test(g('bookTape').children[0].querySelector('.h').textContent.trim()) : false,
+        colores: g('bookTape').children.length ? [...new Set([...g('bookTape').children].map((r2) => cs(r2.querySelector('.p')).color))] : [],
+        altoFila: g('bookTape').children.length ? Math.round(R(g('bookTape').children[0]).height) : 0,
+        activa: tab('[data-btab=\"tape\"]').classList.contains('active') && tab('[aria-selected=\"true\"]') === tab('[data-btab=\"tape\"]'),
+        origen: g('bookSrc').textContent.trim(),
+        cabeceras: [...g('tapeBody').querySelectorAll('.bf-book-cols span')].map((s) => s.textContent.trim()),
+        desborda: g('bookCard').scrollWidth > g('bookCard').clientWidth + 1,
+      };
+      tab('[data-btab=\"book\"]').click();
+      await new Promise((r) => setTimeout(r, 220));
+      cinta.vuelve = !g('bookCard').classList.contains('modo-tape') && g('tapeBody').hidden === true
+        && g('bookAsks').getBoundingClientRect().height > 20;
+      return { antes, despues, fino, cinta };
+    });
+    const tt = libro.antes.tabs;
+    ok(tt.length === 2 && /^Libro/.test(tt[0].t) && /^Mercado/.test(tt[1].t)
+       && /Libro de órdenes/.test(tt[0].ti) && /Operaciones de mercado/.test(tt[1].ti)
+       && tt.every((x) => x.fs === 14 && x.fw === '500' && x.tt === 'none' && x.ls === 'normal' && !x.recortada)
+       && tt[0].color === 'rgb(255, 255, 255)' && tt[0].subrayado && tt[1].color === 'rgb(145, 148, 153)',
+      `las dos pestañas son «${tt.map((x) => x.t).join(' | ')}» a 14 px/500, ninguna recortada, con el vocabulario del sitio en el title y subrayado de 2 px en la activa (${tt[0].color}) frente a ${tt[1].color} - medido en su DOM; allí el rótulo largo sale cortado «Operacio» y aquí no, porque una pestaña que no se ve no se puede pulsar`);
+    ok(libro.antes.centro.fs === 20 && libro.antes.centro.fw === '700' && /rgb\((36, 193, 141|241, 75, 63)\)/.test(libro.antes.centro.color),
+      `el precio central es grande y en el color del lado (${libro.antes.centro.fs} px / ${libro.antes.centro.fw} · ${libro.antes.centro.color}) - como los suyos 20 px/700`);
+    ok(libro.antes.cantDerecha === 'right' && libro.antes.totalDerecha === 'right'
+       && libro.antes.cabeceras.join(' · ') === 'Precio (USDT) · Cant. (BTC) · Total (USDT)',
+      `cabeceras ${libro.antes.cabeceras.join(' · ')} con Cant. y Total a la derecha (${libro.antes.cantDerecha}/${libro.antes.totalDerecha}) - las suyas llevan la unidad en las tres`);
+    ok(libro.antes.pie.alto === 18 && libro.antes.pie.fs === 12 && /^B[\d.,]+\s?%$/.test(libro.antes.pie.txt),
+      `el pie bid/ask es una banda de ${libro.antes.pie.alto} px a ${libro.antes.pie.fs} px con la letra pegada («${libro.antes.pie.txt}», como su «B48.20%»)`);
+    ok(libro.antes.pasos.length >= 3 && libro.antes.elegida === libro.antes.pasos[0] && libro.fino === libro.antes.nivelesAntes,
+      `el desplegable de agregación ofrece ${libro.antes.pasos.join(' · ')} (deriva de la granularidad del libro que llegue) y con el paso fino se recuperan las ${libro.fino} filas`);
+    ok(libro.despues.escalon === 0 && libro.despues.precios.length > 0 && libro.despues.niveles <= libro.antes.nivelesAntes,
+      `y agrupar en ${libro.despues.grueso} hace de verdad: ${libro.despues.precios.length} niveles pintados, todos múltiplos del paso (0 fuera de escala), frente a ${libro.antes.nivelesAntes} sin agrupar`);
+    const ct = libro.cinta;
+    ok(ct.activa && ct.libroOculto && ct.filas >= 5 && ct.hora && ct.celdas.length === 3 && ct.altoFila === 17 && !ct.desborda,
+      `«Operaciones de mercado» cambia el cuerpo por una cinta de ${ct.filas} filas de ${ct.altoFila} px con ${ct.celdas.join('/')} y hora ${ct.hora ? 'HH:MM:SS' : 'MAL'}`);
+    ok(ct.colores.length === 2 && ct.colores.every((x) => /rgb\((36, 193, 141|241, 75, 63)\)/.test(x)) && ct.vuelve,
+      `cada impresión va en el color del que atacó (${ct.colores.join(', ')}) y la primera pestaña vuelve a su sitio`);
+    ok(/derivado|real|Binance/.test(ct.origen) && ct.cabeceras.join(' · ') === 'Hora · Precio (USDT) · Tamaño (BTC)',
+      `la cinta se etiqueta con su origen (${ct.origen}) y sus cabeceras son ${ct.cabeceras.join(' · ')}`);
+  }
+
   /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
      Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
      695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna
@@ -459,7 +550,8 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   // control equivalente es una línea de acentos, así que se admite desde 16 px.
   ok(piel.altoFraccion >= 16 && piel.altoFraccion <= 34, `la fila de fracciones mide ${piel.altoFraccion} px (sus marcas: 12 px de texto en un bloque de 25 px)`);
   ok(true, 'la hoja bitunix.css es la última del <head> (' + ORDEN_CSS + ')');
-  ok(piel.altoFila >= 14 && piel.altoFila <= 22 && piel.filas === 20, `20 filas de libro a ${piel.altoFila} px`);
+  ok(piel.altoFila >= 14 && piel.altoFila <= 22 && piel.filas >= 20 && piel.filas <= 28 && piel.filas % 2 === 0,
+     `${piel.filas} filas de libro a ${piel.altoFila} px, las dos mitades iguales (el tope son 14 niveles por lado; el número que sale es el alto de la caja / 17, y tests/responsive.test.js comprueba que no sobre más de una fila)`);
   ok(piel.colorFilaAsk === 'rgb(241, 75, 63)' && piel.colorFilaBid === 'rgb(36, 193, 141)', 'ventas en rojo y compras en verde en el libro, con los colores del sitio');
 
   /* ══════════════════════════ C) LIBRO DE ÓRDENES ═════════════════════════ */
@@ -533,7 +625,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(/a la vista$/.test(libro.visibilidad),
      `el precio central y las filas pegadas a él están DENTRO de la tarjeta (${libro.visibilidad})`);
   ok(libro.centroTocaLibro, 'el centro del libro recibe el puntero: no lo tapa ninguna otra tarjeta');
-  ok(libro.asks.length === 10 && libro.bids.length === 10, `${libro.asks.length} niveles de venta y ${libro.bids.length} de compra`);
+  ok(libro.asks.length === libro.bids.length && libro.asks.length >= 5 && libro.asks.length <= 14, `${libro.asks.length} niveles de venta y ${libro.bids.length} de compra - las dos mitades, siempre iguales y dentro del tope -`);
   ok(libro.asks.every((r, i) => i === 0 || r.p < libro.asks[i - 1].p),
      'las ventas BAJAN hacia el precio: la mejor, justo encima del último (orden de Bitunix)');
   ok(libro.bids.every((r, i) => i === 0 || r.p < libro.bids[i - 1].p), 'las compras decrecen hacia abajo');
@@ -955,7 +1047,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     `el libro y las estadísticas a pelo cuestan ${salud.libro.toFixed(2)} ms por pasada frente a ${salud.vela.toFixed(2)} ms por vela del replay (×${(salud.libro / salud.vela).toFixed(2)}): el terminal no multiplica el coste de avanzar`);
   ok(salud.vela < 45, `${salud.vela.toFixed(2)} ms/vela (mejor de dos tandas; la primera ${salud.velaBruta.toFixed(2)}) — techo anti O(n²), no umbral de hardware`);
   ok(salud.renders >= 120, `el libro se refresca en cada una de las 120 velas (${salud.renders} renders)`);
-  ok(salud.filas === 20, `tras 60 velas el libro mantiene sus 20 filas, sin acumular nodos (${salud.filas})`);
+  ok(salud.filas >= 20 && salud.filas <= 28, `tras 60 velas el libro sigue en ${salud.filas} filas (su rango con la caja de 232 px es 20-28), sin acumular nodos`);
   ok(errs.length === 0, `sin errores de JavaScript ni de consola (${errs.length})${errs.length ? ' → ' + errs.slice(0, 3).join(' ⧸ ') : ''}`);
   ok(recursos > 0, `las ${recursos} peticiones de exchange fallaron por el corte de red (y la app las digirió)`);
 
