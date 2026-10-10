@@ -2349,3 +2349,81 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #bottomPanel .bf-solo span { display: none; }
   #bottomPanel .bf-solo { gap: 0; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 21 — LA BARRA DE MODO COMO LA SUYA (11-oct-2026, ítem §5.5a del registro
+   `docs/brecha-visual-bitunix.md`).
+
+   Medido en su página a 1600×900 (es-ES, sin sesión): UNA PÍLDORA de 272×28 con radio
+   9999 y fondo `#222324`, partida en dos mitades de 135 y 136 px por una raya vertical
+   de 1 px. Mitad izquierda: `Cruzada ▾` -el modo de margen- a 12 px / peso 500, la
+   palabra en `#ffffff` y el `▾` en gris. Mitad derecha: los DOS apalancamientos, `10X`
+   en `#24c18d` y `10X` en `#f14b3f`, cada uno de 23×16 a 12 px/500, seguidos de un `▾`
+   gris (12 px) que abre el editor. Nada de la fila está en mayúsculas ni lleva
+   `letter-spacing`, y el número se escribe con la X MAYÚSCULA -así en la barra y así en
+   la tabla de tramos (`200X`)—, que es la razón de cambiar también `#bfLevVal` y
+   `#tagLeverage`: dos cajas del mismo número con dos cajas de letra distintas.
+   ════════════════════════════════════════════════════════════════════════════ */
+#orderCard .bf-margin-row { display: flex; align-items: center; gap: 0; height: 28px;
+  margin: 0 0 8px; padding: 0 4px 0 8px; background: var(--bg-3); border-radius: 9999px; }
+#orderCard .bf-margin-row .seg { display: flex; align-items: stretch; gap: 0; height: 100%;
+  background: transparent; }
+/* Los botones no llevan el `flex: 1 1 0` del segmentado a medias (heredado de `.seg-btn`):
+   repartidas las mitades a partes iguales, «Cruzada» pedía 58 px y le caían 55, y el
+   `text-overflow: ellipsis` de abajo lo disfrazaba de «Cruz…». Con `0 1 auto` cada botón vale lo
+   que vale su palabra y solo se aprieta si de verdad no cabe; así es como la píldora suya se las
+   arregla para meter `Cruzada ▾` + `10X 10X ▾` dentro de 272 px. */
+#orderCard .bf-margin-row .seg-btn { flex: 0 1 auto; height: 100%; padding: 0 4px; border: 0; background: transparent;
+  border-radius: 0; color: var(--tx-3); font-size: 12px; font-weight: 500; white-space: nowrap;
+  text-transform: none; letter-spacing: 0; }
+#orderCard .bf-margin-row .seg-btn.active { color: var(--tx-1); background: transparent; }
+/* La raya de 1 px que partida la píldora (medida: divide las dos mitades de 135/136 px). */
+#orderCard .bf-mode-div { flex: 0 0 auto; width: 1px; height: 14px; margin: 0 6px; background: var(--line); }
+/* La caja de SU texto mide 23×16; aquí el botón estira a lo alto de la píldora y la marca
+   (12 px / 500) se centra dentro. No es capricho: el contrato de diana táctil de esta app
+   exige ≥20 px a todo control visible (`test:bitunix` lo mide) y 24 px a cada fila del
+   formulario, y con 16 px el chip no se podría pulsar con el dedo -la misma razón por la que
+   el deslizador mide 22 px de caja con 3 px de barra (l.386)—. Lo que se copia es la TIPOGRAFÍA
+   y el color medidos, que son 12 px / 500 en `#24c18d` y `#f14b3f`—. */
+#orderCard .bf-lev-chips { display: flex; align-items: center; gap: 7px; margin-left: auto; height: 100%; flex: 0 0 auto; }
+#orderCard .bf-lev-chip { min-width: 23px; height: 100%; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0 1px; border: 0; background: transparent;
+  border-radius: 0; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums;
+  letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer; }
+#orderCard .bf-lev-chip.up { color: var(--up); }
+#orderCard .bf-lev-chip.down { color: var(--down); }
+#orderCard .bf-lev-chip:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* En HEDGE el deslizador escribe en UN lado; el subrayado dice en cuál (en ONE-WAY no se marca
+   ninguno: los dos lados valen lo mismo y marcar uno sería mentir). */
+#orderCard .bf-lev-chip.sel { text-decoration: underline; text-underline-offset: 3px; }
+#orderCard .bf-lev-caret { width: 16px; height: 100%; padding: 0; border: 0; background: transparent;
+  border-radius: 0; color: var(--tx-3); font-size: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; }
+#orderCard .bf-lev-caret:hover { color: var(--tx-1); }
+#orderCard .bf-lev-caret.abierto { transform: rotate(180deg); }
+#orderCard .bf-lev-editor { margin: -4px 0 8px; }
+#orderCard .bf-lev-editor[hidden] { display: none; }
+#orderCard .bf-lev-editor .bf-lev { height: 26px; padding: 0 8px; border: 0; background: var(--bg-2);
+  border-radius: 4px; }
+#orderCard .bf-lev-editor .bf-lev input[type=range] { flex: 1 1 auto; min-width: 0; width: auto; }
+@media (min-width: 641px) {
+  /* La fila vieja se pintaba como caja propia (`min-height: 30px`, `border-radius: var(--r)`,
+     l.1766); la píldora medida manda ahora desde arriba y esas dos líneas solo hacían que la
+     barra midiera 30 px con radio de 4 px. */
+  #orderCard .bf-margin-row { min-height: 0; }
+}
+@media (max-width: 640px) {
+  /* 26 + 9 = el PRESUPUESTO EXACTO de la fila vieja, medido (su `.bf-lev` era de 26 px con
+     `box-sizing: border-box`, y el margen de abajo ya era 9). No es un número al arbitrio: la
+     escalera de la franja (`PC.ajustaEscalera`, tope de 250 px para `#sidebar`) reparte el alto
+     contra el contenido de la tarjeta, y cada desvío de aquí se paga en otra parte -con 24 px
+     `test:layout` veía abrir «Avanzado» comiéndole 4 px al gráfico, y con 28 px los contratos de
+     «el reposo entra entero» de `test:hedge` y `test:plantillas` se salían 1 px—. Con 26 los tres
+     cuadran a 0. Lo que sí se aprieta en el teléfono es la tipografía, como en el resto de
+     segmentados, y el glifo del editor se queda con 14 px de caja pulsable. */
+  #orderCard .bf-margin-row { height: 26px; margin-bottom: 9px; padding: 0 3px 0 6px; }
+  #orderCard .bf-margin-row .seg-btn { font-size: 10.5px; padding: 0 3px; }
+  #orderCard .bf-mode-div { margin: 0 4px; }
+  #orderCard .bf-lev-chip { min-width: 18px; font-size: 10.5px; }
+  #orderCard .bf-lev-chips { gap: 5px; }
+}

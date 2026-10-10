@@ -280,7 +280,7 @@ ok(!!cp && !Number.isNaN(JSON.stringify(cp).length), 'el snapshot anterior al ca
   // comparar contra él daba un verde imposible de conseguir —o un rojo falso, como este—.)
   ok(i.suma > 0 && i.libre >= 0 && Math.abs(i.libre + i.suma - i.balance) < 0.05,
     `libre + usado = balance de la página (${i.libre.toFixed(2)} + ${i.suma.toFixed(2)} = ${i.balance.toFixed(2)})`);
-  ok(/\dx/.test(i.posNotional), `la carta de posición pinta el suyo: «${i.posNotional}»`);
+  ok(/\d[xX]/.test(i.posNotional), `la carta de posición pinta el suyo: «${i.posNotional}»`);
 
   console.log('\n▸ J) Bajar el apalancamiento de un lado con la cuenta justa');
   const j = await page.evaluate(async () => {

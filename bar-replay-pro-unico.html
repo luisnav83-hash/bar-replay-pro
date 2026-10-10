@@ -1923,6 +1923,44 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #bottomPanel .bf-solo span { display: none; }
   #bottomPanel .bf-solo { gap: 0; }
 }
+#orderCard .bf-margin-row { display: flex; align-items: center; gap: 0; height: 28px;
+  margin: 0 0 8px; padding: 0 4px 0 8px; background: var(--bg-3); border-radius: 9999px; }
+#orderCard .bf-margin-row .seg { display: flex; align-items: stretch; gap: 0; height: 100%;
+  background: transparent; }
+#orderCard .bf-margin-row .seg-btn { flex: 0 1 auto; height: 100%; padding: 0 4px; border: 0; background: transparent;
+  border-radius: 0; color: var(--tx-3); font-size: 12px; font-weight: 500; white-space: nowrap;
+  text-transform: none; letter-spacing: 0; }
+#orderCard .bf-margin-row .seg-btn.active { color: var(--tx-1); background: transparent; }
+#orderCard .bf-mode-div { flex: 0 0 auto; width: 1px; height: 14px; margin: 0 6px; background: var(--line); }
+#orderCard .bf-lev-chips { display: flex; align-items: center; gap: 7px; margin-left: auto; height: 100%; flex: 0 0 auto; }
+#orderCard .bf-lev-chip { min-width: 23px; height: 100%; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0 1px; border: 0; background: transparent;
+  border-radius: 0; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums;
+  letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer; }
+#orderCard .bf-lev-chip.up { color: var(--up); }
+#orderCard .bf-lev-chip.down { color: var(--down); }
+#orderCard .bf-lev-chip:hover { text-decoration: underline; text-underline-offset: 3px; }
+#orderCard .bf-lev-chip.sel { text-decoration: underline; text-underline-offset: 3px; }
+#orderCard .bf-lev-caret { width: 16px; height: 100%; padding: 0; border: 0; background: transparent;
+  border-radius: 0; color: var(--tx-3); font-size: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; }
+#orderCard .bf-lev-caret:hover { color: var(--tx-1); }
+#orderCard .bf-lev-caret.abierto { transform: rotate(180deg); }
+#orderCard .bf-lev-editor { margin: -4px 0 8px; }
+#orderCard .bf-lev-editor[hidden] { display: none; }
+#orderCard .bf-lev-editor .bf-lev { height: 26px; padding: 0 8px; border: 0; background: var(--bg-2);
+  border-radius: 4px; }
+#orderCard .bf-lev-editor .bf-lev input[type=range] { flex: 1 1 auto; min-width: 0; width: auto; }
+@media (min-width: 641px) {
+  #orderCard .bf-margin-row { min-height: 0; }
+}
+@media (max-width: 640px) {
+  #orderCard .bf-margin-row { height: 26px; margin-bottom: 9px; padding: 0 3px 0 6px; }
+  #orderCard .bf-margin-row .seg-btn { font-size: 10.5px; padding: 0 3px; }
+  #orderCard .bf-mode-div { margin: 0 4px; }
+  #orderCard .bf-lev-chip { min-width: 18px; font-size: 10.5px; }
+  #orderCard .bf-lev-chips { gap: 5px; }
+}
 </style>
 </head>
 <body>
@@ -2416,13 +2454,38 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
         <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
              apalancamiento y unidad. El modo cambia el cálculo de liquidación
              (js/tradingEngine.js: `marginMode`). -->
-        <div class="bf-margin-row">
+        <!-- BARRA DE MODO, MEDIDA EN SU PÁGINA (11-oct, 1600×900, es-ES, sin sesión): una PÍLDORA
+             de 272×28, radio 9999 y fondo #222324, partida por una raya de 1 px en dos mitades de
+             135/136 px. La izquierda es el modo de margen (`Cruzada ▾`, 12 px / peso 500, la palabra
+             en blanco). La derecha NO es un número de cuenta suelto: son los DOS apalancamientos,
+             `10X` en #24c18d (largo) y `10X` en #f14b3f (corto), cada uno de 23×16 a 12 px/500, y
+             detrás un `▾` gris que abre el editor. Dos decisiones escritas, no coladas:
+              · el `▾` suyo abre un popover con la escala; el nuestro abre la fila del deslizador,
+                que ya existe y es la fuente de verdad que mueve el motor y las pruebas. No hay
+                popover que copiar sin inventárselo.
+              · el margen se queda `Cruzada | Aislada` en segmentado: el suyo es un menú que sin
+                sesión no se puede abrir, y adivinar sus opciones sería inventar datos.
+             Efecto secundario buscado: el deslizador deja de ocupar 30 px de la tarjeta (en el
+             teléfono, donde cada línea cuenta, ver el contrato de tests/responsive). -->
+        <div class="bf-margin-row" id="bfModeBar">
           <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
             <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzada</button>
             <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislada</button>
           </div>
+          <span class="bf-mode-div" aria-hidden="true"></span>
+          <div class="bf-lev-chips" role="group" aria-label="Apalancamiento de cada lado">
+            <!-- Los dos chips LEEN de verdad (js/uiController.js: UI.syncLevChips): en ONE-WAY los dos
+                 dicen el apalancamiento de la cuenta -por eso salen iguales, como en su página- y en
+                 HEDGE cada uno dice el suyo. Pincharlos abre el editor y, en HEDGE, elige a qué lado
+                 escribe el deslizador. -->
+            <button type="button" class="bf-lev-chip up" id="btnLevLong">1X</button>
+            <button type="button" class="bf-lev-chip down" id="btnLevShort">1X</button>
+            <button type="button" class="bf-lev-caret" id="btnLevEdit" aria-expanded="false" aria-controls="bfLevEditor" title="Editar el apalancamiento">▾</button>
+          </div>
+        </div>
+        <div class="bf-lev-editor" id="bfLevEditor" hidden>
           <div class="bf-lev" title="Apalancamiento actual">
-            <b id="bfLevVal">1x</b>
+            <b id="bfLevVal">1X</b>
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
             <!-- En HEDGE el deslizador escribe en UN lado, así que hay que decir cuáles son los dos
                  (en ONE-WAY esta línea no aparece: solo hay un apalancamiento, el de la cuenta). -->
@@ -2914,7 +2977,7 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   <div class="tab-body" id="tab-account"><div class="bf-tabrow">
     <div class="card">
           <div class="card-head"><span class="card-title">Cuenta</span>
-            <span class="tag" id="tagLeverage">1x</span>
+            <span class="tag" id="tagLeverage">1X</span>
           </div>
           <div class="card-body">
             <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>
@@ -11251,7 +11314,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     document.getElementById('leverageSelect').addEventListener('change', (e) => {
       TE.configure({ leverage: +e.target.value });
-      setText('tagLeverage', e.target.value + 'x');
+      setText('tagLeverage', e.target.value + 'X');
       UI.syncLeverage(+e.target.value);
       UI.updateOrderHint();
       UI.refreshAccount();
@@ -12592,7 +12655,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('acFees', 'Comisiones ' + U.fmtMoney(m.fees));
     const meter = document.getElementById('marginMeter');
     if (meter) meter.style.width = U.clamp(m.exposure, 0, 100) + '%';
-    setText('tagLeverage', TE.state.leverage + 'x');
+    setText('tagLeverage', TE.state.leverage + 'X');
     setText('eqValue', U.fmtMoney(m.equity));
     UI.refreshPosition();
   };
@@ -12748,7 +12811,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     setText('posEntry', U.fmtPrice(p.entryPrice));
     setText('posSize', U.num(p.qty, 6) + ' ' + App.baseAsset());
-    setText('posNotional', U.fmtMoney(p.notional) + ' · ' + p.leverage + 'x');
+    setText('posNotional', U.fmtMoney(p.notional) + ' · ' + p.leverage + 'X');   // la X suya, no una segunda caja
     setText('posMark', U.fmtPrice(price));
     setText('posSlDist', p.sl ? `${U.fmtPrice(p.sl)} (${U.fmtPct(((p.sl - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin SL');
     setText('posTpDist', p.tp ? `${U.fmtPrice(p.tp)} (${U.fmtPct(((p.tp - p.entryPrice) / p.entryPrice) * 100, 2, true)})` : 'sin TP');
@@ -13192,10 +13255,50 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       }
       if (+sel.value !== lev) { sel.value = String(lev); sel.dispatchEvent(new Event('change', { bubbles: true })); }
     }
-    setText('bfLevVal', lev + 'x');
+    setText('bfLevVal', lev + 'X');   // la X mayúscula es la de su barra med (`10X`)
     const r = document.getElementById('levRange');
     if (r && +r.value !== lev) r.value = String(lev);
     UI.syncLevLados();
+  };
+
+  /* LOS DOS `10X` DE LA BARRA DE MODO, medidos en su página (11-oct): `10X` verde (largo) y
+     `10X` rojo (corto), 12 px / peso 500, 23×16 cada uno, dentro de la píldora de 28 px.
+     No son decoración: leen `TE.leverageLadoInfo()`, así que en ONE-WAY los dos dicen el de la
+     cuenta -por eso salen iguales, igual que en la suya- y en HEDGE cada uno dice el suyo. */
+  UI.syncLevChips = function () {
+    const info = (TE.leverageLadoInfo && TE.leverageLadoInfo()) || null;
+    if (!info) return;
+    const uno = info.modo !== 'HEDGE';
+    const largo = document.getElementById('btnLevLong'), corto = document.getElementById('btnLevShort');
+    const ed = document.getElementById('bfLevEditor');
+    const l = uno ? info.cuenta : info.long, s = uno ? info.cuenta : info.short;
+    const titulo = (uno ? 'Uno y otro lado a ' + l + 'X (apalancamiento de la cuenta)'
+                        : 'Largo ▲ ' + l + 'X · corto ▼ ' + s + 'X')
+      + ' — clic para editar el deslizador';
+    if (largo) { largo.textContent = l + 'X'; largo.title = titulo; }
+    if (corto) { corto.textContent = s + 'X'; corto.title = titulo; }
+    const lado = (!uno && App.levLado && App.levLado !== 'reset') ? App.levLado : null;
+    if (largo) largo.classList.toggle('sel', lado === 'long');
+    if (corto) corto.classList.toggle('sel', lado === 'short');
+    const caret = document.getElementById('btnLevEdit');
+    if (caret) {
+      const abierto = !!(ed && !ed.hidden);
+      caret.setAttribute('aria-expanded', String(abierto));
+      caret.classList.toggle('abierto', abierto);
+    }
+  };
+
+  /** Abre / cierra el editor del deslizador (lo que en el sitio es el popover del `▾`). */
+  UI.muestraLevEditor = function (abierto) {
+    const ed = document.getElementById('bfLevEditor');
+    if (!ed) return;
+    ed.hidden = !abierto;
+    try { if (window.ST && ST.set) ST.set('levEditor', !!abierto); } catch (e) {}
+    if (abierto) {
+      const r = document.getElementById('levRange');
+      if (r) { try { r.focus({ preventScroll: true }); } catch (e) { if (r.focus) r.focus(); } }
+    }
+    UI.syncLevChips();
   };
 
   /** Lectura de los dos lados en la propia fila del deslizador (solo en hedge). */
@@ -13215,6 +13318,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       }
     }
     if (row) row.style.display = esHedge ? '' : 'none';
+    /* El alto de «Avanzado» se cachea (`btn.dataset.altoAdv`) porque plegado no se puede medir, y
+       EN ESTE BLOQUE vive justo lo que cambia de tamaño con el modo de posición (`#segLevLado`,
+       ~54 px). Sin invalidar, la cifra cacheada con HEDGE puesto (366 px medidos, por 312 en
+       ONE-WAY) seguía mandando después de volver a ONE-WAY y el umbral de deshacer («tiene que
+       sobrar tanto hueco como lo que ocupa el bloque») quedaba inflado: el pliegue se quedaba
+       pegado «por espacio» con aire de sobra. Se borra la caché y la próxima pasada del
+       ResizeObserver mide en frío, que es la vía que sí sabe medir con el bloque oculto. */
+    { const ab = document.getElementById('btnOrderAvanzado'); if (ab) delete ab.dataset.altoAdv; }
+    UI.syncLevChips();
     const seg = document.getElementById('segLevLado');
     if (seg) [...seg.querySelectorAll('.seg-btn')].forEach((b) => b.classList.toggle('active', b.dataset.levlado === (App.levLado || 'long')));
   };
@@ -13236,6 +13348,29 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     });
     const r = document.getElementById('levRange');
     if (r) r.addEventListener('input', () => UI.syncLeverage(+r.value));
+    // La píldora de la barra de modo: `▾` abre el editor y cada `10X` lo abre además eligiendo
+    // el lado al que escribe el deslizador. Se reutiliza el botón de `#segLevLado` en vez de
+    // duplicar la lógica: es el que sabe unificar con «⤺ Ambos» y el que avisa por toast.
+    {
+      const ed = document.getElementById('bfLevEditor');
+      const caret = document.getElementById('btnLevEdit');
+      if (ed && caret) {
+        try { ed.hidden = !(window.ST && ST.get && ST.get('levEditor', false) === true); } catch (e) {}
+        caret.addEventListener('click', () => UI.muestraLevEditor(ed.hidden));
+        [['btnLevLong', 'long'], ['btnLevShort', 'short']].forEach(([id, lado]) => {
+          const ch = document.getElementById(id);
+          if (!ch) return;
+          ch.addEventListener('click', () => {
+            if (TE.state.modoPosicion === 'HEDGE') {
+              const b = document.querySelector('#segLevLado [data-levlado="' + lado + '"]');
+              if (b) b.click();
+            }
+            UI.muestraLevEditor(true);
+          });
+        });
+      }
+      UI.syncLevChips();
+    }
     /* Qué lado edita el deslizador. «⤺ Ambos» no es un lado: deshace la separación (un control que
        quitara el override desapareciendo sería invisible, y aquí lo que hace falta es poder VOLVER). */
     const segLado = document.getElementById('segLevLado');
@@ -13271,7 +13406,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // es el apalancamiento del lado que manda el deslizador, no el de la cuenta.
     const lev = Math.max(1, TE.state.modoPosicion === 'HEDGE' ? TE.leverageDe(App.levLado || 'long') : TE.state.leverage);
     setText('bfCostVal', notional > 0 ? U.fmtMoney(notional) : '—');
-    setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}x)` : '—');
+    setText('bfMarginVal', notional > 0 ? U.fmtMoney(notional / lev) + ` (${lev}X)` : '—');
     const cero = notional <= 0;
     ['btnLong', 'btnShort'].forEach((id) => {
       const b = document.getElementById(id);

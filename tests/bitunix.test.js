@@ -536,6 +536,115 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       `«Historial de financiación» existe con su registro en el motor y sus cabeceras (${abajo.fundCab.replace(/^Historial de financiación \(\d+\)\s*/, '') || '—'})`);
   }
 
+  /* ─── LA BARRA DE MODO COMO LA SUYA (ítem §5.5a del registro, 11-oct) ───
+     Medido en su página a 1600×900 (es-ES, sin sesión): PÍLDORA de 272×28, radio 9999, fondo
+     #222324, partida por una raya de 1 px; izquierda `Cruzada ▾` a 12 px/500 en blanco; derecha
+     los DOS `10X` (23×16, 12 px/500) en #24c18d y #f14b3f + un `▾` gris que abre el editor.
+     Se comprueba además que los chips LEEN de verdad (mueven el motor y se mueven con él), que el
+     editor está cerrado en reposo y que en HEDGE cada chip pinta el suyo. Al terminar se deja la
+     cuenta como estaba (ONE-WAY, 1X): la sección E lee ese valor de arranque. */
+  {
+    const modo = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const cs = (e, p) => getComputedStyle(e, p || null);
+      const caja = (e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+      const barra = g('bfModeBar'), div = document.querySelector('#bfModeBar .bf-mode-div');
+      const btns = [...g('segMarginMode').querySelectorAll('.seg-btn')].map((b) => ({
+        t: b.textContent.trim(), px: Math.round(parseFloat(cs(b).fontSize)), fw: cs(b).fontWeight,
+        color: cs(b).color, radio: cs(b).borderTopLeftRadius, fondo: cs(b).backgroundColor }));
+      const chip = (id) => { const e = g(id); return { t: e.textContent.trim(), px: Math.round(parseFloat(cs(e).fontSize)),
+        fw: cs(e).fontWeight, color: cs(e).color, ...caja(e), sel: e.classList.contains('sel') }; };
+      // Ninguna palabra de la píldora puede salir con puntos suspensivos: es el defecto que
+      // el registro de esta piel persigue desde el principio (el ellipsis disfrazando el recorte).
+      const recorte = [...g('segMarginMode').querySelectorAll('.seg-btn'), g('btnLevEdit')]
+        .map((e) => ({ t: e.textContent.trim(), sw: e.scrollWidth, cw: e.clientWidth }))
+        .filter((x) => x.sw > x.cw + 1).map((x) => '«' + x.t + '» ' + x.sw + '>' + x.cw);
+      const cajaTarjeta = g('orderCard').getBoundingClientRect();
+      const rBarra = barra.getBoundingClientRect();
+      const antes = { recorte, tarjeta: Math.round(cajaTarjeta.width),
+        dentro: rBarra.right <= cajaTarjeta.right + 1 && rBarra.left >= cajaTarjeta.left - 1,
+        barra: { ...caja(barra), radio: cs(barra).borderTopLeftRadius, fondo: cs(barra).backgroundColor },
+        div: div ? { ...caja(div), fondo: cs(div).backgroundColor } : null,
+        btns, largo: chip('btnLevLong'), corto: chip('btnLevShort'),
+        lev: TE.state.leverage, modoPos: TE.state.modoPosicion, editorOculto: g('bfLevEditor').hidden };
+      // 1 · mover el deslizador con el editor cerrado tiene que reflejarse en los dos chips
+      const r = g('levRange');
+      r.value = 20; r.dispatchEvent(new Event('input', { bubbles: true }));
+      const tras20 = { largo: g('btnLevLong').textContent.trim(), corto: g('btnLevShort').textContent.trim(),
+        val: g('bfLevVal').textContent.trim(), lev: TE.state.leverage };
+      // 2 · el `▾` abre el editor y el deslizador queda alcanzable
+      g('btnLevEdit').click();
+      await new Promise((x) => setTimeout(x, 120));
+      const abierto = { oculto: g('bfLevEditor').hidden, aria: g('btnLevEdit').getAttribute('aria-expanded'),
+        slider: caja(g('levRange')), valVisible: !!(g('bfLevVal').offsetParent) };
+      // 3 · HEDGE: cada chip lee el suyo, y pinchar el rojo escribe en el corto
+      document.querySelector('#segPosMode [data-pmode="HEDGE"]').click();
+      await new Promise((x) => setTimeout(x, 150));
+      g('btnLevShort').click();
+      await new Promise((x) => setTimeout(x, 150));
+      const ladoAntes = App.levLado;
+      r.value = 25; r.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 150));
+      const hedge = { ladoElegido: ladoAntes, lado: App.levLado, corto: g('btnLevShort').textContent.trim(),
+        largo: g('btnLevLong').textContent.trim(), lecCorto: TE.leverageDe('short'), lecLargo: TE.leverageDe('long'),
+        selCorto: g('btnLevShort').classList.contains('sel'), selLargo: g('btnLevLong').classList.contains('sel'),
+        lados: g('levLados').textContent.trim() };
+      // y se deshace todo, EN ESTE ORDEN: primero volver a ONE-WAY (si no, el deslizador sigue
+      // escribiendo en UN lado y la cuenta se queda en 20×), luego unificar, luego bajar a 1X, y
+      // por último CERRAR el editor -si se queda abierto añade 22 px a la tarjeta y el plegado
+      // automático por espacio de «Avanzado» se dispara, que es precisamente lo que mide otra
+      // ancla de más abajo—.
+      document.querySelector('#segPosMode [data-pmode="ONE_WAY"]').click();
+      await new Promise((x) => setTimeout(x, 150));
+      document.querySelector('#segLevLado [data-levlado="reset"]').click();
+      r.value = 1; r.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((x) => setTimeout(x, 150));
+      g('btnLevEdit').click();
+      // y el formulario, a su estado de REPOSO: los dos bloques de §5 han dejado el tamaño al 25 %,
+      // que llena la línea de «Coste» y la del aviso (dos filas cada una, ~35 px) y con eso el
+      // plegado automático de «Avanzado» se dispara CON RAZÓN -la ancla de más abajo mide el
+      // reposo, así que hay que devolvérselo (0 % de tamaño y un resize para que el observer
+      // reevalúe con la tarjeta ya corta)—.
+      document.querySelector('#quickSize [data-pct=\"0\"]').click();
+      await new Promise((x) => setTimeout(x, 250));
+      window.dispatchEvent(new Event('resize'));
+      await new Promise((x) => setTimeout(x, 350));
+      const vuelta = { lev: TE.state.leverage, modoPos: TE.state.modoPosicion, editor: g('bfLevEditor').hidden,
+        largo: g('btnLevLong').textContent.trim(), corto: g('btnLevShort').textContent.trim(),
+        chipSel: g('btnLevLong').classList.contains('sel') || g('btnLevShort').classList.contains('sel') };
+      return { antes, tras20, abierto, hedge, vuelta };
+    });
+    ok(modo.antes.barra.h >= 27 && modo.antes.barra.h <= 29 && modo.antes.barra.radio === '9999px'
+       && modo.antes.barra.fondo === 'rgb(34, 35, 36)',
+      `la barra de modo es su píldora (${modo.antes.barra.w}×${modo.antes.barra.h} px, radio ${modo.antes.barra.radio}, fondo ${modo.antes.barra.fondo}) - la suya 272×28, radio 9999, #222324`);
+    ok(modo.antes.div && modo.antes.div.w === 1,
+      `y está partida por su raya de ${modo.antes.div ? modo.antes.div.w : 0} px (${modo.antes.div ? modo.antes.div.fondo : '—'}), no por dos cajas`);
+    ok(modo.antes.btns.every((b) => b.px === 12 && b.fw === '500' && b.radio === '0px' && b.fondo === 'rgba(0, 0, 0, 0)')
+       && modo.antes.btns[0].color === 'rgb(255, 255, 255)' && modo.antes.btns[1].color === 'rgb(145, 148, 153)',
+      `el modo a 12 px / peso 500 dentro de la píldora, ${modo.antes.btns[0].t} en ${modo.antes.btns[0].color} y ${modo.antes.btns[1].t} en ${modo.antes.btns[1].color}, sin caja propia (la suya: «Cruzada ▾» 12/500 en blanco)`);
+    ok(modo.antes.largo.px === 12 && modo.antes.largo.fw === '500'
+       && modo.antes.largo.color === 'rgb(36, 193, 141)' && modo.antes.corto.color === 'rgb(241, 75, 63)'
+       && modo.antes.largo.w >= 18 && modo.antes.largo.h >= 20 && modo.antes.corto.h >= 20,
+      `los dos apalancamientos, no uno: ${modo.antes.largo.t} en ${modo.antes.largo.color} y ${modo.antes.corto.t} en ${modo.antes.corto.color} a ${modo.antes.largo.px} px/peso ${modo.antes.largo.fw}, caja ${modo.antes.largo.w}×${modo.antes.largo.h} (su texto medido: 23×16 a 12 px/500 en #24c18d y #f14b3f; la caja nuestra estira a la píldora para ser pulsable con el dedo)`);
+    ok(modo.antes.recorte.length === 0 && modo.antes.dentro,
+      'ningún rótulo de la píldora sale cortado'
+      + (modo.antes.recorte.length ? ' → ' + modo.antes.recorte.join(', ') : ' (palabra completa en las dos mitades y en la flecha)')
+      + ` y la píldora cabe en su tarjeta (${modo.antes.barra.w} px de barra dentro de ${modo.antes.tarjeta} de carta)`);
+    ok(modo.antes.lev === 1 && modo.antes.largo.t === '1X' && modo.antes.corto.t === '1X' && !modo.antes.largo.sel,
+      `en ONE-WAY los dos chips dicen el de la cuenta y salen iguales (${modo.antes.largo.t} / ${modo.antes.corto.t}), sin marcar ninguno: no hay lado que preferir`);
+    ok(modo.tras20.largo === '20X' && modo.tras20.corto === '20X' && modo.tras20.val === '20X' && modo.tras20.lev === 20,
+      `mover el deslizador escribe de verdad en los dos lados: chips ${modo.tras20.largo}/${modo.tras20.corto}, valor ${modo.tras20.val} y motor a ${modo.tras20.lev}× -con el editor cerrado, además—`);
+    ok(modo.antes.editorOculto === true && modo.abierto.oculto === false && modo.abierto.aria === 'true'
+       && modo.abierto.slider.w >= 40 && modo.abierto.valVisible,
+      `el ▾ suyo abre un popover; el nuestro abre la fila del deslizador (${modo.abierto.slider.w}×${modo.abierto.slider.h} px alcanzables, aria-expanded ${modo.abierto.aria}) en vez de inventarse un popover`);
+    ok(modo.hedge.ladoElegido === 'short' && modo.hedge.lecCorto === 25 && modo.hedge.lecLargo !== 25
+       && modo.hedge.corto === '25X' && modo.hedge.selCorto && !modo.hedge.selLargo,
+      `en HEDGE el chip rojo ESCRIBE y LEE: ${modo.hedge.largo}▲ / ${modo.hedge.corto}▼ (corto ${modo.hedge.lecCorto}×, largo ${modo.hedge.lecLargo}×) y solo el rojo va marcado - lectura: «${modo.hedge.lados}»`);
+    ok(modo.vuelta.lev === 1 && modo.vuelta.modoPos === 'ONE_WAY' && modo.vuelta.largo === '1X'
+       && modo.vuelta.corto === '1X' && !modo.vuelta.chipSel && modo.vuelta.editor === true,
+      `y se puede deshacer: ONE-WAY + ⤺ Ambos dejan la cuenta en ${modo.vuelta.lev}× con los dos chips otra vez en ${modo.vuelta.largo} y el editor cerrado (${modo.vuelta.editor ? 'oculto' : 'abierto'}) -así la sección E arranca como esperaba-`);
+  }
+
   /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
      Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
      695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna
@@ -565,6 +674,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       };
     });
     const holgado = await cabida();                                     // 1440x900, viewport base
+
     ok(!holgado.plegado && !holgado.auto,
        `con hueco de sobra el bloque «Avanzado» NO se pliega solo (plegado ${holgado.plegado}, por espacio ${holgado.auto}): SL/TP y la comisión se ven sin tocar nada`);
     ok(holgado.clip === 0 && holgado.larga && holgado.corta,
@@ -601,7 +711,10 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     const cs = (id) => (g(id) ? getComputedStyle(g(id)) : null);
     const r = getComputedStyle(document.documentElement);
     const hoja = [...document.styleSheets].map((s) => s.href || '').find((h) => /bitunix/.test(h)) || '';
-    const activa = document.querySelector('#segMarginMode .seg-btn.active');
+    // `#segMarginMode` QUEDÓ FUERA a propósito (ítem §5.5a): su fila es la PÍLDORA medida, donde
+    // el activo es la palabra en blanco sin caja -anclado arriba—. El verde del segmentado se sigue
+    // comprobando en uno genérico, `#segSize`, que es el que copia su «Abierto | Cerrado».
+    const activa = document.querySelector('#segSize .seg-btn.active');
     const tab = document.querySelector('.tab.active');
     return {
       up: r.getPropertyValue('--up').trim(), down: r.getPropertyValue('--down').trim(),
@@ -649,7 +762,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(piel.pilla === '9999px', `los dos botones son PÍLDORA (${piel.pilla}), como los suyos (radio 9999px medido)`);
   ok(piel.altoLong >= 34 && piel.altoLong <= 44, `altura del botón de entrada: ${piel.altoLong} px`);
   ok(piel.subrayado.h === '2px' && /36, 193, 141/.test(piel.subrayado.bg), `subrayado de la pestaña activa: ${piel.subrayado.h} en ${piel.subrayado.bg} (verde, no lima)`);
-  ok(/36, 193, 141/.test(piel.seg.bg) && piel.seg.h <= 30, `segmentado activo en verde rgb(36,193,141) (el suyo «Abierto» mide 26 px), ${piel.seg.h} px el nuestro`);
+  ok(/36, 193, 141/.test(piel.seg.bg) && piel.seg.h <= 30, `segmentado genérico activo en verde rgb(36,193,141) (el suyo «Abierto» mide 26 px), ${piel.seg.h} px el nuestro - la fila de modo va plana, que es como la medimos-`);
   ok(/tabular-nums/.test(piel.tabulares), `cifras tabulares en la fila de estadísticas (${piel.tabulares})`);
   // El sitio declara su propio :root con --bu-fsz:14px y --bu-h5-fsz:12px. Nuestro cuerpo
   // estaba en 12 px: de ahí la sensación de «otra aplicación» aunque los colores fueran bien.
@@ -875,12 +988,16 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       modo: TE.state.marginMode,
     };
   });
-  ok(orden.antes === '1x', `el chip de apalancamiento arranca en ${orden.antes}`);
-  ok(orden.chip20 === '20x', 'mover el deslizador pone el chip en 20x');
-  ok(orden.chip10 === '10x' && orden.tag === '10x', 'cambiar el <select> (lo que hacen otras suites) sincroniza chip y etiqueta');
+  ok(orden.antes === '1X', `el chip de apalancamiento arranca en ${orden.antes} (la X mayúscula es la de su barra, medida «10X»)`);
+  ok(orden.chip20 === '20X', 'mover el deslizador pone el chip en 20X');
+  ok(orden.chip10 === '10X' && orden.tag === '10X', 'cambiar el <select> (lo que hacen otras suites) sincroniza chip y etiqueta');
   ok(orden.modo50 === 'pct' && String(orden.size50) === '50', `pulsar 50 en modo % deja el tamaño en ${orden.size50} (modo ${orden.modo50})`);
   ok(orden.coste === orden.esperadoCoste, `el «Coste» de la fila inferior es el notional real: ${orden.coste}`);
-  ok(orden.margen.indexOf(orden.margenEsperado) === 0 && /\(10x\)/.test(orden.margen), `margen = notional/apalancamiento: ${orden.margen}`);
+  /* La caja del margen cierra la cifra con la MISMA X mayúscula que su barra de apalancamiento
+     (medido en el flotante y en la píldora: `10X`); antes el producto escribía `(10x)` y dos
+     glifos distintos decían lo mismo a tres píxeles de distancia. El ancla comprueba el número y
+     el paréntesis, y la caja por coherencia tipográfica, no por capricho. */
+  ok(orden.margen.indexOf(orden.margenEsperado) === 0 && /\(10X\)/.test(orden.margen), `margen = notional/apalancamiento: ${orden.margen}`);
   ok(orden.usd > 0 && cerca(orden.usd, orden.equity * 0.25, 1), `en modo USD, 25 % ≈ ${orden.usd} (equity ${orden.equity}×0,25)`);
   ok(orden.cero.long && orden.cero.short && orden.cero.coste === '—', 'tamaño 0 → ambos botones deshabilitados y coste «—»');
   ok(orden.activos.join() === '100', 'el deslizador marca la fracción activa (100)');

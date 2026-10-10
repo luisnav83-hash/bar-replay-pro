@@ -503,13 +503,38 @@
         <!-- Fila superior del panel de órdenes, como Bitunix: modo de margen,
              apalancamiento y unidad. El modo cambia el cálculo de liquidación
              (js/tradingEngine.js: `marginMode`). -->
-        <div class="bf-margin-row">
+        <!-- BARRA DE MODO, MEDIDA EN SU PÁGINA (11-oct, 1600×900, es-ES, sin sesión): una PÍLDORA
+             de 272×28, radio 9999 y fondo #222324, partida por una raya de 1 px en dos mitades de
+             135/136 px. La izquierda es el modo de margen (`Cruzada ▾`, 12 px / peso 500, la palabra
+             en blanco). La derecha NO es un número de cuenta suelto: son los DOS apalancamientos,
+             `10X` en #24c18d (largo) y `10X` en #f14b3f (corto), cada uno de 23×16 a 12 px/500, y
+             detrás un `▾` gris que abre el editor. Dos decisiones escritas, no coladas:
+              · el `▾` suyo abre un popover con la escala; el nuestro abre la fila del deslizador,
+                que ya existe y es la fuente de verdad que mueve el motor y las pruebas. No hay
+                popover que copiar sin inventárselo.
+              · el margen se queda `Cruzada | Aislada` en segmentado: el suyo es un menú que sin
+                sesión no se puede abrir, y adivinar sus opciones sería inventar datos.
+             Efecto secundario buscado: el deslizador deja de ocupar 30 px de la tarjeta (en el
+             teléfono, donde cada línea cuenta, ver el contrato de tests/responsive). -->
+        <div class="bf-margin-row" id="bfModeBar">
           <div class="seg seg-sm" id="segMarginMode" role="group" aria-label="Modo de margen">
             <button class="seg-btn active" data-mm="cross" title="Margen cruzado: respalda la posición toda la cuenta (el margen libre reduce el riesgo de liquidación)">Cruzada</button>
             <button class="seg-btn" data-mm="isolated" title="Margen aislado: solo arriesga el margen asignado a la posición">Aislada</button>
           </div>
+          <span class="bf-mode-div" aria-hidden="true"></span>
+          <div class="bf-lev-chips" role="group" aria-label="Apalancamiento de cada lado">
+            <!-- Los dos chips LEEN de verdad (js/uiController.js: UI.syncLevChips): en ONE-WAY los dos
+                 dicen el apalancamiento de la cuenta -por eso salen iguales, como en su página- y en
+                 HEDGE cada uno dice el suyo. Pincharlos abre el editor y, en HEDGE, elige a qué lado
+                 escribe el deslizador. -->
+            <button type="button" class="bf-lev-chip up" id="btnLevLong">1X</button>
+            <button type="button" class="bf-lev-chip down" id="btnLevShort">1X</button>
+            <button type="button" class="bf-lev-caret" id="btnLevEdit" aria-expanded="false" aria-controls="bfLevEditor" title="Editar el apalancamiento">▾</button>
+          </div>
+        </div>
+        <div class="bf-lev-editor" id="bfLevEditor" hidden>
           <div class="bf-lev" title="Apalancamiento actual">
-            <b id="bfLevVal">1x</b>
+            <b id="bfLevVal">1X</b>
             <input type="range" id="levRange" min="1" max="100" step="1" value="1" aria-label="Apalancamiento">
             <!-- En HEDGE el deslizador escribe en UN lado, así que hay que decir cuáles son los dos
                  (en ONE-WAY esta línea no aparece: solo hay un apalancamiento, el de la cuenta). -->
@@ -1001,7 +1026,7 @@
   <div class="tab-body" id="tab-account"><div class="bf-tabrow">
     <div class="card">
           <div class="card-head"><span class="card-title">Cuenta</span>
-            <span class="tag" id="tagLeverage">1x</span>
+            <span class="tag" id="tagLeverage">1X</span>
           </div>
           <div class="card-body">
             <div class="kv big"><span>Balance</span><b id="acBalance">$10,000.00</b></div>

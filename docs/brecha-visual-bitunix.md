@@ -216,6 +216,86 @@ financiación · Activos · Bots(0)`; a la derecha `☐ Sólo actual · Cerrar t
    fijo (artículos 223/225), `TP/SL` como casilla que despliega el bloque, y apalancamiento
    con los dos `10X` (largo/corto) en la barra de modo — todo esto ya está en el motor
    (capas 3b/3c/3d), falta vestirlo igual.
+   · 5a — **LA BARRA DE MODO: HECHA el 11-oct** (el `Activador ▾` ya estaba, ítem 6.2). Medida
+     en su página recortando la cabecera de su widget (1600×900, es-ES, sin sesión): es UNA
+     PÍLDORA de **272×28, radio 9999 y fondo `#222324`**, partida por una **raya de 1 px** en dos
+     mitades de 135/136 px. Izquierda: `Cruzada ▾` a **12 px / peso 500** en `#ffffff`, con el
+     caret en gris. Derecha: NO un número suelto, sino **los DOS apalancamientos** —`10X` en
+     `#24c18d` (largo) y `10X` en `#f14b3f` (corto), cada uno de **23×16 a 12 px/500**— y detrás
+     un `▾` gris que abre el editor. Sin `uppercase` ni `letter-spacing`, y con la **X
+     MAYÚSCULA** (así en la barra y así en su tabla de tramos, `200X`): por eso `#bfLevVal` y
+     `#tagLeverage` pasan también a `10X` -dos cajas del mismo número con dos cajas de letra
+     distintas era peor el remedio—.
+   · 5a · Lo que NO se copia, dicho: (1) el `▾` suyo abre un popover con la escala; el nuestro
+     abre la fila del deslizador, que ya existía, es la fuente de verdad del motor y la que
+     mueven las pruebas (montar un popover habría cambiado el contrato por una apariencia);
+     (2) el modo de margen se queda `Cruzada | Aislada` en segmentado porque el suyo es un MENÚ
+     que sin sesión no se pudo abrir -medido: solo la palabra y el caret— y copiar sus opciones
+     sería inventárselas; (3) la caja de cada chip estira a lo alto de la píldora (28 px, y 24 en
+     el teléfono) en vez de los 16 px suyos: el contrato táctil de esta app exige ≥20 px a todo
+     control visible y ≥24 px a cada fila del formulario (`test:bitunix` lo mide), así que se
+     copia la TIPOGRAFÍA y el color medidos y se respeta la diana propia.
+   · 5a · Los chips no son decoración: leen `TE.leverageLadoInfo()`, en ONE-WAY los dos dicen el
+     de la cuenta (por eso salen iguales, como en la suya) y en HEDGE cada uno el suyo; pinchar
+     el rojo ESCRIBE en el corto reutilizando `#segLevLado`, que es el control que sabe unificar
+     con «⤺ Ambos» y avisar por toast. Efecto medido en el alto: al ir el deslizador escondido
+     hasta que se le llama, la tarjeta respira (~8 px más de aire a 1440×900) y la fila pasa de
+     30 a 24 px en el teléfono.
+   · 5a · Arreglo que salió al anclar: el alto de «Avanzado» se cachea (`btn.dataset.altoAdv`)
+     porque plegado no se puede medir, y esa cifra seguía valiendo la del modo HEDGE (+54 px de
+     `#segLevLado`) después de volver a ONE-WAY -nadie reevalúa el umbral para deshacer el
+     pliegue—, con lo que el bloque se quedaba plegado «por espacio» con hueco de sobra. Ahora la
+     caché se invalida justo cuando cambia el contenido del bloque (`UI.syncLevLados`).
+     Diez comprobaciones anclan lo de arriba: caja/radio/fondo de la píldora, la raya de 1 px,
+     los dos rótulos a 12/500 en blanco y gris sin caja propia, los dos `10X` con su color y su
+     tipografía, la igualdad en ONE-WAY, que el deslizador escribe en los dos chips y en el
+     motor, que el `▾` abre una fila con el deslizador alcanzable, que en HEDGE el rojo lee y
+     escribe (corto 25×, largo 20×), que todo se puede deshacer y que NINGÚN rótulo de la píldora
+     sale cortado (251 px de barra dentro de 271 de carta).
+   · 5a · REMATES que salieron al verificar contra TODAS las suites, no solo la nuestra. Cada uno
+     vale lo que mide, no lo que parecía:
+     (1) `Cruzada` salía `Cruz…`. Los dos botones heredaban el `flex: 1 1 0` del segmentado a
+     medias: cada mitad se quedaba en 55 px y la palabra pedía 58 (medido con `scrollWidth`), y el
+     `text-overflow: ellipsis` heredado lo disfrazaba. Con `flex: 0 1 auto` cada botón vale lo que
+     vale su texto y solo se aprieta si de verdad no cabe -así es como la píldora suya mete
+     `Cruzada` + los dos `10X` + el caret dentro de 272 px—. Queda anclado que ninguna palabra
+     salga con puntos, que es el defecto que este registro persigue desde la primera pasada.
+     (2) En el teléfono la píldora pedía 24 px y la escalera lo cobraba caro: `test:layout` medía
+     que abrir «Avanzado» LE COMÍA 4 px AL GRÁFICO (la franja pasaba de 246 a su tope de 250); con
+     28 px, en cambio, `test:hedge` y `test:plantillas` veían 1 px fuera del reposo. El número
+     honesto es 26 + 9 de margen = el PRESUPUESTO EXACTO de la fila vieja (su `.bf-lev` medía 26 px
+     con `box-sizing: border-box`); con eso los tres contratos cuadran a 0 y la ancla dice
+     «249 px abierto vs 249 cerrado». Lo que sí se aprieta aquí es la tipografía (10,5 px), como en
+     el resto de segmentados del teléfono.
+     (3) La `X` mayúscula se llevó a los otros dos sitios donde ese número se ve:
+     `Margen (USDT) $10,000.00 (1X)` y la carta de posición `73.333,17 · 10X`. El `<select>`
+     heredado (`#leverageSelect`) sigue en minúscula a propósito: no se pinta y varias suites lo usan
+     como fuente de verdad del apalancamiento -tocar su texto habría cambiado un contrato por algo
+     invisible—. Y `test:apalancamiento-lado` pasa a aceptar las dos cajas (`/\d[xX]/`), que es lo
+     que ese ancla quería decir desde el principio.
+   · Verificado con §5.5a en disco: `test:bitunix` **206 ✓ / 0 ✗** (antes 196; +10 anclas),
+     `test:responsive`/`test:layout` **200 ✓**, `test:hedge` 74 ✓, `test:plantillas` 33 ✓,
+     `run-all` **31 suites · 1784 ✓ · 0 ✗** (antes 1774), `tools/barrido-graficos.js`
+     **70 · 0 NO CUADRA · 1 A DECIDIR** (sin cambios: la ventana 320×240 sigue sin tocarse) y
+     `tools/build-single.js` **1138 KB**.
+   · Nota de método, que es lo que costó el día: el ancla del plegado automático mide el REPOSO,
+     y los bloques de prueba del §5 dejan el tamaño al 25 % (Coste y aviso a dos filas = +35 px,
+     margen −27), así que plegarse era LO CORRECTO y no un defecto; cada bloque del §5 devuelve
+     ahora el formulario a su estado de reposo (0 %, ONE-WAY, 1X, editor cerrado) con un `resize`
+     por delante. Y aviso para quien toque la escalera: `autoAprieta` cachea el alto del bloque
+     abierto (`btn.dataset.altoAdv`) porque plegado no se puede medir; lo que NO hay que hacer es
+     adelantar ese cacheo (probado: con HEDGE fijaba 366 px y luego el bloque se plegaba con hueco
+     de sobra), lo que hay que hacer es INVALIDAR la caché cuando cambia el contenido del bloque,
+     que es lo que hace ahora `UI.syncLevLados`.
+
+   · 5b — **PENDIENTE: `TP/SL` como casilla que despliega el bloque.** Ya está medido (misma
+     sonda): la fila mide **272×18** a 14 px/400 con una **casilla de ~16 px** y el rótulo
+     `TP/SL` a 12 px en `#ffffff`, y en el MISMO extremo derecho lleva un `Avanzado ▸` (55×14 a
+     12 px). Al marcarla aparecen **dos cajas de 272×40** (fondo `#222324`, radio 4 px, paso de
+     48 px) con la etiqueta `TP` / `SL` DENTRO a la izquierda y `Precio (USDT) ▾` a la derecha;
+     los botones `Abrir Largo/Corto` bajan 100 px. Nota para cuando se vista: el `Avanzado ▸` suyo
+     de ESA fila no es el nuestro del encabezado -el nuestro pliega el bloque entero (comisión,
+     plantillas, modo de posición), no las opciones de TP/SL—, así que no se fusionan.
 6. Seguir con `tools/barrido-graficos.js` como verificador: los contrastes `.hint` a 3,01:1
    y el `#overlayCanvas` a 1× en pantallas 2× siguen abiertos.
 
