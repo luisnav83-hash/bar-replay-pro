@@ -10,6 +10,7 @@
     "test:net": "node tests/network.test.js",
     "test:browser": "node tests/browser.capture.js",
     "build:single": "node tools/build-single.js",
+    "barrido:graficos": "node tools/build-single.js && node tools/barrido-graficos.js",
     "test:single": "node tools/build-single.js && node tests/single.test.js",
     "test:logic": "node tests/logic.test.js",
     "test:futuros": "node tests/futuros.test.js",

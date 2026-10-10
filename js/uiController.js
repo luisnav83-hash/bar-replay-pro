@@ -1172,7 +1172,7 @@
         case 'B': App.placeLimitOrder('long'); break;
         case 'S': App.placeLimitOrder('short'); break;
         case 't': case 'T': {
-          // Los tres tipos del selector, en el mismo orden que en el panel del exchange.
+          // Los cuatro tipos del selector (F1), en el mismo orden que en el panel del exchange.
           const orden = ['market', 'limite', 'trigger', 'trailing'];
           UI.setOrderType(orden[(orden.indexOf(App.orderType) + 1) % orden.length]);
           break;
