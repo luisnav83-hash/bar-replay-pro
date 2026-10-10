@@ -167,8 +167,51 @@ financiación · Activos · Bots(0)`; a la derecha `☐ Sólo actual · Cerrar t
      real del cajón (`max(17px, (--cuerpo − --marco) / 2)` por lado); con el envoltorio dejaban de
      casar y el gráfico caía a 111 px. Las dos vistas se conmutan con una clase (`.modo-tape`) y
      `display:none` en lo que toca esconder.
-4. **Pestañas del panel inferior** con su vocabulario y sus contadores, y `Sólo actual` +
-   `Cerrar todo` a la derecha.
+4. ~~**Pestañas del panel inferior** con su vocabulario y sus contadores, y `Sólo actual` +
+   `Cerrar todo` a la derecha~~ — **HECHO el 11-oct**, medido en su DOM a 1600×900 (es-ES, sin
+   sesión) y no de memoria; la sonda se borró al cerrar el ítem así que las cifras quedan aquí.
+   · SUS OCHO ETIQUETAS: `Posiciones (0) · Órdenes abiertas (0) · Historial de órdenes ·
+     Historial de posiciones · Historial de operación · Historial de financiación · Activos ·
+     Bots(0)`. El contador va DENTRO del texto (y en `Bots(0)` sin espacio delante del paréntesis).
+     Cada etiqueta a **14 px / peso 500 igual en la activa que en la inactiva**, la activa `#fff`
+     y la inactiva `#919499`, fondo transparente, radio 0, sin `uppercase` ni `letter-spacing` y
+     -a diferencia del libro- **SIN subrayado**: su `::after` lleva `content: none`. Nuestras nueve
+     pestañas están ancladas a eso (contadores con paréntesis incluidos).
+   · SU FILA DE LA DERECHA mide 194×22 y son dos cosas: `Sólo actual` a 14 px / peso 400 con su
+     casilla de ~15 px delante, y `Cerrar todo` en **píldora** (radio 9999, 12 px, `#919499`,
+     64×22). No hay ningún botón `⋮` en lo medido, así que no se añade.
+   · **Lo que entra y lo que no, con el porqué.** Entran las tres pestañas de historial con datos
+     del motor: `Historial de posiciones` (que es lo que ya pintábamos bajo el nombre
+     «Historial de trades»: una fila por posición cerrada, rebautizada), `Historial de operación`
+     (una fila por EJECUCIÓN) y `Historial de financiación` (desde `TE.state.fundingLog`, que el
+     motor rellena en cada liquidación real; con tasa 0 la tabla se queda vacía -no se inventan
+     liquidaciones-). NO entran `Historial de órdenes` (el motor solo guarda las vivas en
+     `pending`, no las ejecutadas o canceladas), `Activos` (no hay cartera) ni `Bots(0)` (no hay
+     motor de bots): poner la pestaña vacía sería un adorno, y quitar adornos es de lo que va esto.
+   · `Sólo actual` tiene qué filtrar de verdad: cambiar de par NO reinicia la cuenta, así que el
+     historial mezcla símbolos. Para eso el motor anota el par en cada fila (`TE.state.pair` +
+     `TE.setPair`, y `pair` en la posición) y la casilla filtra las tres tablas; su estado se
+     guarda como `soloActual`. `Cerrar todo` es OTRA ENTRADA a `App.flatten()`, no otro camino.
+   · Las CABECERAS de las dos tablas nuevas no se pueden copiar del sitio: con las tres tablas
+     vacías (sin sesión) no hay ni una cabecera que medir (`filas 0`, `cabeceras []`). Las nuestras
+     salen de lo que guarda el motor -`# · Dir · Hora · Precio · Cantidad · Notional · Concepto` y
+     `# · Liquidación (UTC) · Dir · Tasa · Notional · Importe`- y eso queda dicho aquí, que es lo
+     que este registro pide en vez de inventar un parecido.
+   · DOS DEFECTOS REALES que salió encontrar al anclar esto. (1) El refresco del panel comparaba
+     SOLO el número de posiciones cerradas, así que **promediar una entrada no repintaba el
+     historial** (añade una ejecución sin cerrar nada): el memo pasa a comparar la forma completa
+     (cerrados + filas + entradas de la abierta + liquidaciones). (2) Una ejecución se pinta una
+     sola vez: las ENTRADAS viven en la posición (`parts`, la misma lista de la que cuelgan las
+     marcas del gráfico) y la fila del cierre parcial aporta solo SU cierre; copiar ahí las
+     entradas duplicaba cada tramo. Anclado contando filas paso a paso: 4→5→6→7→8.
+   · Y una lección de cómo se mide: el ancla del subrayado usaba `getComputedStyle(e)` sin pasarle
+     el pseudo, así que leía el `content` del BOTÓN (siempre `normal`) y daba por subrayadas las
+     nueve pestañas. Cuadraba el número, no el hecho. Con el segundo argumento bien pasado, la
+     ancla dice lo que dice la hoja de estilo.
+   · Verificado con §5.4 en disco: `test:bitunix` **196 ✓ / 0 ✗** (antes 186), `run-all`
+     **31 suites · 1774 ✓ · 0 ✗** (antes 1764), `test:responsive` 200 ✓,
+     `tools/barrido-graficos.js` **70 · 0 NO CUADRA · 1 A DECIDIR** (la ventana 320×240, sin
+     tocar por decisión del día) y `tools/build-single.js` 1129 KB.
 5. **Cómo se tradea**: `Activador ▾` como desplegable que contiene Trigger/Trailing/Riesgo
    fijo (artículos 223/225), `TP/SL` como casilla que despliega el bloque, y apalancamiento
    con los dos `10X` (largo/corto) en la barra de modo — todo esto ya está en el motor

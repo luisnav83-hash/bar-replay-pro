@@ -65,6 +65,7 @@
     UI.syncIndicatorModalFromConfig(App.indicators);
     UI.setPlaying(false);
     UI._closedCount = 0;
+    UI._histSig = null;   // forma del historial: cerrados + filas + entradas de la abierta + liquidaciones
     UI.refreshAll();
     UI.refreshStats(true);
     UI.renderSessions();
@@ -551,6 +552,18 @@
       else if (_t === 'account') UI.refreshAccount();
       if (t.dataset.tab === 'drawings') DT.renderList(document.getElementById('drawList'));
     }));
+
+    const solo = document.getElementById('chkSoloActual');
+    if (solo) {
+      try { solo.checked = !!(window.ST && ST.get && ST.get('soloActual', false) === true); } catch (e) {}
+      solo.addEventListener('change', () => {
+        if (window.ST && ST.set) ST.set('soloActual', !!solo.checked);
+        UI.renderTrades();
+        U.log(solo.checked ? '🔎 Panel inferior: solo el par cargado' : '🔎 Panel inferior: todos los pares de la sesión', 'sys');
+      });
+    }
+    const pill = document.getElementById('btnFlattenTab');
+    if (pill) pill.addEventListener('click', () => App.flatten());
 
     document.getElementById('btnClearLog').addEventListener('click', () => {
       document.getElementById('logList').innerHTML = '';
@@ -1786,11 +1799,19 @@
     const metrics = TE.getMetrics();
     const trades = TE.state.trades;
     const closedCount = trades.filter((t) => t.status === 'closed').length;
+    // LA FORMA DEL HISTORIAL, no solo cuántos están cerrados. Costó de encontrar (11-oct,
+    // al montar «Historial de operación» y «de financiación»): comparando solo `closedCount`,
+    // promediar una entrada no repintaba nada (añade una EJECUCIÓN sin cerrar nada) y el
+    // libro se quedaba atrasado hasta el siguiente cierre. El cierre parcial sí cambiaba el
+    // conteo, y de ahí que el defecto pareciera limitado a una pestaña.
+    const hist = closedCount + '/' + trades.length
+      + '/' + (TE.state.position ? (TE.state.position.parts || []).length : 0)
+      + '/' + ((TE.state.fundingLog || []).length);
 
     // La curva de capital y el cómputo de métricas se hace como mucho cada 250 ms,
     // salvo que se fuerce o que haya cambiado el número de trades cerrados.
     const now = performance.now();
-    const tradeClosed = closedCount !== UI._closedCount;
+    const tradeClosed = closedCount !== UI._closedCount || hist !== UI._histSig;
     const shouldHeavy = force || tradeClosed || !UI._statsAt || (now - UI._statsAt > 250);
 
     // La fila de la posición abierta es barata de refrescar (unos pocos textos),
@@ -1822,7 +1843,7 @@
     setText('eqValue', U.fmtMoney(metrics.equity));
 
     CM.drawEquity(TE.state.equitySeries, TE.state.initialCapital);
-    if (force || closedCount !== UI._closedCount) {
+    if (tradeClosed) {
       UI.renderTrades();
       UI.refreshPosition();
     } else {
@@ -1831,6 +1852,7 @@
       UI.refreshPosition();
     }
     UI._closedCount = closedCount;
+    UI._histSig = hist;
   };
 
   /** Tabla de historial de trades. */
@@ -1965,15 +1987,91 @@
     });
   };
 
+  /** El filtro «Sólo actual»: con un solo par cargado no se nota; al cambiar de símbolo, el
+     historial guarda lo del anterior (el motor NO se reinicia al cambiar de par), así que la
+     casilla tiene qué filtrar de verdad. */
+  UI.soloActual = function () {
+    const c = document.getElementById('chkSoloActual');
+    return !!(c && c.checked);
+  };
+  UI.historialVisible = function () {
+    const arr = TE.state.trades || [];
+    if (!UI.soloActual()) return arr;
+    return arr.filter((t) => (t.pair || TE.state.pair) === TE.state.pair);
+  };
+
+  /* «HISTORIAL DE OPERACIÓN»: una fila por ejecución. */
+  UI.renderFills = function () {
+    const body = document.getElementById('fillsBody');
+    if (!body) return;
+    const vac = document.getElementById('fillsEmpty');
+    const relleno = [];
+    for (const t of UI.historialVisible()) {
+      // Fuente única de las ENTRADAS: `parts` de la posición, que es la misma lista de la que
+      // cuelgan las marcas de entrada en el gráfico (js/chart.js:556) y los contadores de
+      // «Promediar» (l.1738). La fila de un cierre parcial NO repite las entradas -si las
+      // pintáramos también desde ahí, cada tramo saldría dos veces en el libro—: lo que aporta
+      // esa fila es SU ejecución de cierre, que se añade más abajo.
+      const partes = Array.isArray(t.parts) ? t.parts : [];
+      partes.forEach((x, i) => relleno.push({ t: x.time, dir: t.side, p: x.entryPrice, q: x.qty, o: x.origin,
+                                              kind: i === 0 ? 'entrada' : 'promedio ' + i, id: t.id }));
+      if (t.status === 'closed' && t.exitPrice != null) {
+        // El motivo SOLO se escribe cuando dice algo que la palabra «cierre» no dice: con
+        // `manual` salía «cierre · mercado · cierre manual», tres veces lo mismo.
+        const mot = TE.reasonLabel ? TE.reasonLabel(t.reason) : '';
+        relleno.push({ t: t.exitTime, dir: t.side, p: t.exitPrice, q: t.qty, kind: t.parcial ? 'cierre parcial' : 'cierre',
+                       o: 'mercado', id: t.id, rank: 1,
+                       motivo: (/^cierre manual$|^manual$/i.test(mot) || !mot) ? '' : mot });
+      }
+    }
+    // Descendente por hora, y a igualdad de hora la entrada ANTES que el cierre: en el replay
+    // las dos ejecuciones de un abrir-y-cerrar dentro de la misma vela comparten `time`, y el
+    // orden natural del libro es abrir → cerrar (sin esto, el asiento nº 1 era el cierre).
+    relleno.sort((x, y) => ((y.t || 0) - (x.t || 0)) || ((y.rank || 0) - (x.rank || 0)));
+    setText('tabFillCount', relleno.length);
+    if (!relleno.length) { body.innerHTML = ''; if (vac) vac.classList.remove('hidden'); return; }
+    if (vac) vac.classList.add('hidden');
+    body.innerHTML = relleno.map((x, i) => {
+      const cierra = /^cierre/.test(x.kind);
+      const vendedora = cierra ? (x.dir === 'long') : (x.dir !== 'long');
+      // El origen llega del motor en inglés ('market' | 'limit' | 'limite'): aquí se traduce,
+      // que es la tabla que lee la persona.
+      const origen = /^(limite|limit|market)$/i.test(x.o || '')
+        ? (/^limi/i.test(x.o) ? 'límite' : 'mercado') : (x.o || 'mercado');
+      return `<tr class="${vendedora ? 'loss' : 'win'}"><td>${relleno.length - i}</td>`
+        + `<td class="dir-${x.dir}">${x.dir === 'long' ? 'LONG' : 'SHORT'}</td>`
+        + `<td>${U.fmtDate(x.t)}</td><td class="num">${U.fmtPrice(x.p)}</td><td class="num">${U.num(x.q, 6)}</td>`
+        + `<td class="num">${U.fmtMoney(x.p * x.q, false)}</td>`
+        + `<td>${x.kind} · ${origen}${x.motivo ? ' · ' + x.motivo : ''}</td></tr>`;
+    }).join('');
+  };
+
+  /* «HISTORIAL DE FINANCIACIÓN»: cada liquidación, con su hora y su importe firmado. */
+  UI.renderFunding = function () {
+    const body = document.getElementById('fundingBody');
+    if (!body) return;
+    const vac = document.getElementById('fundingEmpty');
+    let arr = (TE.state.fundingLog || []).slice().reverse();
+    if (UI.soloActual()) arr = arr.filter((f) => (f.pair || TE.state.pair) === TE.state.pair);
+    setText('tabFundCount', arr.length);
+    if (!arr.length) { body.innerHTML = ''; if (vac) vac.classList.remove('hidden'); return; }
+    if (vac) vac.classList.add('hidden');
+    body.innerHTML = arr.map((f, i) => `<tr><td>${arr.length - i}</td><td>${U.fmtDate(f.t)}</td>`
+      + `<td class="dir-${f.side}">${f.side === 'long' ? 'LONG' : 'SHORT'}</td>`
+      + `<td class="num">${U.num(f.rate, 4)} %</td><td class="num">${U.num(f.notional, 2)}</td>`
+      + `<td class="num ${f.amount < 0 ? 'loss' : 'win'}">${U.fmtMoney(f.amount, true)}</td></tr>`).join('');
+  };
+
   UI.renderTrades = function () {
     const body = document.getElementById('tradesBody');
     const empty = document.getElementById('tradesEmpty');
-    const trades = TE.state.trades.filter((t) => t.status === 'closed').slice().reverse();
+    const trades = UI.historialVisible().filter((t) => t.status === 'closed').slice().reverse();
     const abierta = TE.state.position;
-    setText('tabTradeCount', TE.state.trades.filter((t) => t.status === 'closed').length);
+    setText('tabTradeCount', UI.historialVisible().filter((t) => t.status === 'closed').length);
     if (!trades.length && !abierta) {
       body.innerHTML = '';
       empty.classList.remove('hidden');
+      UI.renderFills(); UI.renderFunding();
       return;
     }
     empty.classList.add('hidden');
@@ -1997,6 +2095,10 @@
       </tr>`;
     }).join('');
     UI._paintTradeSparks();   // los canvas solo se pueden pintar cuando ya están en el DOM
+    // Las dos pestañas hermanas salen del MISMO historial: si no se repintaran aquí,
+    // «Historial de operación» se quedaría vacía en cuanto hay una sola operación (su
+    // rama vacía sí llamaba, la otra no - medido con la prueba de §5.4, 0 filas contra 2).
+    UI.renderFills(); UI.renderFunding();
   };
 
   /* ------------------------------- Barra replay ------------------------------- */

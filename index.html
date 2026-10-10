@@ -804,14 +804,26 @@
      ===================================================================== -->
 <section id="bottomPanel">
   <div class="tabs">
-    <button class="tab active" data-tab="positions">Posiciones <span id="tabPosCount">0</span></button>
-    <button class="tab" data-tab="openorders">Órdenes abiertas <span id="tabPendCount">0</span></button>
-    <button class="tab" data-tab="trades">Historial de trades (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab active" data-tab="positions">Posiciones (<span id="tabPosCount">0</span>)</button>
+    <button class="tab" data-tab="openorders">Órdenes abiertas (<span id="tabPendCount">0</span>)</button>
+    <button class="tab" data-tab="trades">Historial de posiciones (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab" data-tab="fills">Historial de operación (<span id="tabFillCount">0</span>)</button>
+    <button class="tab" data-tab="funding">Historial de financiación (<span id="tabFundCount">0</span>)</button>
     <button class="tab" data-tab="account">Cuenta</button>
     <button class="tab" data-tab="stats">Estadísticas</button>
     <button class="tab" data-tab="log">Log</button>
     <button class="tab" data-tab="drawings">Dibujos (<span id="tabDrawCount">0</span>)</button>
     <div class="tabs-right">
+      <!-- `Sólo actual` y `Cerrar todo` son SU fila de la derecha (medido: el bloque entero mide
+           194×22, la etiqueta a 14 px/400 con su casilla de 15 px delante, y `Cerrar todo` en
+           PÍLDORA -radio 9999-, 12 px, `#919499`, 64×22). La casilla no es decorativa: el motor
+           anota el par en cada operación y al cambiar de símbolo el historial no se borra, así que
+           filtrar por el par cargado SÍ tiene qué filtrar. `Cerrar todo` es el mismo `App.flatten()`
+           del botón de la tarjeta de órdenes: otra entrada, no otro camino. -->
+      <label class="bf-solo" title="Mostrar solo lo del par cargado ahora (el historial guarda también el de los pares que visitaste)">
+        <input type="checkbox" id="chkSoloActual"><span>Sólo actual</span>
+      </label>
+      <button class="bf-pill" id="btnFlattenTab" title="Cerrar la posición abierta a mercado (Escape) - lo mismo que el botón de la tarjeta de órdenes">Cerrar todo</button>
       <button class="mini-btn" id="btnClearLog" title="Vaciar el log">limpiar log</button>
       <button class="mini-btn" id="btnBottomToggle" title="Plegar / desplegar panel inferior">⌄</button>
     </div>
@@ -946,7 +958,35 @@
       </thead>
       <tbody id="tradesBody"></tbody>
     </table>
-    <div class="empty" id="tradesEmpty">Todavía no hay trades cerrados. Abre una posición con los botones LONG / SHORT y avanza el replay.</div>
+    <div class="empty" id="tradesEmpty">Todavía no hay posiciones cerradas. Abre una posición con los botones Abrir Largo / Abrir Corto y avanza el replay.</div>
+  </div>
+
+  <!-- «HISTORIAL DE OPERACIÓN»: una fila por EJECUCIÓN (entradas, promedios y cada cierre), no por
+       posición -que es lo que enseña la de al lado—. Sale de `parts[]` de la posición (el motor
+       guarda cada tramo de un promediado) y del cierre registrado en `trades`. -->
+  <div class="tab-body" id="tab-fills">
+    <table id="fillsTable">
+      <thead><tr>
+        <th>#</th><th>Dir</th><th>Hora (UTC)</th><th class="num">Precio</th><th class="num">Cantidad</th>
+        <th class="num">Notional</th><th>Concepto</th>
+      </tr></thead>
+      <tbody id="fillsBody"></tbody>
+    </table>
+    <div class="empty" id="fillsEmpty">Sin ejecuciones todavía: cada entrada, cada promedio y cada cierre sale aquí, uno por línea.</div>
+  </div>
+
+  <!-- «HISTORIAL DE FINANCIACIÓN»: cada liquidación de funding que el motor cobró o pagó, con su
+       hora, su tasa y su importe. Con `funding = 0` (el valor con el que se arranca) esta tabla está
+       vacía A PROPÓSITO: no se inventan liquidaciones que no ocurrieron. -->
+  <div class="tab-body" id="tab-funding">
+    <table id="fundingTable">
+      <thead><tr>
+        <th>#</th><th>Liquidación (UTC)</th><th>Dir</th><th class="num">Tasa</th>
+        <th class="num">Notional</th><th class="num">Importe</th>
+      </tr></thead>
+      <tbody id="fundingBody"></tbody>
+    </table>
+    <div class="empty" id="fundingEmpty">Ninguna liquidación de funding en esta sesión: se pone una tasa en Ajustes (o se dejan los niveles del exchange) y aquí aparecerá cada cobro o pago.</div>
   </div>
 
   <!-- PESTAÑA «ÓRDENES»: en Bitunix las órdenes en espera tienen pestaña propia.

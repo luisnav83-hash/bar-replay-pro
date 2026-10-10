@@ -2294,3 +2294,58 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #bookCard .bf-tabs { gap: 10px; }
   #bookCard .bf-tab { font-size: 13px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BLOQUE 20 — EL PANEL INFERIOR CON SU VOCABULARIO Y SU FILA DE LA DERECHA
+   (11-oct-2026, ítem §5.4 del registro `docs/brecha-visual-bitunix.md`).
+
+   Medido en su DOM a 1600×900 (es-ES, sin sesión): la tira de pestañas mide 1292 px de ancho;
+   cada etiqueta a **14 px / peso 500**, la activa `#fff` y la inactiva `#919499`, SIN subrayado
+   (`::after` con `content: none` -a diferencia del libro, que sí lleva su raya blanca de 2 px—)
+   y con el contador DENTRO del texto (`Posiciones (0)`). Sus ocho etiquetas:
+   `Posiciones (0) · Órdenes abiertas (0) · Historial de órdenes · Historial de posiciones ·
+   Historial de operación · Historial de financiación · Activos · Bots(0)`.
+   A la derecha, un bloque de 194×22: `☐ Sólo actual` (14 px/400 con su casilla) y `Cerrar todo`
+   en PÍLDORA (radio 9999, 12 px, `#919499`, 64×22).
+
+   Qué se copia y qué no, con el criterio escrito:
+     · `Historial de trades` se RENOMBRA a `Historial de posiciones` -es exactamente eso lo que
+       pinta: una fila por posición cerrada—, y entran las dos que faltan con datos propios del
+       motor: `Historial de operación` (una fila por EJECUCIÓN, desde `parts[]`) y `Historial de
+       financiación` (desde `TE.state.fundingLog`, que el motor rellena en cada liquidación real).
+     · `Historial de órdenes` y `Bots(0)` NO entran: el motor no guarda las órdenes ya ejecutadas o
+       canceladas (solo las vivas en `pending`) y no hay bots. Poner la pestaña vacía sería un
+       adorno, que es lo que este registro viene a quitar.
+     · `Sólo actual` sí tiene qué filtrar: cambiar de par NO reinicia la cuenta, así que el
+       historial mezcla símbolos; cada operación nace con su `pair` (js/tradingEngine.js) y la
+       casilla filtra las tres tablas.
+   ════════════════════════════════════════════════════════════════════════════ */
+#bottomPanel .tab.active { color: var(--tx-1); font-weight: 500; }
+#bottomPanel .tab.active::after { content: none; }
+#bottomPanel .tab span[id] { color: inherit; font-weight: inherit; }
+/* Con cinco pestañas con contador + las nuestras, la tira no cabe en 1024 px: desliza en vez de
+   partir la fila o de comerse el botón del final, y el bloque de la derecha se queda pegado. */
+#bottomPanel .tabs { overflow-x: auto; scrollbar-width: none; gap: 0 2px; }
+#bottomPanel .tabs::-webkit-scrollbar { display: none; }
+#bottomPanel .tabs-right { position: sticky; right: 0; background: var(--bg-2); padding-left: 6px; }
+/* El bloque de la derecha mide 22 px de alto en el sitio (194×22 medido). La etiqueta suelta
+   se quedaba en 16 px -la altura de su línea de 14 px— y flotaba torcida junto a la píldora,
+   que sí mide 22: se le da la misma caja y se centra el par casilla+texto dentro. */
+#bottomPanel .bf-solo { display: inline-flex; align-items: center; gap: 5px; height: 22px;
+                        font-size: 14px; font-weight: 400; color: var(--tx-3); cursor: pointer;
+                        white-space: nowrap; letter-spacing: 0; }
+#bottomPanel .bf-solo:hover { color: var(--tx-1); }
+#bottomPanel .bf-solo input { width: 13px; height: 13px; margin: 0; accent-color: var(--activo); cursor: pointer; }
+#bottomPanel .bf-pill { height: 22px; padding: 0 8px; border: 0; border-radius: 9999px;
+                        background: transparent; color: var(--tx-3); font-size: 12px; font-weight: 400;
+                        letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer; }
+#bottomPanel .bf-pill:hover { color: #fff; background: var(--bg-3); }
+#bottomPanel .bf-pill:disabled { color: var(--tx-4); cursor: default; background: transparent; }
+#bottomPanel .tab-body table th { font-size: var(--fs-rotulo); }
+@media (max-width: 640px) {
+  /* En el teléfono la tira es la que menos sitio tiene: las etiquetas vuelven a su tamaño de
+     panel apurado (10,5 px en los tiers de poco alto, ver ~1086) y lo que se sacrifica es el
+     texto de la casilla, que viaja al `title`. */
+  #bottomPanel .bf-solo span { display: none; }
+  #bottomPanel .bf-solo { gap: 0; }
+}

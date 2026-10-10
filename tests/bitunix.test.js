@@ -424,6 +424,118 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       `la cinta se etiqueta con su origen (${ct.origen}) y sus cabeceras son ${ct.cabeceras.join(' · ')}`);
   }
 
+  /* ─── PANEL INFERIOR CON SU VOCABULARIO (ítem §5.4 del registro, 11-oct) ───
+     Medido en su DOM: pestañas a 14 px / peso 500, la activa blanca y la inactiva `#919499`, SIN
+     subrayado (el subrayado de 2 px es del LIBRO, no de aquí), contador dentro del texto, y a la
+     derecha `☐ Sólo actual` + `Cerrar todo` en píldora (radio 9999, 12 px, 22 de alto). Se comprueba
+     además que las dos pestañas nuevas salen de datos del motor y que el filtro filtra. */
+  {
+    const abajo = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const R = (e) => e.getBoundingClientRect();
+      // Ojo con el segundo argumento: `getComputedStyle(e)` IGNORA el pseudo, así que medir
+      // «subrayado» sin él devolvía el `content` del BOTÓN ('normal') y las nueve pestañas
+      // salían subrayadas aunque no tuvieran `::after`. Engañó a esta ancla el 11-oct.
+      const cs = (e, p) => getComputedStyle(e, p || null);
+      const tabs = [...document.querySelectorAll('#bottomPanel .tab')].map((b) => ({
+        t: b.textContent.trim().replace(/\s+/g, ' '), fs: Math.round(parseFloat(cs(b).fontSize)), fw: cs(b).fontWeight,
+        color: cs(b).color, subrayado: cs(b, '::after').content !== 'none',
+      }));
+      const activa = tabs.find((x) => /^Posiciones/.test(x.t));
+      const inactiva = tabs.find((x) => /^Cuenta/.test(x.t));
+      const pill = g('btnFlattenTab'), pc = cs(pill);
+      const solo = g('chkSoloActual');
+      const nombre = (sel) => document.querySelector(sel).textContent.trim().replace(/\s+/g, ' ');
+      // una ida y vuelta real: abrir, cerrar y mirar las dos pestañas nuevas
+      if (window.App && App.sizeMode !== 'pct') document.querySelector('#segSize [data-mode=\"pct\"]').click();
+      g('sizeInput').value = '25'; g('sizeInput').dispatchEvent(new Event('input', { bubbles: true }));
+      const antes = { tabs, activa, inactiva,
+        pill: { radio: pc.borderRadius, fs: Math.round(parseFloat(pc.fontSize)), h: Math.round(R(pill).height), color: pc.color, txt: pill.textContent.trim() },
+        casilla: { txt: solo.parentElement.textContent.trim(), h: Math.round(R(solo.parentElement).height) },
+        fills0: g('fillsBody').children.length, fund0: g('fundingBody').children.length,
+        fundLog: Array.isArray(window.TE.state.fundingLog) };
+      document.getElementById('btnLong').click();
+      await new Promise((r) => setTimeout(r, 700));
+      const abierto = { pos: TE.state.position ? TE.state.position.side : null,
+                       pairEnTrade: (TE.state.trades[TE.state.trades.length - 1] || {}).pair };
+      g('btnFlattenTab').click();
+      await new Promise((r) => setTimeout(r, 700));
+      const tras = { pos: TE.state.position ? TE.state.position.side : null,
+                     fills: [...g('fillsBody').querySelectorAll('tr')].map((tr) => tr.textContent.trim().replace(/\s+/g, ' ')),
+                     fillsN: g('tabFillCount').textContent,
+                     posN: g('tabTradeCount').textContent };
+      // el filtro, con una fila de OTRO par metida a mano en el historial
+      TE.state.trades.push(Object.assign({}, TE.state.trades[TE.state.trades.length - 1], { pair: 'ETHUSDT', id: 999 }));
+      UI.renderTrades();
+      const sinFiltro = g('tradesBody').children.length;
+      solo.checked = true; solo.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const conFiltro = g('tradesBody').children.length;
+      solo.checked = false; solo.dispatchEvent(new Event('change', { bubbles: true }));
+      TE.state.trades.pop(); UI.renderTrades();
+      return { antes, abierto, tras, sinFiltro, conFiltro,
+        fillsCab: nombre('#fillsTable thead'), fundCab: nombre('#fundingTable thead'),
+        fundVacio: g('fundingEmpty').classList.contains('hidden') ? 'oculto' : 'visible' };
+    });
+    const nombres = abajo.antes.tabs.map((x) => x.t);
+    ok(/Posiciones \(\d+\)/.test(nombres[0]) && nombres.some((x) => /^Historial de posiciones \(\d+\)$/.test(x))
+       && nombres.some((x) => /^Historial de operación \(\d+\)$/.test(x)) && nombres.some((x) => /^Historial de financiación \(\d+\)$/.test(x))
+       && nombres.some((x) => /^Órdenes abiertas \(\d+\)$/.test(x)),
+      `las pestañas del panel inferior usan su vocabulario: ${nombres.slice(0, 5).join(' · ')}`);
+    const bichos = abajo.antes.tabs.filter((x) => x.fs !== 14 || x.fw !== '500' || x.subrayado);
+    ok(bichos.length === 0 && abajo.antes.activa.color === 'rgb(255, 255, 255)' && abajo.antes.inactiva.color === 'rgb(145, 148, 153)',
+      `todas a ${abajo.antes.tabs[0].fs} px / peso ${abajo.antes.tabs[0].fw}, la activa ${abajo.antes.activa.color} y la inactiva ${abajo.antes.inactiva.color}, sin subrayado (el de 2 px es del libro; medido aquí con content:none)`
+      + (bichos.length ? ' → desentonan: ' + bichos.map((x) => `${x.t}=${x.fs}/${x.fw}${x.subrayado ? '+subrayado' : ''}`).join(', ') : ''));
+    ok(abajo.antes.pill.txt === 'Cerrar todo' && abajo.antes.pill.radio === '9999px' && abajo.antes.pill.fs === 12 && abajo.antes.pill.h >= 20 && abajo.antes.pill.h <= 24,
+      `«${abajo.antes.pill.txt}» es la píldora de su fila derecha (radio ${abajo.antes.pill.radio}, ${abajo.antes.pill.fs} px, ${abajo.antes.pill.h} px de alto, ${abajo.antes.pill.color})`);
+    ok(/^Sólo actual$/.test(abajo.antes.casilla.txt) && abajo.antes.casilla.h >= 20 && abajo.antes.casilla.h <= 26,
+      `y el casillero «${abajo.antes.casilla.txt}» mide ${abajo.antes.casilla.h} px de alto, como su bloque de 22`);
+    ok(abajo.abierto.pos === 'long' && abajo.tras.pos === null,
+      `la píldora cierra de verdad: posición ${abajo.abierto.pos} tras Abrir Largo y ${abajo.tras.pos} tras «Cerrar todo`);
+    ok(abajo.abierto.pairEnTrade === (abajo.tras.pair || 'BTCUSDT') || /BTCUSDT/.test(String(abajo.abierto.pairEnTrade)),
+      `cada operación nace anotada con su par (${abajo.abierto.pairEnTrade}), que es lo que hace útil «Sólo actual»`);
+    ok(abajo.tras.fills.length >= 2 && abajo.tras.fillsN === String(abajo.tras.fills.length)
+       && /entrada/.test(abajo.tras.fills.join(' ')) && /cierre/.test(abajo.tras.fills.join(' ')),
+      `«Historial de operación» pinta una fila por ejecución (${abajo.tras.fills.length}: ${abajo.tras.fills.map((x) => x.split(' ')[1] + ' ' + (x.match(/entrada|cierre[^ ]*/g) || [''])[0]).join(' | ')})`);
+    // Una ejecución = una fila, ni una más, y el panel se entera SOLO de que la hay.
+    // Se prueba por dos sitios a la vez: (1) tras cada mutación del motor se llama al refresco
+    // que llama la app (UI.refreshStats, sin forzar), que es donde estaba el memo -comparaba
+    // solo los CERRADOS, así que «promediar» no repintaba la tabla—; (2) si la fila del cierre
+    // parcial repintara también las entradas de la posición, cada paso sumaría de dos en dos.
+    const parciales = await page.evaluate(async () => {
+      const g = (id) => document.getElementById(id);
+      const n = () => g('fillsBody').children.length;
+      const t = () => TE.state.lastPrice;
+      const texto = () => [...g('fillsBody').querySelectorAll('tr')].map((x) => x.textContent.trim().replace(/\s+/g, ' '));
+      const re = async () => { UI.refreshStats(); await new Promise((r) => setTimeout(r, 120)); };
+      const e0 = n();
+      g('sizeInput').value = '25'; g('sizeInput').dispatchEvent(new Event('input', { bubbles: true }));
+      g('btnLong').click();
+      await new Promise((r) => setTimeout(r, 600));
+      const e1 = n();
+      TE.addToPosition('long', { mode: 'pct', size: 10, entryPrice: t(), time: TE.state.lastTime });
+      await re();
+      const e2 = n();
+      TE.reducePosition(0.5, t() * 1.002, TE.state.lastTime, 'parcial');
+      await re();
+      const e3 = n(), txt = texto();
+      g('btnFlattenTab').click();
+      await new Promise((r) => setTimeout(r, 600));
+      const e4 = n();
+      const pos = TE.state.trades.filter((x) => Array.isArray(x.parts)).pop();
+      return { e0, e1, e2, e3, e4, txt, partes: pos ? pos.parts.length : -1,
+               cerradas: TE.state.trades.filter((x) => x.status === 'closed').length };
+    });
+    ok(parciales.e1 === parciales.e0 + 1 && parciales.e2 === parciales.e1 + 1
+       && parciales.e3 === parciales.e2 + 1 && parciales.e4 === parciales.e3 + 1 && parciales.partes === 2
+       && /cierre parcial/.test(parciales.txt.join(' ')),
+      `una ejecución, una fila: abrir +1, promediar +1, parcial +1, cerrar +1 (${parciales.e0}→${parciales.e1}→${parciales.e2}→${parciales.e3}→${parciales.e4}); las ${parciales.partes} entradas viven en la posición y el cierre parcial no las repite`);
+    ok(abajo.sinFiltro > abajo.conFiltro && abajo.conFiltro >= 1,
+      `«Sólo actual» filtra de verdad: ${abajo.sinFiltro} filas con todo y ${abajo.conFiltro} con solo el par cargado (la fila ETHUSDT plantada fuera del filtro desaparece)`);
+    ok(abajo.antes.fundLog && /Liquidación \(UTC\)/.test(abajo.fundCab) && /Tasa/.test(abajo.fundCab) && /Importe/.test(abajo.fundCab),
+      `«Historial de financiación» existe con su registro en el motor y sus cabeceras (${abajo.fundCab.replace(/^Historial de financiación \(\d+\)\s*/, '') || '—'})`);
+  }
+
   /* ─── La entrada no puede quedar bajo el borde de su cajón (ítem 2 del registro) ───
      Medido el 10-oct-2026 con `tools/barrido-graficos.js`: la tarjeta de órdenes ocupaba
      695-697 px y «Abrir Largo / Abrir Corto» caían ~140 px por debajo del borde de la columna
@@ -472,7 +584,9 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(est.cuentaEnPestañas && est.statsEnPestañas && est.curvaEnPestañas, 'cuenta, estadísticas y curva de capital, en sus pestañas');
   ok(est.tradesEnPestañas && est.logEnPestañas && est.dibujosEnPestañas, 'trades, log y dibujos siguen accesibles por pestaña');
   ok(est.indicadoresVivos, 'los paneles de indicadores se reubican, no se eliminan');
-  ok(est.tabs.join() === 'positions,openorders,trades,account,stats,log,drawings', `pestañas: ${est.tabs.join(' · ')}`);
+  // Con §5.4 entran las dos pestañas nuevas DEL MEDIO (donde las tiene el sitio: los tres
+  // historiales van seguidos), y `Dibujos` sigue cerrando la tira.
+  ok(est.tabs.join() === 'positions,openorders,trades,fills,funding,account,stats,log,drawings', `pestañas: ${est.tabs.join(' · ')}`);
   ok(est.duplicados.length === 0, `sin ids duplicados en el marcado de la app${est.duplicados.length ? ' → ' + est.duplicados.join(',') : ''}`);
   ok(est.duplicadosLib.every((x) => x === 'tv-attr-logo' || x === 'a'),
      `lo único que se repite dentro de los charts es lo que inyecta la librería (${est.duplicadosLib.join(', ') || 'nada'})`);

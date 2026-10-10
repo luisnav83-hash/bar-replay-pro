@@ -101,6 +101,7 @@
     // 2) Ajustes guardados
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
+    if (window.TE && TE.setPair) TE.setPair(App.pair);   // para el filtro «Sólo actual» del panel
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
     App.riesgo.auto = s.nivelesAuto !== false;      // leer niveles del exchange (por defecto, sí)
     {                                               // el interruptor de Ajustes nace con ese valor
@@ -326,6 +327,7 @@
     const interval = document.getElementById('tfSelect').value;
     if (!DS.TIMEFRAMES[interval]) { U.toast('Temporalidad no válida', 'err'); return; }
     App.pair = pair; App.interval = interval;
+    if (window.TE && TE.setPair) TE.setPair(pair);
     App.aplicarRiesgoBitunix();      // niveles y ritmo de funding del símbolo que se va a cargar
 
     const tfSec = DS.TIMEFRAMES[interval].ms / 1000;

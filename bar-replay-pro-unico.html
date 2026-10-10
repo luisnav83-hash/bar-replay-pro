@@ -1902,6 +1902,27 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
   #bookCard .bf-tabs { gap: 10px; }
   #bookCard .bf-tab { font-size: 13px; }
 }
+#bottomPanel .tab.active { color: var(--tx-1); font-weight: 500; }
+#bottomPanel .tab.active::after { content: none; }
+#bottomPanel .tab span[id] { color: inherit; font-weight: inherit; }
+#bottomPanel .tabs { overflow-x: auto; scrollbar-width: none; gap: 0 2px; }
+#bottomPanel .tabs::-webkit-scrollbar { display: none; }
+#bottomPanel .tabs-right { position: sticky; right: 0; background: var(--bg-2); padding-left: 6px; }
+#bottomPanel .bf-solo { display: inline-flex; align-items: center; gap: 5px; height: 22px;
+                        font-size: 14px; font-weight: 400; color: var(--tx-3); cursor: pointer;
+                        white-space: nowrap; letter-spacing: 0; }
+#bottomPanel .bf-solo:hover { color: var(--tx-1); }
+#bottomPanel .bf-solo input { width: 13px; height: 13px; margin: 0; accent-color: var(--activo); cursor: pointer; }
+#bottomPanel .bf-pill { height: 22px; padding: 0 8px; border: 0; border-radius: 9999px;
+                        background: transparent; color: var(--tx-3); font-size: 12px; font-weight: 400;
+                        letter-spacing: 0; text-transform: none; white-space: nowrap; cursor: pointer; }
+#bottomPanel .bf-pill:hover { color: #fff; background: var(--bg-3); }
+#bottomPanel .bf-pill:disabled { color: var(--tx-4); cursor: default; background: transparent; }
+#bottomPanel .tab-body table th { font-size: var(--fs-rotulo); }
+@media (max-width: 640px) {
+  #bottomPanel .bf-solo span { display: none; }
+  #bottomPanel .bf-solo { gap: 0; }
+}
 </style>
 </head>
 <body>
@@ -2696,14 +2717,26 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
      ===================================================================== -->
 <section id="bottomPanel">
   <div class="tabs">
-    <button class="tab active" data-tab="positions">Posiciones <span id="tabPosCount">0</span></button>
-    <button class="tab" data-tab="openorders">Órdenes abiertas <span id="tabPendCount">0</span></button>
-    <button class="tab" data-tab="trades">Historial de trades (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab active" data-tab="positions">Posiciones (<span id="tabPosCount">0</span>)</button>
+    <button class="tab" data-tab="openorders">Órdenes abiertas (<span id="tabPendCount">0</span>)</button>
+    <button class="tab" data-tab="trades">Historial de posiciones (<span id="tabTradeCount">0</span>)</button>
+    <button class="tab" data-tab="fills">Historial de operación (<span id="tabFillCount">0</span>)</button>
+    <button class="tab" data-tab="funding">Historial de financiación (<span id="tabFundCount">0</span>)</button>
     <button class="tab" data-tab="account">Cuenta</button>
     <button class="tab" data-tab="stats">Estadísticas</button>
     <button class="tab" data-tab="log">Log</button>
     <button class="tab" data-tab="drawings">Dibujos (<span id="tabDrawCount">0</span>)</button>
     <div class="tabs-right">
+      <!-- `Sólo actual` y `Cerrar todo` son SU fila de la derecha (medido: el bloque entero mide
+           194×22, la etiqueta a 14 px/400 con su casilla de 15 px delante, y `Cerrar todo` en
+           PÍLDORA -radio 9999-, 12 px, `#919499`, 64×22). La casilla no es decorativa: el motor
+           anota el par en cada operación y al cambiar de símbolo el historial no se borra, así que
+           filtrar por el par cargado SÍ tiene qué filtrar. `Cerrar todo` es el mismo `App.flatten()`
+           del botón de la tarjeta de órdenes: otra entrada, no otro camino. -->
+      <label class="bf-solo" title="Mostrar solo lo del par cargado ahora (el historial guarda también el de los pares que visitaste)">
+        <input type="checkbox" id="chkSoloActual"><span>Sólo actual</span>
+      </label>
+      <button class="bf-pill" id="btnFlattenTab" title="Cerrar la posición abierta a mercado (Escape) - lo mismo que el botón de la tarjeta de órdenes">Cerrar todo</button>
       <button class="mini-btn" id="btnClearLog" title="Vaciar el log">limpiar log</button>
       <button class="mini-btn" id="btnBottomToggle" title="Plegar / desplegar panel inferior">⌄</button>
     </div>
@@ -2838,7 +2871,35 @@ canvas.tr-spark { display: block; width: 46px; height: 16px;
       </thead>
       <tbody id="tradesBody"></tbody>
     </table>
-    <div class="empty" id="tradesEmpty">Todavía no hay trades cerrados. Abre una posición con los botones LONG / SHORT y avanza el replay.</div>
+    <div class="empty" id="tradesEmpty">Todavía no hay posiciones cerradas. Abre una posición con los botones Abrir Largo / Abrir Corto y avanza el replay.</div>
+  </div>
+
+  <!-- «HISTORIAL DE OPERACIÓN»: una fila por EJECUCIÓN (entradas, promedios y cada cierre), no por
+       posición -que es lo que enseña la de al lado—. Sale de `parts[]` de la posición (el motor
+       guarda cada tramo de un promediado) y del cierre registrado en `trades`. -->
+  <div class="tab-body" id="tab-fills">
+    <table id="fillsTable">
+      <thead><tr>
+        <th>#</th><th>Dir</th><th>Hora (UTC)</th><th class="num">Precio</th><th class="num">Cantidad</th>
+        <th class="num">Notional</th><th>Concepto</th>
+      </tr></thead>
+      <tbody id="fillsBody"></tbody>
+    </table>
+    <div class="empty" id="fillsEmpty">Sin ejecuciones todavía: cada entrada, cada promedio y cada cierre sale aquí, uno por línea.</div>
+  </div>
+
+  <!-- «HISTORIAL DE FINANCIACIÓN»: cada liquidación de funding que el motor cobró o pagó, con su
+       hora, su tasa y su importe. Con `funding = 0` (el valor con el que se arranca) esta tabla está
+       vacía A PROPÓSITO: no se inventan liquidaciones que no ocurrieron. -->
+  <div class="tab-body" id="tab-funding">
+    <table id="fundingTable">
+      <thead><tr>
+        <th>#</th><th>Liquidación (UTC)</th><th>Dir</th><th class="num">Tasa</th>
+        <th class="num">Notional</th><th class="num">Importe</th>
+      </tr></thead>
+      <tbody id="fundingBody"></tbody>
+    </table>
+    <div class="empty" id="fundingEmpty">Ninguna liquidación de funding en esta sesión: se pone una tasa en Ajustes (o se dejan los niveles del exchange) y aquí aparecerá cada cobro o pago.</div>
   </div>
 
   <!-- PESTAÑA «ÓRDENES»: en Bitunix las órdenes en espera tienen pestaña propia.
@@ -4788,6 +4849,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
        con la posición). */
     tpslCuenta: { activo: false, modo: 'pct', base: 'invertido', ambito: 'ambos', ganancia: null, perdida: null },
     pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
+    pair: null,              // par cargado: las historias lo anotan para «Sólo actual»
+    fundingLog: [],          // [{t, side, rate, notional, amount, id}] - cada liquidación
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
@@ -4970,6 +5033,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   /** Reinicia la cuenta al capital inicial y borra el historial. */
+  /** El par cargado lo sabe el motor para poder anotar cada operación (filtro «Sólo actual»). */
+  TE.setPair = function (p) { TE.state.pair = p || null; };
+
   TE.resetAccount = function (capital) {
     const s = TE.state;
     if (capital !== undefined) s.initialCapital = +capital;
@@ -4983,6 +5049,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // de las posiciones, y sin posiciones no tiene a quién aplicar.
     s.leverageLado = { long: null, short: null };
     s.pending = [];
+    s.fundingLog = [];   // las liquidaciones cobradas son de la cuenta que se va
     s.trades = [];
     s.equitySeries = [];
     s.feesPaid = 0;
@@ -5375,6 +5442,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       entryBalance: s.balance,
       openFee: fee,        // comisión de apertura (ya descontada del balance)
       funding: 0,          // coste de financiación acumulado durante la posición
+      pair: s.pair || null, // el par con el que se abrió: «Sólo actual» filtra por esto
       fees: fee,
       mfe: 0, mae: 0,      // excursión favorable/adversa máxima
       bars: 0,
@@ -5855,6 +5923,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       riskUsd: p.sl !== null ? Math.abs(p.entryPrice - p.sl) * qtyClose : null,
       additions: p.additions || 0,
       parts: p.parts.length,
+      // El cierre parcial es una fila NUEVA del historial, y `parts` aquí es un número (el
+      // conteo que leen las estadísticas). Las ENTRADAS no se copian en esta fila: siguen
+      // viviendo en la posición (l.682), que es la fuente única que consulta
+      // «Historial de operación» -copiarlas sería pintar cada tramo dos veces—.
+      pair: p.pair || s.pair || null,
     };
     row.pnlPct = row.entryBalance > 0 ? (row.pnl / row.entryBalance) * 100 : 0;
     row.pnlPctPrice = row.entryPrice > 0 ? ((px - row.entryPrice) / row.entryPrice) * 100 * dir : 0;
@@ -6597,8 +6670,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       let pagado = 0, hits = 0;
       while (candle.time >= p.pagoFundingEn) {
         const dir = p.side === 'long' ? 1 : -1;
-        pagado -= dir * p.notional * (s.fundingPct / 100);
+        const golpe = -dir * p.notional * (s.fundingPct / 100);
+        pagado += golpe;
         hits++;
+        /* El registro por liquidación (no un total): es lo que hace el `Historial de financiación`
+           del sitio y lo que permite cuadrar la cuenta de una posición con tres cobros del mismo
+           día. Se anota ANTES de avanzar la agenda para que la hora sea la de la liquidación. */
+        s.fundingLog.push({ t: p.pagoFundingEn, side: p.side, rate: s.fundingPct,
+                            notional: p.notional, amount: golpe, id: p.id || null, pair: p.pair || s.pair || null });
         p.pagoFundingEn = TE._siguienteFunding(p.pagoFundingEn);
         if (hits > 1000) break;                     // reloj roto: no colgar la pestaña
       }
@@ -10969,6 +11048,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     UI.syncIndicatorModalFromConfig(App.indicators);
     UI.setPlaying(false);
     UI._closedCount = 0;
+    UI._histSig = null;   // forma del historial: cerrados + filas + entradas de la abierta + liquidaciones
     UI.refreshAll();
     UI.refreshStats(true);
     UI.renderSessions();
@@ -11455,6 +11535,18 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       else if (_t === 'account') UI.refreshAccount();
       if (t.dataset.tab === 'drawings') DT.renderList(document.getElementById('drawList'));
     }));
+
+    const solo = document.getElementById('chkSoloActual');
+    if (solo) {
+      try { solo.checked = !!(window.ST && ST.get && ST.get('soloActual', false) === true); } catch (e) {}
+      solo.addEventListener('change', () => {
+        if (window.ST && ST.set) ST.set('soloActual', !!solo.checked);
+        UI.renderTrades();
+        U.log(solo.checked ? '🔎 Panel inferior: solo el par cargado' : '🔎 Panel inferior: todos los pares de la sesión', 'sys');
+      });
+    }
+    const pill = document.getElementById('btnFlattenTab');
+    if (pill) pill.addEventListener('click', () => App.flatten());
 
     document.getElementById('btnClearLog').addEventListener('click', () => {
       document.getElementById('logList').innerHTML = '';
@@ -12690,11 +12782,19 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const metrics = TE.getMetrics();
     const trades = TE.state.trades;
     const closedCount = trades.filter((t) => t.status === 'closed').length;
+    // LA FORMA DEL HISTORIAL, no solo cuántos están cerrados. Costó de encontrar (11-oct,
+    // al montar «Historial de operación» y «de financiación»): comparando solo `closedCount`,
+    // promediar una entrada no repintaba nada (añade una EJECUCIÓN sin cerrar nada) y el
+    // libro se quedaba atrasado hasta el siguiente cierre. El cierre parcial sí cambiaba el
+    // conteo, y de ahí que el defecto pareciera limitado a una pestaña.
+    const hist = closedCount + '/' + trades.length
+      + '/' + (TE.state.position ? (TE.state.position.parts || []).length : 0)
+      + '/' + ((TE.state.fundingLog || []).length);
 
     // La curva de capital y el cómputo de métricas se hace como mucho cada 250 ms,
     // salvo que se fuerce o que haya cambiado el número de trades cerrados.
     const now = performance.now();
-    const tradeClosed = closedCount !== UI._closedCount;
+    const tradeClosed = closedCount !== UI._closedCount || hist !== UI._histSig;
     const shouldHeavy = force || tradeClosed || !UI._statsAt || (now - UI._statsAt > 250);
 
     // La fila de la posición abierta es barata de refrescar (unos pocos textos),
@@ -12726,7 +12826,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     setText('eqValue', U.fmtMoney(metrics.equity));
 
     CM.drawEquity(TE.state.equitySeries, TE.state.initialCapital);
-    if (force || closedCount !== UI._closedCount) {
+    if (tradeClosed) {
       UI.renderTrades();
       UI.refreshPosition();
     } else {
@@ -12735,6 +12835,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       UI.refreshPosition();
     }
     UI._closedCount = closedCount;
+    UI._histSig = hist;
   };
 
   /** Tabla de historial de trades. */
@@ -12869,15 +12970,91 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     });
   };
 
+  /** El filtro «Sólo actual»: con un solo par cargado no se nota; al cambiar de símbolo, el
+     historial guarda lo del anterior (el motor NO se reinicia al cambiar de par), así que la
+     casilla tiene qué filtrar de verdad. */
+  UI.soloActual = function () {
+    const c = document.getElementById('chkSoloActual');
+    return !!(c && c.checked);
+  };
+  UI.historialVisible = function () {
+    const arr = TE.state.trades || [];
+    if (!UI.soloActual()) return arr;
+    return arr.filter((t) => (t.pair || TE.state.pair) === TE.state.pair);
+  };
+
+  /* «HISTORIAL DE OPERACIÓN»: una fila por ejecución. */
+  UI.renderFills = function () {
+    const body = document.getElementById('fillsBody');
+    if (!body) return;
+    const vac = document.getElementById('fillsEmpty');
+    const relleno = [];
+    for (const t of UI.historialVisible()) {
+      // Fuente única de las ENTRADAS: `parts` de la posición, que es la misma lista de la que
+      // cuelgan las marcas de entrada en el gráfico (js/chart.js:556) y los contadores de
+      // «Promediar» (l.1738). La fila de un cierre parcial NO repite las entradas -si las
+      // pintáramos también desde ahí, cada tramo saldría dos veces en el libro—: lo que aporta
+      // esa fila es SU ejecución de cierre, que se añade más abajo.
+      const partes = Array.isArray(t.parts) ? t.parts : [];
+      partes.forEach((x, i) => relleno.push({ t: x.time, dir: t.side, p: x.entryPrice, q: x.qty, o: x.origin,
+                                              kind: i === 0 ? 'entrada' : 'promedio ' + i, id: t.id }));
+      if (t.status === 'closed' && t.exitPrice != null) {
+        // El motivo SOLO se escribe cuando dice algo que la palabra «cierre» no dice: con
+        // `manual` salía «cierre · mercado · cierre manual», tres veces lo mismo.
+        const mot = TE.reasonLabel ? TE.reasonLabel(t.reason) : '';
+        relleno.push({ t: t.exitTime, dir: t.side, p: t.exitPrice, q: t.qty, kind: t.parcial ? 'cierre parcial' : 'cierre',
+                       o: 'mercado', id: t.id, rank: 1,
+                       motivo: (/^cierre manual$|^manual$/i.test(mot) || !mot) ? '' : mot });
+      }
+    }
+    // Descendente por hora, y a igualdad de hora la entrada ANTES que el cierre: en el replay
+    // las dos ejecuciones de un abrir-y-cerrar dentro de la misma vela comparten `time`, y el
+    // orden natural del libro es abrir → cerrar (sin esto, el asiento nº 1 era el cierre).
+    relleno.sort((x, y) => ((y.t || 0) - (x.t || 0)) || ((y.rank || 0) - (x.rank || 0)));
+    setText('tabFillCount', relleno.length);
+    if (!relleno.length) { body.innerHTML = ''; if (vac) vac.classList.remove('hidden'); return; }
+    if (vac) vac.classList.add('hidden');
+    body.innerHTML = relleno.map((x, i) => {
+      const cierra = /^cierre/.test(x.kind);
+      const vendedora = cierra ? (x.dir === 'long') : (x.dir !== 'long');
+      // El origen llega del motor en inglés ('market' | 'limit' | 'limite'): aquí se traduce,
+      // que es la tabla que lee la persona.
+      const origen = /^(limite|limit|market)$/i.test(x.o || '')
+        ? (/^limi/i.test(x.o) ? 'límite' : 'mercado') : (x.o || 'mercado');
+      return `<tr class="${vendedora ? 'loss' : 'win'}"><td>${relleno.length - i}</td>`
+        + `<td class="dir-${x.dir}">${x.dir === 'long' ? 'LONG' : 'SHORT'}</td>`
+        + `<td>${U.fmtDate(x.t)}</td><td class="num">${U.fmtPrice(x.p)}</td><td class="num">${U.num(x.q, 6)}</td>`
+        + `<td class="num">${U.fmtMoney(x.p * x.q, false)}</td>`
+        + `<td>${x.kind} · ${origen}${x.motivo ? ' · ' + x.motivo : ''}</td></tr>`;
+    }).join('');
+  };
+
+  /* «HISTORIAL DE FINANCIACIÓN»: cada liquidación, con su hora y su importe firmado. */
+  UI.renderFunding = function () {
+    const body = document.getElementById('fundingBody');
+    if (!body) return;
+    const vac = document.getElementById('fundingEmpty');
+    let arr = (TE.state.fundingLog || []).slice().reverse();
+    if (UI.soloActual()) arr = arr.filter((f) => (f.pair || TE.state.pair) === TE.state.pair);
+    setText('tabFundCount', arr.length);
+    if (!arr.length) { body.innerHTML = ''; if (vac) vac.classList.remove('hidden'); return; }
+    if (vac) vac.classList.add('hidden');
+    body.innerHTML = arr.map((f, i) => `<tr><td>${arr.length - i}</td><td>${U.fmtDate(f.t)}</td>`
+      + `<td class="dir-${f.side}">${f.side === 'long' ? 'LONG' : 'SHORT'}</td>`
+      + `<td class="num">${U.num(f.rate, 4)} %</td><td class="num">${U.num(f.notional, 2)}</td>`
+      + `<td class="num ${f.amount < 0 ? 'loss' : 'win'}">${U.fmtMoney(f.amount, true)}</td></tr>`).join('');
+  };
+
   UI.renderTrades = function () {
     const body = document.getElementById('tradesBody');
     const empty = document.getElementById('tradesEmpty');
-    const trades = TE.state.trades.filter((t) => t.status === 'closed').slice().reverse();
+    const trades = UI.historialVisible().filter((t) => t.status === 'closed').slice().reverse();
     const abierta = TE.state.position;
-    setText('tabTradeCount', TE.state.trades.filter((t) => t.status === 'closed').length);
+    setText('tabTradeCount', UI.historialVisible().filter((t) => t.status === 'closed').length);
     if (!trades.length && !abierta) {
       body.innerHTML = '';
       empty.classList.remove('hidden');
+      UI.renderFills(); UI.renderFunding();
       return;
     }
     empty.classList.add('hidden');
@@ -12901,6 +13078,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       </tr>`;
     }).join('');
     UI._paintTradeSparks();   // los canvas solo se pueden pintar cuando ya están en el DOM
+    // Las dos pestañas hermanas salen del MISMO historial: si no se repintaran aquí,
+    // «Historial de operación» se quedaría vacía en cuanto hay una sola operación (su
+    // rama vacía sí llamaba, la otra no - medido con la prueba de §5.4, 0 filas contra 2).
+    UI.renderFills(); UI.renderFunding();
   };
 
   /* ------------------------------- Barra replay ------------------------------- */
@@ -13674,6 +13855,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // 2) Ajustes guardados
     const s = ST.getSettings();
     App.pair = s.pair; App.interval = s.interval; App.warmup = s.warmup;
+    if (window.TE && TE.setPair) TE.setPair(App.pair);   // para el filtro «Sólo actual» del panel
     App.autoReveal = s.autoReveal; App.sizeMode = s.sizeMode;
     App.riesgo.auto = s.nivelesAuto !== false;      // leer niveles del exchange (por defecto, sí)
     {                                               // el interruptor de Ajustes nace con ese valor
@@ -13899,6 +14081,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const interval = document.getElementById('tfSelect').value;
     if (!DS.TIMEFRAMES[interval]) { U.toast('Temporalidad no válida', 'err'); return; }
     App.pair = pair; App.interval = interval;
+    if (window.TE && TE.setPair) TE.setPair(pair);
     App.aplicarRiesgoBitunix();      // niveles y ritmo de funding del símbolo que se va a cargar
 
     const tfSec = DS.TIMEFRAMES[interval].ms / 1000;

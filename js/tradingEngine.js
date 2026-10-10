@@ -77,6 +77,8 @@
        con la posición). */
     tpslCuenta: { activo: false, modo: 'pct', base: 'invertido', ambito: 'ambos', ganancia: null, perdida: null },
     pending: [],             // órdenes LÍMITE en espera (aún no ejecutadas)
+    pair: null,              // par cargado: las historias lo anotan para «Sólo actual»
+    fundingLog: [],          // [{t, side, rate, notional, amount, id}] - cada liquidación
     trades: [],              // historial (abiertas + cerradas)
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
@@ -259,6 +261,9 @@
   };
 
   /** Reinicia la cuenta al capital inicial y borra el historial. */
+  /** El par cargado lo sabe el motor para poder anotar cada operación (filtro «Sólo actual»). */
+  TE.setPair = function (p) { TE.state.pair = p || null; };
+
   TE.resetAccount = function (capital) {
     const s = TE.state;
     if (capital !== undefined) s.initialCapital = +capital;
@@ -272,6 +277,7 @@
     // de las posiciones, y sin posiciones no tiene a quién aplicar.
     s.leverageLado = { long: null, short: null };
     s.pending = [];
+    s.fundingLog = [];   // las liquidaciones cobradas son de la cuenta que se va
     s.trades = [];
     s.equitySeries = [];
     s.feesPaid = 0;
@@ -664,6 +670,7 @@
       entryBalance: s.balance,
       openFee: fee,        // comisión de apertura (ya descontada del balance)
       funding: 0,          // coste de financiación acumulado durante la posición
+      pair: s.pair || null, // el par con el que se abrió: «Sólo actual» filtra por esto
       fees: fee,
       mfe: 0, mae: 0,      // excursión favorable/adversa máxima
       bars: 0,
@@ -1144,6 +1151,11 @@
       riskUsd: p.sl !== null ? Math.abs(p.entryPrice - p.sl) * qtyClose : null,
       additions: p.additions || 0,
       parts: p.parts.length,
+      // El cierre parcial es una fila NUEVA del historial, y `parts` aquí es un número (el
+      // conteo que leen las estadísticas). Las ENTRADAS no se copian en esta fila: siguen
+      // viviendo en la posición (l.682), que es la fuente única que consulta
+      // «Historial de operación» -copiarlas sería pintar cada tramo dos veces—.
+      pair: p.pair || s.pair || null,
     };
     row.pnlPct = row.entryBalance > 0 ? (row.pnl / row.entryBalance) * 100 : 0;
     row.pnlPctPrice = row.entryPrice > 0 ? ((px - row.entryPrice) / row.entryPrice) * 100 * dir : 0;
@@ -1886,8 +1898,14 @@
       let pagado = 0, hits = 0;
       while (candle.time >= p.pagoFundingEn) {
         const dir = p.side === 'long' ? 1 : -1;
-        pagado -= dir * p.notional * (s.fundingPct / 100);
+        const golpe = -dir * p.notional * (s.fundingPct / 100);
+        pagado += golpe;
         hits++;
+        /* El registro por liquidación (no un total): es lo que hace el `Historial de financiación`
+           del sitio y lo que permite cuadrar la cuenta de una posición con tres cobros del mismo
+           día. Se anota ANTES de avanzar la agenda para que la hora sea la de la liquidación. */
+        s.fundingLog.push({ t: p.pagoFundingEn, side: p.side, rate: s.fundingPct,
+                            notional: p.notional, amount: golpe, id: p.id || null, pair: p.pair || s.pair || null });
         p.pagoFundingEn = TE._siguienteFunding(p.pagoFundingEn);
         if (hits > 1000) break;                     // reloj roto: no colgar la pestaña
       }
