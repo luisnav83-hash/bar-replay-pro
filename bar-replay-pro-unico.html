@@ -9413,6 +9413,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         e.stopPropagation();
         return;
       }
+      const boton = DT._hitChip(tp.x, tp.y);
+      if (boton) {
+        DT._touchDrag = true;
+        DT.drag = DT._arrastreCreacion(boton, tp);
+        if (DT.onTradeHandle) DT.onTradeHandle(boton, null, 'start');
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const th = DT._hitTradeHandle(tp.x, tp.y);
       if (!th) return;
       DT._touchDrag = true;
@@ -9602,9 +9611,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
        lienzo: hace falta comprobarla aqui tambien. Y es un bug que la suite de §5.7 no veia porque su
        ancla preguntaba al predicado (DT._hitTradeX) en vez de clicar con el raton: con el raton, ni la x
        del SL/TP ni la de la pastilla nueva respondian. */
-    DT.canvas.style.pointerEvents = (hit || th || mas || cruz) ? 'auto' : 'none';
+    /* Los botones TP/SL del chip también capturan: sin esto el lienzo no recibe el mousedown y no se
+       puede crear el nivel arrastrando desde ellos (lo que comprobó la sonda de arrastre). */
+    const boton = DT._hitChip(p.x, p.y);
+    DT.canvas.style.pointerEvents = (hit || th || mas || cruz || boton) ? 'auto' : 'none';
     DT.canvas.style.cursor = (cruz || mas) ? 'pointer'
-      : th ? 'grab'
+      : (th || boton) ? 'grab'
       : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
 
@@ -9632,6 +9644,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const cruce = DT._hitTradeX(p.x, p.y);
     if (cruce) {          // la × de una etiqueta manda sobre el arrastre: clic = quitar el nivel
       if (DT.onTradeClear) DT.onTradeClear(cruce.id);
+      return;
+    }
+    /* Botones TP / SL del chip de la posición: arrastrar desde ellos CREA el nivel (como en Bitunix,
+       «pulsar el botón TP/SL y arrastrar»). Van antes que las líneas: el chip está sobre la de entrada. */
+    const boton = DT._hitChip(p.x, p.y);
+    if (boton) {
+      DT.drag = DT._arrastreCreacion(boton, p);
+      DT.canvas.style.cursor = 'grabbing';
+      if (DT.onTradeHandle) DT.onTradeHandle(boton, null, 'start');
       return;
     }
     const th = DT._hitTradeHandle(p.x, p.y);
@@ -9952,6 +9973,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         ]
       : [];
     DT._rebuildHandles();
+    /* Datos del chip de la posición (cantidad, entrada, lado y margen). Sin posición, no hay chip. */
+    DT._chip = (pos && pos.entryPrice > 0) ? {
+      price: pos.entryPrice, qty: pos.qty, entryPrice: pos.entryPrice, side: lado,
+      t: (pos.entryTime === undefined ? null : pos.entryTime),
+      margen: (pos.notional > 0 && pos.leverage > 0) ? pos.notional / pos.leverage : null,
+    } : null;
   };
 
   /**
@@ -10753,6 +10780,82 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
      color y la × para quitar el nivel, separadas por un hilo #292a2b. Nosotros llevábamos una
      pestañita lisa con ⇕ pegada al borde derecho: sin cantidad, sin PnL y sin forma de borrar sin ir al
      formulario. */
+  /* Chip de la posición sobre la línea de ENTRADA, como el de Bitunix: [tamaño | PnL no realizado | TP | SL].
+     El tamaño va en el color del lado; el PnL en USDT con el signo de su color; TP y SL son los botones
+     que se arrastran para crear el nivel (en Bitunix, «pulsar el botón TP/SL y arrastrar»). */
+  DT._cajasChip = [];
+  DT._hitChip = function (x, y) {
+    const cajas = DT._cajasChip || [];
+    for (const c of cajas) {
+      if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return c.kind;
+    }
+    return null;
+  };
+
+  DT._arrastreCreacion = function (kind, p) {
+    /* Sin nivel todavía no hay handle que agarrar: el objeto de arrastre basta. `lastPrice: null` hace
+       que soltar sin mover no cree nada (la UI ignora el precio nulo al terminar). */
+    return {
+      tradeHandle: { id: kind, price: null, _grupo: null, creando: true },
+      id: kind, lastPrice: null, x0: p.x, y0: p.y, x1: p.x, y1: p.y,
+    };
+  };
+
+  DT._drawChip = function (ctx) {
+    DT._cajasChip = [];
+    const c = DT._chip;
+    if (!c || !DT._yOf) return;
+    const y = DT._yOf(c.price);
+    if (y === null || y === undefined || !Number.isFinite(y)) return;
+    const w = DT.width || 800;
+    const ALTO = 24, PAD = 8, RADIO = 4, GAP = 4;
+    const FONDO = '#1a1b1c', PELO = '#292a2b';
+    const verde = '#24c18d', rojo = '#f14b3f';
+    const colorLado = c.side === 'short' ? rojo : verde;
+    const px = (window.App && App.currentPrice) ? App.currentPrice() : c.price;
+    const pnl = (Number.isFinite(px) && TE.pnlBrutoEn) ? TE.pnlBrutoEn(px, c) : null;
+    const signo = pnl === null ? '' : (pnl < 0 ? '-' : '+');
+    const txtQty = U.num(c.qty, c.qty >= 1 ? 4 : 6);
+    const txtPnl = pnl === null ? '—' : signo + U.num(Math.abs(pnl), 2) + ' USDT';
+    const colorPnl = pnl === null || pnl === 0 ? '#919499' : (pnl > 0 ? verde : rojo);
+    ctx.save();
+    ctx.font = '12px "noto sans", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const a1 = Math.max(56, Math.ceil(ctx.measureText(txtQty).width) + PAD * 2);
+    const a2 = Math.max(64, Math.ceil(ctx.measureText(txtPnl).width) + PAD * 2);
+    const aT = 36, aS = 36;
+    const total = a1 + a2 + GAP + aT + GAP + aS;
+    const margenDcha = DT._anchoEje() + 24 + 2 + 6;
+    const xe = (c.t === null || c.t === undefined) ? null : DT._xOf(c.t);
+    const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - total - margenDcha)));
+    const cy = Math.round(y - ALTO / 2);
+    /* Tamaño: bloque sólido del lado con el número en blanco */
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(gx, cy, a1, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx, cy, a1, ALTO);
+    ctx.fillStyle = colorLado; ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillText(txtQty, gx + PAD, y + 0.5);
+    /* PnL: caja oscura con el número del color de su signo */
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(gx + a1, cy, a2, ALTO, [0, RADIO, RADIO, 0]); else ctx.rect(gx + a1, cy, a2, ALTO);
+    ctx.fillStyle = FONDO; ctx.fill();
+    ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = colorPnl; ctx.fillText(txtPnl, gx + a1 + PAD, y + 0.5);
+    /* Botones TP y SL: contorno del color del nivel */
+    const boton = (x0, texto, color, kind) => {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x0 + 0.5, cy + 0.5, aT - 1, ALTO - 1, RADIO); else ctx.rect(x0 + 0.5, cy + 0.5, aT - 1, ALTO - 1);
+      ctx.fillStyle = FONDO; ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.fillText(texto, x0 + Math.round((aT - ctx.measureText(texto).width) / 2), y + 0.5);
+      DT._cajasChip.push({ kind, x: x0, y: cy, w: aT, h: ALTO });
+    };
+    const xT = gx + a1 + a2 + GAP;
+    boton(xT, 'TP', verde, 'tp');
+    boton(xT + aT + GAP, 'SL', rojo, 'sl');
+    ctx.restore();
+  };
+
   DT._drawTradeHandles = function (ctx) {
     const ALTO = 30, RADIO = 4, PAD = 9, CRUZ = 26;
     const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
@@ -10875,7 +10978,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
          su línea en cuanto la entrada caía en el tercio derecho de la carta. */
       const xe = (h.t === null || h.t === undefined) ? null : DT._xOf(h.t);
       const anchoGrupo = anP + anC + CRUZ;
-      const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - 10)));
+      /* Como en las órdenes límite: el grupo termina ANTES del disco ⊕ (que va pegado al eje), con su
+         margen. Con el margen de 10 px la × y el PnL quedaban debajo del disco. */
+      const margenDcha = DT._anchoEje() + 24 + 2 + 6;
+      const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
       const cy = Math.round(y - ALTO / 2);
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -10897,6 +11003,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       disco(ctx, cy);
       ctx.restore();
     });
+    DT._drawChip(ctx);
     if (movido && (DT._reintentosEscala || 0) < 8) {
       DT._reintentosEscala = (DT._reintentosEscala || 0) + 1;
       requestAnimationFrame(() => { if (DT.render) DT.render(); });
@@ -13100,7 +13207,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
             U.log(`🛠 ${id.toUpperCase()} ajustado a ${U.fmtPrice(price)} arrastrando`, 'warn');
           }
         }
-        U.log(`🖱️ ${id.toUpperCase()} ajustado en el gráfico a ${U.fmtPrice(price)}`, 'warn');
+        if (price !== null) U.log(`🖱️ ${id.toUpperCase()} ajustado en el gráfico a ${U.fmtPrice(price)}`, 'warn');
         U.playSound('click');
       }
     };
