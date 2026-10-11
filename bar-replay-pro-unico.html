@@ -3566,8 +3566,9 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
         <input type="range" id="pdSlRango" min="-100" max="0" step="0.1" value="0" aria-label="Retorno del stop loss">
         <div class="modal-note">PnL bruto estimado: <b id="pdSlPnl">—</b> · cambio de precio <b id="pdSlCambio">—</b></div>
       </div>
+      <div class="modal-note" id="pdRevision" hidden></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-ghost" id="pdVolver" hidden>Volver</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button></div>
   </div>
 </div>
 
@@ -17038,6 +17039,7 @@ ${rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).joi
   }
 
   PD.abrir = function () {
+    PD._salirRevision();
     const p = TE.state.position;
     const sinPos = !p;
     $('pdInfo').textContent = sinPos ? 'No hay posición abierta: abre una para fijar su TP/SL.'
@@ -17049,25 +17051,58 @@ ${rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).joi
     pintaFila('sl', p.sl || null);
   };
 
+  /* Revisión final (como el «Confirm» de Bitunix): primer pulsar «Confirmar» muestra el resumen de lo
+     que va a cambiar; «Aplicar» lo fija en el motor. Cualquier edición vuelve al paso de edición. */
+  PD._enRevision = false;
+  PD._salirRevision = function () {
+    PD._enRevision = false;
+    const r = $('pdRevision'); if (r) { r.hidden = true; r.textContent = ''; }
+    const c = $('pdConfirmar'); if (c) c.textContent = 'Confirmar';
+    const v = $('pdVolver'); if (v) v.hidden = true;
+  };
+
+  PD._plan = function (p) {
+    const items = [], errores = [];
+    for (const k of ['tp', 'sl']) {
+      const L = K[k], txt = $('pd' + L + 'Precio').value.trim(), actual = p[k] || null;
+      if (txt === '') { if (actual !== null) items.push({ k, quitar: true }); continue; }
+      const precio = +txt;
+      if (!Number.isFinite(precio) || precio <= 0) { errores.push(`${k.toUpperCase()}: el precio no es válido`); continue; }
+      if (actual !== null && Math.abs(precio - actual) < 1e-9) continue;
+      items.push({ k, precio, pnl: TE.pnlBrutoEn(precio, p) });
+    }
+    return { items, errores };
+  };
+
   PD.confirmar = function () {
     const p = TE.state.position; if (!p) return false;
-    const pedidos = [['tp', TE.setTP], ['sl', TE.setSL]];
-    let algunoFallo = false, cambios = 0;
-    for (const [k, fn] of pedidos) {
-      const L = K[k];
-      const txt = $('pd' + L + 'Precio').value.trim();
-      const actual = p[k] || null;
-      if (txt === '') {                                   // vacío = quitar el nivel (si lo había)
-        if (actual !== null) { fn.call(TE, null); cambios++; }
-        continue;
-      }
-      const precio = +txt;
-      if (!Number.isFinite(precio) || precio <= 0) { U.toast(`${k.toUpperCase()}: el precio no es válido`, 'warn'); algunoFallo = true; continue; }
-      if (actual !== null && Math.abs(precio - actual) < 1e-9) continue;   // sin cambios: no se toca
-      if (fn.call(TE, precio)) cambios++; else algunoFallo = true;
+    const plan = PD._plan(p);
+    if (plan.errores.length) { plan.errores.forEach((e) => U.toast(e, 'warn')); return false; }
+    if (!plan.items.length) { PD._salirRevision(); UI.closeModal('modalPosTpSl'); return true; }
+    if (!PD._enRevision) {                               // paso 1: resumen
+      const r = $('pdRevision');
+      r.textContent = 'Se va a aplicar: ' + plan.items.map((it) => it.quitar
+        ? `quitar el ${it.k.toUpperCase()}`
+        : `${it.k.toUpperCase()} en ${U.fmtPrice(it.precio)} (PnL bruto ${U.fmtMoney(it.pnl, true)})`).join(' · ');
+      r.hidden = false;
+      $('pdConfirmar').textContent = 'Aplicar';
+      $('pdVolver').hidden = false;
+      PD._enRevision = true;
+      return false;
     }
-    if (!algunoFallo) { UI.closeModal('modalPosTpSl'); if (cambios) U.toast('TP/SL actualizados', 'info'); }
-    return !algunoFallo;
+    // paso 2: aplicar. Cada cambio pasa por el motor, que valida el lado.
+    const fallos = [];
+    for (const it of plan.items) {
+      const ok = it.quitar
+        ? (it.k === 'tp' ? TE.setTP(null) : TE.setSL(null))
+        : (it.k === 'tp' ? TE.setTP(it.precio) : TE.setSL(it.precio));
+      if (!ok) fallos.push(it.k.toUpperCase());
+    }
+    if (fallos.length) { U.toast(`No se pudo fijar ${fallos.join(' ni ')}: revisa el precio`, 'warn'); PD._salirRevision(); return false; }
+    PD._salirRevision();
+    UI.closeModal('modalPosTpSl');
+    U.toast('TP/SL actualizados', 'info');
+    return true;
   };
 
   function enlaza() {
@@ -17075,11 +17110,12 @@ ${rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).joi
     if (b) b.addEventListener('click', () => { PD.abrir(); UI.openModal('modalPosTpSl'); });
     ['tp', 'sl'].forEach((k) => {
       const L = K[k];
-      $('pd' + L + 'Precio').addEventListener('input', () => sincroniza(k, 'precio'));
-      $('pd' + L + 'Roi').addEventListener('input', () => sincroniza(k, 'roi'));
-      $('pd' + L + 'Rango').addEventListener('input', () => sincroniza(k, 'rango'));
+      $('pd' + L + 'Precio').addEventListener('input', () => { PD._salirRevision(); sincroniza(k, 'precio'); });
+      $('pd' + L + 'Roi').addEventListener('input', () => { PD._salirRevision(); sincroniza(k, 'roi'); });
+      $('pd' + L + 'Rango').addEventListener('input', () => { PD._salirRevision(); sincroniza(k, 'rango'); });
     });
-    document.querySelectorAll('[data-quitar]').forEach((btn) => btn.addEventListener('click', () => pintaFila(btn.dataset.quitar, null)));
+    document.querySelectorAll('[data-quitar]').forEach((btn) => btn.addEventListener('click', () => { PD._salirRevision(); pintaFila(btn.dataset.quitar, null); }));
+    const v = $('pdVolver'); if (v) v.addEventListener('click', () => PD._salirRevision());
     const c = $('pdConfirmar'); if (c) c.addEventListener('click', () => PD.confirmar());
   }
 

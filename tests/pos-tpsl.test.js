@@ -10,6 +10,10 @@ function ok(cond, msg) {
   if (cond) { pass++; console.log('  ✓ ' + msg); }
   else { fail++; console.log('  ✗ ' + msg); }
 }
+const confirmar = async (p) => {   // revisión: 1.º «Confirmar» muestra el resumen, 2.º «Aplicar» fija
+  await p.evaluate(() => document.getElementById('pdConfirmar').click()); await ESP(150);
+  await p.evaluate(() => document.getElementById('pdConfirmar').click()); await ESP(250);
+};
 const cerca = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
 
 (async () => {
@@ -85,7 +89,15 @@ const cerca = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   // Confirmar: TP y SL llegan al motor
   await p.evaluate(() => { document.getElementById('pdTpRango').value = '20'; document.getElementById('pdTpRango').dispatchEvent(new Event('input')); });
   await p.evaluate(() => document.getElementById('pdConfirmar').click());
-  await ESP(300);
+  await ESP(150);
+  const revision = await p.evaluate(() => ({ visible: !document.getElementById('pdRevision').hidden, texto: document.getElementById('pdRevision').textContent, boton: document.getElementById('pdConfirmar').textContent, abierto: document.getElementById('modalPosTpSl').classList.contains('open'), tpAun: TE.state.position.tp }));
+  ok(revision.visible && /TP en/.test(revision.texto) && /SL en/.test(revision.texto) && revision.boton === 'Aplicar' && revision.abierto && revision.tpAun === null,
+    `el primer «Confirmar» muestra el resumen («${revision.texto.slice(0, 70)}…») sin tocar el motor`);
+  await p.evaluate(() => document.getElementById('pdVolver').click()); await ESP(100);
+  const volvio = await p.evaluate(() => ({ oculto: document.getElementById('pdRevision').hidden, boton: document.getElementById('pdConfirmar').textContent }));
+  ok(volvio.oculto && volvio.boton === 'Confirmar', '«Volver» quita el resumen y devuelve el botón a «Confirmar»');
+  await p.evaluate(() => document.getElementById('pdConfirmar').click()); await ESP(150);
+  await p.evaluate(() => document.getElementById('pdConfirmar').click()); await ESP(300);
   const tras = await p.evaluate(() => ({
     tp: TE.state.position.tp, sl: TE.state.position.sl, entrada: TE.state.position.entryPrice,
     abierto: document.getElementById('modalPosTpSl').classList.contains('open'),
@@ -102,16 +114,15 @@ const cerca = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
 
   // SL por encima de la entrada en LONG: el motor lo rechaza y el diálogo se queda abierto
   await p.evaluate((e) => { const i = document.getElementById('pdSlPrecio'); i.value = (e * 1.01).toFixed(2); i.dispatchEvent(new Event('input')); }, entrada);
-  await p.evaluate(() => document.getElementById('pdConfirmar').click());
-  await ESP(200);
+  await confirmar(p);
   const rechazo = await p.evaluate((s) => ({ abierto: document.getElementById('modalPosTpSl').classList.contains('open'), sl: TE.state.position.sl, previo: s }), tras.sl);
   ok(rechazo.abierto && cerca(rechazo.sl, rechazo.previo, 1e-9), 'un SL por encima de la entrada en LONG se rechaza y el diálogo sigue abierto');
 
   // Quitar el TP con su botón
   await p.evaluate(() => { document.querySelector('[data-quitar="tp"]').click(); });
   await p.evaluate(() => document.getElementById('pdSlPrecio').value = String(TE.state.position.sl));
-  await p.evaluate(() => { document.getElementById('pdSlPrecio').dispatchEvent(new Event('input')); document.getElementById('pdConfirmar').click(); });
-  await ESP(200);
+  await p.evaluate(() => { document.getElementById('pdSlPrecio').dispatchEvent(new Event('input')); });
+  await confirmar(p);
   const quitado = await p.evaluate(() => ({ tp: TE.state.position.tp, sl: TE.state.position.sl, abierto: document.getElementById('modalPosTpSl').classList.contains('open') }));
   ok(quitado.tp === null && !quitado.abierto && quitado.sl !== null, 'Quitar el TP lo borra en el motor y el SL se queda');
 
