@@ -698,12 +698,16 @@
       t: (pos.entryTime === undefined ? null : pos.entryTime),
     } : null;
     const mk = (id, price, color, label, nivel) => Object.assign({ id, price, color, label, nivel }, extra);
-    DT._posHandles = pos && (pos.sl !== null || pos.tp !== null)
-      ? [
-          ...(pos.sl !== null ? [mk('sl', pos.sl, '#f14b3f', 'SL', 'sl')] : []),
-          ...(pos.tp !== null ? [mk('tp', pos.tp, '#24c18d', 'TP', 'tp')] : []),
-        ]
-      : [];
+    /* TP parciales (Partial TP/SL): uno por nivel, con su cantidad (o «All» si cierra la posición entera).
+       Son fijos: se quitan con su × y no se arrastran (un arrastre los confundiría con el TP entero). */
+    const tramos = pos ? (pos.tpLevels || []).map((l, i) => Object.assign(
+      mk('tplv:' + i, l.price, '#24c18d', 'TP', 'tp'),
+      { tramo: true, fijo: true, pctTramo: l.pct, qty: pos.qty * l.pct })) : [];
+    DT._posHandles = pos ? [
+      ...(pos.sl !== null ? [mk('sl', pos.sl, '#f14b3f', 'SL', 'sl')] : []),
+      ...(pos.tp !== null ? [mk('tp', pos.tp, '#24c18d', 'TP', 'tp')] : []),
+      ...tramos,
+    ] : [];
     DT._rebuildHandles();
     /* Datos del chip de la posición (cantidad, entrada, lado y margen). Sin posición, no hay chip. */
     DT._chip = (pos && pos.entryPrice > 0) ? {
@@ -792,6 +796,7 @@
     if (DT._hitTradeX(x, y)) return null;      // la × se clica, no se arrastra
     if (DT._hitTradePlus(x, y)) return null;   // idem con el disco del extremo
     for (const h of DT.tradeHandles) {
+      if (h.fijo) continue;                    // los TP parciales no se arrastran
       const hy = DT._yOf(h.price);
       if (hy === null) continue;
       if (Math.abs(y - hy) < 9 && x > hx - 26 && x < hx + 60) return h;
@@ -1754,12 +1759,12 @@
          el PnL en USDT y % sobre el margen en el centro, y la × a la derecha. Antes ponía la cantidad
          en BTC (`TP 0.0648`), que no es lo que el usuario mira en un nivel. */
       const txt = h.label;
-      const pnl = TE.pnlBrutoEn(h.price, h);
+      const pnl = h.tramo ? null : TE.pnlBrutoEn(h.price, h);
       const signo = pnl === null ? '' : (pnl < 0 ? '-' : '+');
       const roi = (pnl !== null && Number.isFinite(h.margen) && h.margen > 0) ? pnl / h.margen * 100 : null;
-      const txtPnl = pnl === null ? '' : (roi === null
+      const txtPnl = h.tramo ? (h.pctTramo >= 0.999 ? 'All' : U.num(h.qty, 4)) : (pnl === null ? '' : (roi === null
         ? signo + U.num(Math.abs(pnl), 2) + ' USDT'
-        : signo + U.num(Math.abs(pnl), 2) + ' USDT (' + signo + U.num(Math.abs(roi), 2) + '%)');
+        : signo + U.num(Math.abs(pnl), 2) + ' USDT (' + signo + U.num(Math.abs(roi), 2) + '%)'));
       ctx.font = '12px "noto sans", system-ui, sans-serif';
       ctx.textBaseline = 'middle';
       const anP = Math.max(56, Math.ceil(ctx.measureText(txt).width) + PAD * 2);
@@ -1803,7 +1808,7 @@
       ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), cy + ALTO / 2 + 0.5);
       DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
       h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
-      disco(ctx, cy);
+      if (!h.tramo) disco(ctx, cy);
       ctx.restore();
     });
     DT._drawChip(ctx);

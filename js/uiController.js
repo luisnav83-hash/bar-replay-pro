@@ -1752,6 +1752,16 @@
       }
       const pos = TE.state.position;
       if (!pos) return;
+      /* × de un TP parcial («TP | 13557.4 | ×»): quita ese nivel y deja el resto. */
+      const tramo = /^tplv:(\d+)$/.exec(String(id));
+      if (tramo) {
+        TE.removeTpLevel(+tramo[1]);
+        App.refreshOrderLines();
+        DT.setTradeHandles(TE.state.position);
+        UI.refreshPosition();
+        if (UI.refreshAll) UI.refreshAll();
+        return;
+      }
       if (id !== 'sl' && id !== 'tp') return;
       const nombre = id.toUpperCase();
       if (id === 'sl') TE.setSL(null); else TE.setTP(null);
