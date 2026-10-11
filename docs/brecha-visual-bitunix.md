@@ -504,6 +504,50 @@ la **pareja flotante sobre la carta** en la vista de carta; y las dos cosas que 
 
 ---
 
+### 5.7 · las órdenes visuales dibujadas sobre la carta (vídeo oficial medido)
+
+El enlace que pasó el usuario (`…/bitunix-assets/chart-trading/focused-trading/visual-orders.mp4`)
+es el único sitio donde se ve esta UI: **sin sesión no hay posición que dibujar**, así que la sonda
+de Chromium del §5.1 no puede medirla. Se midió **sobre el fotograma nativo** con recorte por color
+(`imageio-ffmpeg` + PIL; no hay `ffmpeg` en el PATH): el vídeo es 4800×2700 a 24 fps, un plano
+continuo de 32 s -`scdet` no encontró ningún corte, y el diff de fotogramas no aísla la interacción
+porque la carta está viva-. 4800/3 = 1600 y 2700/3 = 900: es justo el viewport de nuestras sondas de
+escritorio, así que **la calibración es ÷3** y se cruzó con un elemento ya medido en el DOM (el riel
+de dibujo: 34 px). Con eso, lo que sale del fotograma es geometría y estructura; **los hex NO salen
+del vídeo**, que está comprimido y saca el verde `#01bb79` donde el DOM real da `#24c18d` -los colores
+de la implementación son los tokens del §1-.
+
+| medido en el vídeo (px CSS) | qué es | qué hacemos |
+| --- | --- | --- |
+| grupo 30 de alto, 268 de ancho | la etiqueta que cabalga la línea | alto fijo **30**, ancho el que pida el contenido |
+| pastilla 27×119 sólida | `SL 0,1592` / `TP 0,1592` en blanco sobre el color del lado | `label + cantidad` en 12/400, relleno `#f14b3f`/`#24c18d`, radio 4 |
+| caja `#1a1b1c` al lado | el PnL firmado que daría ese nivel (`-30,8` / `+42,45`) en el color del lado | sale de `TE.pnlBrutoEn`, que es la fórmula de `closePosition` -no una copia en el lienzo- |
+| celda separada por un hilo `#292a2b` | la `×` que quita el nivel | caja de 26×30 al final del grupo; clic → `TE.setSL(null)`/`setTP(null)` + el campo del formulario se vacía + aviso |
+| nace en x=182, no en el borde derecho | la etiqueta sigue a **la vela de la orden** | `DT._xOf(entrada)` con recorte contra el borde por el ancho real del grupo |
+| línea de SL/TP discontinua, la de entrada punteada | y sin rótulo de la librería sobre la línea | `lineStyle` 2 y 1; **quitado** el `title` de SL/TP (`axisLabelVisible` sigue) |
+| banda verde/roja mientras arrastras (t=4-7 y 25-28) | zona de ganancia hacia arriba en el TP, de pérdida hacia abajo en el SL | relleno al 8,5 % del color del lado solo mientras `DT.drag` apunta a ese handle |
+
+Lo que **no** se copia todavía, que el vídeo también enseña (apuntado para no perderlo):
+
+1. **El billete al arrastrar sobre la carta vacía**: panel flotante con `Posición 63942,1/63827,1`,
+   campo de cantidad, `Market Buy` y ✓, con el riel `0 % 25 % 50 % 75 % 100 %` debajo (t=17-20). Aquí
+   la orden se sigue poniendo en el formulario; sería un modo nuevo de colocar, no un cambio de piel.
+2. **El `⊕` del extremo de la línea y su menú** (t=2-3 y 13-16): `add alert`, `Set order`,
+   `Limit/Market`, `Trigger order (Market)`, `Cancel order`, `To price`. Es un popover con acciones de
+   motor; las órdenes límite pendientes siguen con su pestaña ámbar en el borde derecho hasta que eso
+   esté diseñado.
+3. **El riel con imán / lápiz+candado / candado / ojo** y la **hora actual en negrita** en el eje de
+   tiempo, más la insignia circular de TradingView: son de la carta, no de la orden.
+
+**Contrato**: 12 anclas nuevas en `tests/bitunix.test.js` (sección I), que sube la suite a 250 ✓ 0 ✗.
+Como esto se pinta en `#overlayCanvas`, las anclas **muestrean el píxel del lienzo** (que la pastilla
+del TP sea exactamente `#24c18d`, que la del SL sea `#f14b3f`, que el tinte no se salga de la caja de
+30 px, que la banda aparezca con alfa > 0 al arrastrar y desaparezca al soltar) y no leen CSS; se
+comprueban además los golpes (`×` clickeable y fuera del arrastre, el resto de la pastilla sí agarra)
+y la aritmética (`20 / 20 / null`). El montaje del test invierte las coordenadas (`CM.yToPrice`) para
+elegir precios que caigan dentro del lienzo: a ±3 % de la entrada el TP se salía por arriba y el
+muestreo daba negro -error de medición nuestro, no de la piel-.
+
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 
 **Aplicado y medido después de aplicar:**

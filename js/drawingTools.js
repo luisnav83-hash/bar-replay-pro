@@ -64,6 +64,7 @@
     lastScreen: null,
   };
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
+  DT.onTradeClear = null;   // callback(id) → la × de la etiqueta quita el nivel (lo conecta uiController)
   DT.onChange = null;       // callback al cambiar la lista de dibujos
 
   /* ============================== INICIALIZACIÓN ============================== */
@@ -116,6 +117,13 @@
     canvas.addEventListener('touchstart', (e) => {
       if (!e.touches || !e.touches.length) return;
       const tp = DT._touchPos(e.touches[0]);
+      const cruce = DT._hitTradeX(tp.x, tp.y);
+      if (cruce) {                       // el dedo en la ×: quita el nivel y no inicia el arrastre
+        if (DT.onTradeClear) DT.onTradeClear(cruce.id);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const th = DT._hitTradeHandle(tp.x, tp.y);
       if (!th) return;
       DT._touchDrag = true;
@@ -295,7 +303,8 @@
     // el arrastre (falla el mousedown antes de llegar a _onDown).
     const th = DT._hitTradeHandle(p.x, p.y);
     DT.canvas.style.pointerEvents = (hit || th) ? 'auto' : 'none';
-    DT.canvas.style.cursor = th ? 'grab'
+    DT.canvas.style.cursor = DT._hitTradeX(p.x, p.y) ? 'pointer'
+      : th ? 'grab'
       : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
 
@@ -304,6 +313,11 @@
     const p = DT._localPos(e);
 
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
+    const cruce = DT._hitTradeX(p.x, p.y);
+    if (cruce) {          // la × de una etiqueta manda sobre el arrastre: clic = quitar el nivel
+      if (DT.onTradeClear) DT.onTradeClear(cruce.id);
+      return;
+    }
     const th = DT._hitTradeHandle(p.x, p.y);
     if (th) {
       // lastPrice: el último precio visto durante el arrastre. Al soltar no se
@@ -572,10 +586,21 @@
    * Acepta null para limpiarlos (posición cerrada).
    */
   DT.setTradeHandles = function (pos) {
+    /* Colores y datos de la etiqueta: el TP era CIAN por herencia del tema anterior, y en su modo
+       concentrado el TP es VERDE de ganancia (y el SL, su rojo); los hex son los medidos en el DOM,
+       no los del vídeo, que está comprimido y saca #01bb79. Cada handle lleva entrada, cantidad y hora
+       de entrada para que la pastilla pueda escribir `SL 0,1592` y su PnL sin inventar nada: la cuenta
+       la hace TE.pnlBrutoEn y el lienzo solo la formatea. */
+    const lado = pos && pos.side === 'short' ? 'short' : 'long';
+    const extra = pos ? {
+      qty: pos.qty, entryPrice: pos.entryPrice, side: lado,
+      t: (pos.entryTime === undefined ? null : pos.entryTime),
+    } : null;
+    const mk = (id, price, color, label, nivel) => Object.assign({ id, price, color, label, nivel }, extra);
     DT._posHandles = pos && (pos.sl !== null || pos.tp !== null)
       ? [
-          ...(pos.sl !== null ? [{ id: 'sl', price: pos.sl, color: '#ff1744', label: 'SL' }] : []),
-          ...(pos.tp !== null ? [{ id: 'tp', price: pos.tp, color: '#00e5ff', label: 'TP' }] : []),
+          ...(pos.sl !== null ? [mk('sl', pos.sl, '#f14b3f', 'SL', 'sl')] : []),
+          ...(pos.tp !== null ? [mk('tp', pos.tp, '#24c18d', 'TP', 'tp')] : []),
         ]
       : [];
     DT._rebuildHandles();
@@ -611,11 +636,24 @@
   DT._hitTradeHandle = function (x, y) {
     const w = DT.width || 800;
     const hx = w - 92;
+    if (DT._hitTradeX(x, y)) return null;      // la × se clica, no se arrastra
     for (const h of DT.tradeHandles) {
       const hy = DT._yOf(h.price);
       if (hy === null) continue;
       if (Math.abs(y - hy) < 9 && x > hx - 26 && x < hx + 60) return h;
+      const g = h._grupo;                      // la pastilla también se agarra: es su etiqueta
+      if (g && x >= g.x && x <= g.x + g.w && y >= g.y && y <= g.y + g.h) return h;
       if (DT.tool === 'cursor' && Math.abs(y - hy) <= 6 && x >= 0 && x <= hx - 26) return h;
+    }
+    return null;
+  };
+
+  /** Caja de la × de cada etiqueta (se guarda al pintar, que es cuando se sabe su x real). */
+  DT._hitTradeX = function (x, y) {
+    const cs = DT._cajasCruz;
+    if (!cs) return null;
+    for (const c of cs) {
+      if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return c;
     }
     return null;
   };
@@ -1292,25 +1330,80 @@
     ctx.restore();
   };
 
-  /** Handles de SL/TP dibujados como pestañas arrastrables. */
+  /* Anatomía de las etiquetas de nivel de su modo «focused trading», MEDIDA sobre el vídeo oficial de
+     órdenes visuales fotograma a fotograma (nativo 4800×2700 = 1600×900 CSS a dpr 3 → ÷3): el grupo
+     mide 30 px de alto y 268 de ancho, la pastilla sólida 27×119, y nace en la x de la vela de la
+     orden (x=182 en el fotograma), NO en el borde derecho. A la izquierda la pastilla con nombre y
+     cantidad en blanco sobre el color del lado; a su derecha caja #1a1b1c con el PnL firmado en ese
+     color y la × para quitar el nivel, separadas por un hilo #292a2b. Nosotros llevábamos una
+     pestañita lisa con ⇕ pegada al borde derecho: sin cantidad, sin PnL y sin forma de borrar sin ir al
+     formulario. */
   DT._drawTradeHandles = function (ctx) {
-    if (!DT.tradeHandles.length) return;
-    const w = DT.width || 800;
+    const ALTO = 30, RADIO = 4, PAD = 9, CRUZ = 26;
+    const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
+    const w = DT.width || 800, alto = DT.height || 400;
+    DT._cajasCruz = [];
     DT.tradeHandles.forEach((h) => {
       const y = DT._yOf(h.price);
+      h._grupo = null;
       if (y === null) return;
       ctx.save();
-      ctx.fillStyle = h.color;
-      ctx.globalAlpha = 0.9;
-      const txt = h.label + ' ⇕';
-      const bw = Math.max(46, Math.ceil((ctx.measureText(txt).width || 24) + 12)), bh = 14;
-      const bx = w - 92, by = y - bh / 2;
+      if (String(h.id).indexOf('limit:') === 0) {
+        /* Pendientes: conservan la pestaña del borde derecho. Su editor visual -el panel de cantidad
+           con el riel 0/25/50/75/100 % que sale en el vídeo- todavía no está copiado. */
+        ctx.fillStyle = h.color;
+        ctx.globalAlpha = 0.9;
+        const txt = h.label + ' ⇕';
+        const bw = Math.max(46, Math.ceil((ctx.measureText(txt).width || 24) + 12)), bh = 14;
+        const bx = w - 92, by = y - bh / 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 3); else ctx.rect(bx, by, bw, bh);
+        ctx.fill();
+        ctx.fillStyle = '#0a0a0b';
+        ctx.font = 'bold 10px ui-monospace, monospace';
+        ctx.fillText(txt, bx + 5, y + 3.5);
+        ctx.restore();
+        return;
+      }
+      /* La banda verde/roja que pintan MIENTRAS se arrastra el nivel (fotogramas t=4..7 y t=25..28):
+         zona de ganancia hacia arriba en el TP, de pérdida hacia abajo en el SL. */
+      if (DT.drag && DT.drag.tradeHandle && DT.drag.tradeHandle.id === h.id) {
+        ctx.globalAlpha = 0.085;
+        ctx.fillStyle = h.color;
+        if (h.id === 'tp') ctx.fillRect(0, 0, w, y); else ctx.fillRect(0, y, w, Math.max(0, alto - y));
+        ctx.globalAlpha = 1;
+      }
+      const txt = h.label + ' ' + (Number.isFinite(h.qty) && h.qty > 0 ? U.num(h.qty, 4) : U.fmtPrice(h.price));
+      const pnl = TE.pnlBrutoEn(h.price, h);
+      const txtPnl = pnl === null ? '' : (pnl < 0 ? '-' : '+') + U.num(Math.abs(pnl), 2);
+      ctx.font = '12px "noto sans", system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      const anP = Math.max(56, Math.ceil(ctx.measureText(txt).width) + PAD * 2);
+      const anC = txtPnl ? Math.max(48, Math.ceil(ctx.measureText(txtPnl).width) + PAD * 2) : 0;
+      /* Nace en la x de la vela de la orden (como en el vídeo) y solo se recorta contra el borde
+         derecho con el ancho REAL del grupo: con un margen fijo a ciegas la etiqueta se desplazaba de
+         su línea en cuanto la entrada caía en el tercio derecho de la carta. */
+      const xe = (h.t === null || h.t === undefined) ? null : DT._xOf(h.t);
+      const anchoGrupo = anP + anC + CRUZ;
+      const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - 10)));
+      const cy = Math.round(y - ALTO / 2);
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 3) : ctx.rect(bx, by, bw, bh);
-      ctx.fill();
-      ctx.fillStyle = '#0a0a0b';
-      ctx.font = 'bold 10px ui-monospace, monospace';
-      ctx.fillText(txt, bx + 5, y + 3.5);
+      if (ctx.roundRect) ctx.roundRect(gx + anP, cy, anC + CRUZ, ALTO, RADIO); else ctx.rect(gx + anP, cy, anC + CRUZ, ALTO);
+      ctx.fillStyle = FONDO; ctx.fill();
+      ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(gx, cy, anP, ALTO, RADIO); else ctx.rect(gx, cy, anP, ALTO);
+      ctx.fillStyle = h.color; ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.fillText(txt, gx + PAD, y + 0.5);
+      if (txtPnl) { ctx.fillStyle = h.color; ctx.fillText(txtPnl, gx + anP + PAD, y + 0.5); }
+      const xx = gx + anP + anC;
+      ctx.strokeStyle = PELO; ctx.beginPath();
+      ctx.moveTo(xx + 0.5, cy + 6); ctx.lineTo(xx + 0.5, cy + ALTO - 6); ctx.stroke();
+      ctx.fillStyle = TX3;
+      ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), y + 0.5);
+      DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
+      h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
       ctx.restore();
     });
   };

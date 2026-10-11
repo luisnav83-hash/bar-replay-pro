@@ -709,6 +709,18 @@
    * @param {string} reason 'manual' | 'sl' | 'tp' | 'liq' | 'reset' | 'end'
    * @param {number} time
    */
+  /* PnL BRUTO de una posición (o de la que se le pase) al precio dado, con la MISMA fórmula que
+     aplica closePosition. La etiqueta de SL/TP dibujada sobre la carta muestra exactamente este
+     número: si el dibujo hiciera su propia aritmética, a la primera comisión o funding se separaría
+     de lo que el motor liquida. Devuelve null si faltan datos (nunca un 0 inventado). */
+  TE.pnlBrutoEn = function (price, pos) {
+    const p = pos || TE.state.position;
+    if (!p || !Number.isFinite(+price)) return null;
+    if (!Number.isFinite(p.entryPrice) || !Number.isFinite(p.qty)) return null;
+    const dir = p.side === 'long' ? 1 : -1;
+    return (+price - p.entryPrice) * p.qty * dir;
+  };
+
   TE.closePosition = function (price, reason = 'manual', time, pos) {
     const s = TE.state;
     const p = pos || s.position;

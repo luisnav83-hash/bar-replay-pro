@@ -1468,6 +1468,24 @@
         U.playSound('click');
       }
     };
+    /* La × de la etiqueta dibujada sobre la carta QUITA el nivel, como en su modo concentrado. Se
+       limpia con el setter del motor a null (el único camino que avisa si el modo de riesgo exige SL),
+       se refleja en los campos del formulario -si no, la carta diría una cosa y la caja otra- y se
+       cuenta en el registro. */
+    DT.onTradeClear = (id) => {
+      const pos = TE.state.position;
+      if (!pos) return;
+      if (id !== 'sl' && id !== 'tp') return;
+      const nombre = id.toUpperCase();
+      if (id === 'sl') TE.setSL(null); else TE.setTP(null);
+      const campo = document.getElementById(id === 'sl' ? 'slInput' : 'tpInput');
+      if (campo) campo.value = '';
+      if (UI.syncTpSl) UI.syncTpSl();
+      UI.refreshPosition();
+      if (UI.refreshAll) UI.refreshAll();
+      U.log(`✖ ${nombre} quitado desde la etiqueta de la carta`, 'warn');
+      U.toast(`${nombre} quitado desde la carta`, 'info', 1800);
+    };
     // Al cambiar el tamaño de la ventana, redibujar dibujos
     global.addEventListener('resize', () => { DT.resize(); DT.render(); });
   };

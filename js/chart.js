@@ -528,9 +528,14 @@
       CM._priceLines.push(line);
     };
     const entryLabel = (pos.side === 'long' ? 'LONG' : 'SHORT') + ' ' + U.fmtPrice(pos.entryPrice);
-    mk(pos.entryPrice, COLORS.entry, entryLabel, 0);
-    if (pos.tp !== null && pos.tp !== undefined) mk(pos.tp, COLORS.tp, 'TP ' + U.fmtPrice(pos.tp));
-    if (pos.sl !== null && pos.sl !== undefined) mk(pos.sl, COLORS.sl, 'SL ' + U.fmtPrice(pos.sl));
+    /* En su modo concentrado la linea de ENTRADA es de puntos y los niveles son discontinuos, y el
+       rotulo de SL/TP NO lo escribe la libreria sobre la linea: lo lleva la pastilla que dibujamos
+       nosotros (`SL 0,1592` + PnL + ×), que nace en la x de la vela de entrada y se comería ese texto
+       (docs/brecha-visual-bitunix.md §5.7, medido sobre su vídeo de órdenes visuales). El precio sigue
+       visible en el eje (axisLabelVisible). */
+    mk(pos.entryPrice, COLORS.entry, entryLabel, 1);
+    if (pos.tp !== null && pos.tp !== undefined) mk(pos.tp, COLORS.tp, '', 2);
+    if (pos.sl !== null && pos.sl !== undefined) mk(pos.sl, COLORS.sl, '', 2);
     const liq = TE.liquidationPrice(pos);
     if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, 'LIQ ≈ ' + U.fmtPrice(liq), 1);
 

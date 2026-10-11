@@ -1716,6 +1716,102 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     await new Promise((r) => srv.close(r));
   }
 
+  /* ══════ I) LA ETIQUETA DE LA ORDEN VISUAL SOBRE LA CARTA (§5.7) ══════
+     Fuente: el vídeo oficial de Bitunix «visual-orders», medido fotograma a fotograma con recorte por
+     color sobre el nativo (4800×2700 = 1600×900 CSS a dpr 3 → los píxeles del fotograma se dividen
+     entre 3): el grupo de etiqueta mide 30 px de alto, la pastilla sólida 27×119, y nace en la x de la
+     vela de la orden (x=182 en el fotograma), con el PnL firmado y la × en una caja oscura al lado.
+     Esto se pinta en #overlayCanvas, así que no hay CSS que anclar: se muestrea el PIxel del lienzo.
+     Los precios del montaje salen de invertir las coordenadas (CM.yToPrice) para que las tres líneas
+     caigan dentro del lienzo -a 3 % de la entrada el TP se salía por arriba y el muestreo daba negro-
+     y el tiempo de la vela es el del índice del replay, que es el único que el timeScale conoce. */
+  console.log('\n▸ I) La etiqueta de la orden visual (medida sobre su vídeo, §5.7)');
+  const vis = await page.evaluate(() => {
+    const alto = DT.height || 367;
+    const enY = (f) => { const p = CM.yToPrice(Math.round(alto * f)); return p === null ? null : Math.round(p * 100) / 100; };
+    /* La vela de entrada que se elige es una con HUECO a la derecha (la etiqueta mide ~180 px): si se
+       toma la del índice del replay, que va pegada al borde, la x de la pastilla sale recortada por
+       diseño y la ancla de posición no significa nada. */
+    let t = null, xVela = null;
+    const i0 = BR.getIndex ? Math.max(0, BR.getIndex()) : 0;
+    for (let i = 0; i < CM.candles.length && xVela === null; i++) {
+      const x = CM.candles[i] ? DT._xOf(CM.candles[i].time) : null;
+      if (x !== null && x >= 20 && x <= (DT.width || 800) - 340) { t = CM.candles[i].time; xVela = x; }
+    }
+    const entrada = enY(0.46), tp = enY(0.28), sl = enY(0.62);
+    const pos = { side: 'long', entryPrice: entrada, qty: 0.1592, sl: sl, tp: tp, entryTime: t,
+      leverage: 3, margin: 50, notional: entrada * 0.1592, feePct: 0.05, openFee: 0, funding: 0,
+      mfe: 0, mae: 0, bars: 0 };
+    DT.setTradeHandles(pos);
+    try { CM.setPositionLines(pos); } catch (e) { return { err: String(e) }; }
+    DT.render();
+    const cv = DT.canvas, es = cv.width / (cv.clientWidth || 1);
+    const g2 = cv.getContext('2d', { willReadFrequently: true });
+    const lee = (x, y) => { const d = g2.getImageData(Math.round(x * es), Math.round(y * es), 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
+    const H = (d) => '#' + d.slice(0, 3).map((v) => v.toString(16).padStart(2, '0')).join('');
+    const cerca = (a, b) => Math.abs(a[0] - b[0]) <= 8 && Math.abs(a[1] - b[1]) <= 8 && Math.abs(a[2] - b[2]) <= 8;
+    const rgb = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+    const out = { xVela, anchoLienzo: Math.round(cv.clientWidth),
+      alto: Math.round(cv.clientHeight), precios: { entrada, sl, tp },
+      Handles: DT.tradeHandles.map((h) => ({ id: h.id, color: h.color, qty: h.qty, entrada: h.entryPrice, grupo: h._grupo })),
+      cruces: (DT._cajasCruz || []).map((k) => ({ id: k.id, x: k.x, y: k.y, w: k.w, h: k.h })),
+      lineas: (CM._priceLines || []).map((l) => (l.options ? (l.options().title || '') : '')).join(','),
+      nLineas: (CM._priceLines || []).length,
+      rotulosNivel: (CM._priceLines || []).filter((l) => l.options && /^(SL|TP) /.test(l.options().title || '')).length,
+      estiloEntrada: (() => { const l = (CM._priceLines || []).find((x) => x.options && /LONG|SHORT/.test(x.options().title || '')); return l ? l.options().lineStyle : null; })(),
+      estiloNivel: (() => { const l = (CM._priceLines || []).find((x) => x.options && x.options().color === '#24c18d'); return l ? l.options().lineStyle : null; })(),
+      pnl: { largo: TE.pnlBrutoEn(110, { entryPrice: 100, qty: 2, side: 'long' }),
+             corto: TE.pnlBrutoEn(90, { entryPrice: 100, qty: 2, side: 'short' }),
+             sinDatos: TE.pnlBrutoEn(110, { qty: 2, side: 'long' }) } };
+    DT.tradeHandles.forEach((h) => {
+      const g = h._grupo; if (!g) return;
+      const x = g.x + 6, y = g.y + 6, tinta = rgb(h.color);
+      const o = { grupoW: g.w, dentro: H(lee(x, y)), espera: h.color, dentroOk: cerca(lee(x, y), tinta),
+        arriba: H(lee(x, g.y - 5)), abajo: H(lee(x, g.y + g.h + 5)) };
+      o.yaQueNoPisa = !cerca(lee(x, g.y - 5), tinta) && !cerca(lee(x, g.y + g.h + 5), tinta);
+      const cruz = DT._cajasCruz.find((k) => k.id === h.id);
+      o.enCruz = (() => { const k = DT._hitTradeX(cruz.x + 13, cruz.y + 13); return k ? k.id : null; })();
+      o.arrastreEnCruz = (() => { const k = DT._hitTradeHandle(cruz.x + 13, cruz.y + 13); return k ? k.id : null; })();
+      o.golpeEnPastilla = (() => { const k = DT._hitTradeHandle(x, g.y + Math.round(g.h / 2)); return k ? k.id : null; })();
+      if (h.id === 'tp') {                       // la banda de ganancia mientras se arrastra
+        const yBanda = Math.max(2, g.y - 40);
+        DT.drag = { tradeHandle: h, id: h.id, lastPrice: h.price };
+        DT.render();
+        const durante = lee(x, yBanda);
+        DT.drag = null; DT.render();
+        o.banda = { durante: H(durante), alfa: durante[3], verde: durante[1] > durante[0] + 40 && durante[1] > durante[2] + 20 && durante[3] > 0,
+          despuesAlfa: lee(x, yBanda)[3] };
+      }
+      out['m' + h.id] = o;
+    });
+    DT.setTradeHandles(TE.state.position || null);
+    CM.clearPositionLines(); CM.setPositionLines(TE.state.position || null);
+    DT.render();
+    return out;
+  });
+  ok(!vis.err && vis.nLineas >= 3, `la posición pinta sus líneas en la carta (${vis.nLineas}: ${vis.lineas.slice(0, 54)})${vis.err ? ' — ' + vis.err : ''}`);
+  ok(vis.rotulosNivel === 0, 'SL/TP NO duplican su texto sobre la línea: el rótulo lo lleva la pastilla dibujada');
+  ok(vis.estiloEntrada === 1 && vis.estiloNivel === 2,
+    `entrada punteada y niveles discontinuos, como en su vídeo (estilos ${vis.estiloEntrada} y ${vis.estiloNivel})`);
+  ok(vis.mtp.dentroOk && vis.mtp.espera === '#24c18d',
+    `la pastilla del TP se pinta en el verde medido en el DOM, no en el cian heredado: ${vis.mtp.dentro}`);
+  ok(vis.msl.dentroOk && vis.msl.espera === '#f14b3f', `y la del SL en su rojo: ${vis.msl.dentro}`);
+  ok(vis.mtp.yaQueNoPisa && vis.msl.yaQueNoPisa
+    && vis.Handles.every((h) => h.grupo && h.grupo.h === 30),
+    `el grupo mide el alto del vídeo (30 px) y su tinte no se sale de la caja: SL ${vis.msl.arriba}→${vis.msl.abajo}, TP ${vis.mtp.arriba}→${vis.mtp.abajo}`);
+  ok(vis.cruces.length === 2 && vis.cruces.every((k) => k.w === 26 && k.h === 30),
+    `la × ocupa su propia caja de 26×30 al final del grupo, en las dos etiquetas`);
+  ok(vis.mtp.enCruz === 'tp' && vis.mtp.arrastreEnCruz === null && vis.mtp.golpeEnPastilla === 'tp',
+    'la × se clica sin iniciar arrastre, y el resto de la pastilla sí agarra el nivel');
+  ok(vis.xVela !== null && vis.Handles.every((h) => Math.abs(h.grupo.x - vis.xVela) <= 1),
+    `la etiqueta nace en la x de la vela de la entrada (${vis.xVela} px), no pegada al borde derecho`);
+  ok(vis.Handles.every((h) => h.grupo.x + h.grupo.w <= vis.anchoLienzo && h.grupo.x >= 10),
+    `y nunca desborda la carta: grupo ${vis.mtp.grupoW} px dentro de ${vis.anchoLienzo} px`);
+  ok(vis.mtp.banda && vis.mtp.banda.verde && vis.mtp.banda.despuesAlfa === 0,
+    `arrastrar el TP tiñe la zona de ganancia de verde (alfa ${vis.mtp.banda && vis.mtp.banda.alfa}, luego ${vis.mtp.banda && vis.mtp.banda.despuesAlfa})`);
+  ok(vis.pnl.largo === 20 && vis.pnl.corto === 20 && vis.pnl.sinDatos === null,
+    `el PnL del chip sale de la fórmula del cierre y null si faltan datos: ${vis.pnl.largo}/${vis.pnl.corto}/${vis.pnl.sinDatos}`);
+
   console.log('\n' + '─'.repeat(62));
   console.log(`Piel Bitunix: ${pasan} superadas, ${fallan} fallidas`);
   if (fallan === 0) console.log('✅ El terminal replica la estructura y la piel del panel de futuros sin perder función.');
