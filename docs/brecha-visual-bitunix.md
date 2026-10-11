@@ -533,10 +533,10 @@ Lo que **no** se copia todavía, que el vídeo también enseña (apuntado para n
    campo de cantidad, `Market Buy` y ✓, con el riel `0 % 25 % 50 % 75 % 100 %` debajo (t=17-20).
    **HECHO en §5.8**, con sus números sacados del DOM (no del mock) y su aritmética delegada en el
    formulario.
-2. **El `⊕` del extremo de la línea y su menú** (t=2-3 y 13-16): `add alert`, `Set order`,
-   `Limit/Market`, `Trigger order (Market)`, `Cancel order`, `To price`. Es un popover con acciones de
-   motor; las órdenes límite pendientes siguen con su pestaña ámbar en el borde derecho hasta que eso
-   esté diseñado.
+2. **El `⊕` del extremo de la línea y su menú** (t=2-3 y 13-16) — **HECHO en §5.9** en lo que aquí
+   tiene acción de motor detrás (recolocar y cancelar); `add alert` y `To price` quedan sin copiar por
+   ausencia de función, y la pastilla `[Trigger | precio | ×]` sigue abierta. Las órdenes límite
+   pendientes conservan su pestaña ámbar en el borde derecho, y ahora abren el billete en modo edición.
 3. **El riel con imán / lápiz+candado / candado / ojo** y la **hora actual en negrita** en el eje de
    tiempo, más la insignia circular de TradingView: son de la carta, no de la orden.
 
@@ -604,12 +604,90 @@ medida **después del reflujo** (`offsetHeight` nada más quitar el `hidden` dab
 billete se salía 2 px del área de carta) y el `max-height: calc(100% - 16px)` con desplazamiento
 interno, para que en la franja móvil o con los paneles de indicadores abiertos nunca desborde.
 
-**Lo que NO se copia** (siguen abierto, es interacción nueva): el **menú del `⊕`** en el extremo de la
-línea -`add alert`, `Set order`, `Limit/Market`, `Trigger order (Market)`, `Cancel order`, `To price`,
-que en el fotograma de t=17 se ve además como una pastilla `[Trigger | 64 175,1 | ×]` sentada sobre la
-línea con su pelo verde- y el **editor de las órdenes límite pendientes** (conservan su pestaña ámbar en
-el borde derecho). También quedan del riel ajeno: imán, lápiz+candado, candado y ojo, y la hora actual
-en negrita en el eje de tiempo.
+**Lo que NO se copia aquí**: el **menú del `⊕`** en el extremo de la línea -que es justo lo que se hizo
+en §5.9, con sus dos acciones de motor y lo que no se puede copiar razonablemente-. Sigue abierto el
+pastilla `[Trigger | 64 175,1 | ×]` sentada sobre la línea con su pelo verde (fotograma de t=17), y del
+riel ajeno: imán, lápiz+candado, candado y ojo, y la hora actual en negrita en el eje de tiempo.
+
+### 5.9 · el `⊕` del extremo de la línea y su menú (el billete en modo edición)
+
+**Qué enseña el vídeo.** Del `visual-orders.mp4` se sacó el cuadro de t=14,5 s (`ffmpeg -ss 14.5 -vf
+crop=1700:1400:3000:500`, 1060 px) y se **leyó**, que es la única manera de saber qué filas traía. En el
+extremo de cada línea de orden, pegado al eje de precio, hay un **disco gris con un `+` sentado sobre la
+línea**; al picarlo sale un panel con: `🕐 At 64,175.1 · add alert`, separador, `⚡ At 64,175.1 · Set order`
+con la orden en rojo (`Sell limit order`), el segmentado `Limit | Fixed Risk`, `By Cost (USDT) ▾`, el
+botón rojo `Sell`, la fila de chispas `10 % 20 % 50 % 100 %`, `+ At 64,175.1 · Trigger order (Market)` con
+sus pastillas Buy/Sell, y abajo `Cancel order` y `To price`.
+
+**Qué se copia.** El disco y las dos filas que aquí tienen una acción de motor detrás: **recolocar**
+(precio y, para una pendiente, tamaño) y **cancelar**. `✓` en modo edición no coloca una orden nueva
+encima de la vieja: retira la pendiente (`App.cancelOrder`) y la vuelve a colocar por el formulario, así
+que la cuenta de pendientes **no cambia** — que es precisamente el criterio con el que el billete sabe
+que puede cerrarse (si el recuento baja a `antes - 1`, es que la nueva fue rechazada y el billete se
+queda abierto con su aviso). Para un nivel, `✓` escribe en `TE.setSL`/`TE.setTP` y no toca ni la entrada
+ni el otro nivel (anclado).
+
+**Qué NO se copia, dicho con la comprobación hecha:**
+
+- `add alert`: no hay sistema de alertas. `grep -n "alerta" js/*.js index.html` solo devuelve avisos
+  (`U.toast`), y no hay ningún mecanismo que disparar — una fila de alertas decorosa sería un botón que
+  miente.
+- `To price`: no hay «ir al precio» que sea distinto del reposo, porque la carta se autoajusta en cada
+  barra; y `scrollToPosition` no existe en este código.
+- `Limit | Fixed Risk` y `Trigger order (Market)`: `Fixed Risk` es el modo de riesgo del margen, que
+  aquí vive en `#segMarginMode`; copiar el segmentado dentro del billete crearía un segundo sitio donde
+  se puede contradecir al primero. En su lugar **la fila de tipo se apaga** en modo edición: una pendiente
+  es límite por definición y ofrecer `Mercado` ahí sería prometer una orden que no puede quedar colgada.
+- La pastilla `[Trigger | 64 175,1 | ×]` sobre la línea sigue abierta.
+
+**Las medidas, y de dónde salen.** El disco mide **24×24**: no hay forma de sacarle una geometría al mock
+(su panel de fotograma mide ~428 px CSS, que no es CSS), así que el tamaño es el de los iconos de
+cabecera de la carta **medidos en su DOM** (`Velas`, `Indicadores técnicos`, `Crear alerta`: 24×24 en
+y=161), y su posición `x = ancho del lienzo - 24 - 2` es el borde derecho real del `#overlayCanvas`.
+Relleno `#222324` (la entrada medida), aro `#4a4d55` y `+` en `#919499` son tokens nuestros. Las chispas
+miden **28 px de alto** (la altura de fila medida en el sitio, `nav-link` 58×28), 12/400 en `--font-panel`
+sobre `#222324` con radio 4 y sin pelo; `Cancelar orden` son 28 px en `#f14b3f` (el rojo medido) a 14/500
+con un pelo superior `--line`, alineado a la izquierda, sin caja ni fondo: es una fila de menú, no un
+botón.
+
+**Las chispas no son una lista nuestra.** Se **clonan de `#quickSize [data-pct]`** en el arranque y su
+clic *dispara el botón del formulario*, así que la cuenta contra el saldo sigue viviendo en un solo sitio
+(anclado: 50 % por la chispa = 50 % por el botón, 5046,83 USDT los dos). Lo único escrito a mano es el
+` %` del rótulo, porque el `textContent` de sus botones es el número desnudo y nuestro riel ya rotula
+`50 %`. Y al abrir el menú la chispa viene **encendida** con lo que ya lleva el formulario, no cinco
+botones apagados.
+
+**La carta cambia de forma según qué línea la abrió**, que es lo que hace el suyo y no un adorno:
+pendiente → precio + importe + chispas + riel, fila roja `Cancelar orden`; SL/TP → **fuera** el importe,
+las chispas y el riel (el tamaño del nivel la posición ya lo lleva; dejarlos ahí mudos es peor que
+quitarlos) y la fila roja pasa a decir `Quitar SL` / `Quitar TP`, que borra el nivel en el motor y en el
+formulario (anclado: `sl === null` y `#slInput` vacío, y su disco desaparece del lienzo).
+
+**Cuatro defectos que solo salen midiendo, y quedaron anclados:**
+
+1. `.bf-billete-chips { display: flex }` **ganaba al `[hidden]`** del navegador: la fila, oculta, seguía
+   ocupando sus 28 px + 12 de margen, y el billete de colocar pasaba de los 279 px anclados en §5.8 a
+   319. Añadido `.bf-billete-chips[hidden] { display: none }` (la fila roja ya tenía su guarda, de ahí la
+   asimetría) y una ancla que exige expresamente que el panel de colocación **no haya crecido**.
+2. El `+` se pinta en el lienzo, y el lienzo está con `pointer-events: none` salvo que el hover reconozca
+   lo que hay debajo. Como `_onWrapMove` no conocía el disco, **el `mousedown` no llegaba a `_onDown`**:
+   el billete se abría al llamar a `DT.onTradePlus` a mano y no con el ratón. Misma trampa que ya
+   documenté con las pestañas de SL/TP en §5.7; el disco entró en esa condición.
+3. Anclar el panel al **punto del clic** (`x - ancho`) dejaba su borde derecho 2 px encima del propio `+`,
+   con lo que la única forma de volver a cerrar el menú era cerrarlo desde su `×`. Ahora `abre()` acepta
+   `xDerecha` y el panel **termina** 8 px antes del disco; de paso la línea editada queda a la vista.
+4. El billete **recuerda su tipo a propósito** (el suyo también), pero ese recuerdo se quedaba entre
+   aperturas: después de pulsar `Mercado` una vez, el `✓` colocaba a mercado y la prueba de colocación
+   dejaba una posición en vez de una pendiente. Ahora `abre()` re-aplica y repinta el tipo, y el reposo de
+   las pruebas del §5 lo devuelve a `Límite`.
+
+**Contrato**: 17 anclas nuevas en `tests/bitunix.test.js` (bloque K), que sube `test:bitunix` a
+**283 ✓ · 0 ✗**. Los vecinos, sin moverse: `responsive` 200, `dibujos` 18, `gesto` 12,
+`limite-arrastrar` 26, `dom.smoke` 51, `formulario` 33, `limites` 14, `single` en verde y
+`browser.capture` 47 con 0 errores de JavaScript. Evidencia: `docs/evidencia-5-9-menu-linea.png`
+(billete abierto desde el `⊕` de una pendiente, con su chispa de 50 % encendida y `Cancelar orden`
+debajo). La sonda funcional con la que se verificó el flujo antes de anclarlo quedó en
+`tools/sonda-5-9.js`.
 
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 

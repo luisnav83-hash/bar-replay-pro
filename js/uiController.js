@@ -1482,7 +1482,7 @@
     const BIL = document.getElementById('bfBillete');
     if (BIL) {
       const B = {
-        abierto: false, ladoActivo: 'long', tipoActivo: 'limite', precio: null,
+        abierto: false, ladoActivo: 'long', tipoActivo: 'limite', precio: null, editar: null,
         el: (id) => document.getElementById(id),
         abre(d) {
           const env = document.getElementById('chartWrap'), r = env.getBoundingClientRect();
@@ -1490,7 +1490,13 @@
           B.abierto = true;
           BIL.hidden = false;
           const ancho = Math.min(298, r.width - 16);
-          const x = Math.max(8, Math.min(d.x + 14, r.width - ancho - 8));
+          /* `xDerecha` es para el menu de la linea: el panel tiene que TERMINAR a la izquierda del
+             disco (que es lo que hace su menú, pegado al eje de precio), mientras que en la colocacion
+             arranca 14 px a la derecha del punto del golpe. Con el ancho fijo de 298, anclarlo al punto
+             del clic dejaba el panel 2 px encima de su propio +, y ahi ya no se puede volver a abrir. */
+          const x = Number.isFinite(d.xDerecha)
+            ? Math.max(8, Math.min(Math.round(d.xDerecha - ancho - 8), r.width - ancho - 8))
+            : Math.max(8, Math.min(d.x + 14, r.width - ancho - 8));
           BIL.style.left = x + 'px'; BIL.style.top = Math.max(8, d.y - 40) + 'px'; BIL.style.right = 'auto';
           const pre = B.el('bfBilletePrecio');
           pre.value = B.precio === null ? '' : U.round(B.precio, CM.decimales || 2);
@@ -1504,6 +1510,20 @@
              `hidden` da 269 por 279 reales (la cabecera y el rotulo del tamano crecen despues) y el
              billete se salia 2 px por debajo del area de carta. Si aun asi no cabe, se sube y el
              `max-height` de la hoja le mete barra de desplazamiento en vez de desbordar la carta. */
+          /* El panel vuelve a su forma de colocacion en cada apertura. Dos cosas: la fila de chispas
+             es del menu de edicion, no del billete de la herramienta (dejarla siempre visible le anadia
+             40 px al panel que §5.8 midio y anclo); y el tipo recordado hay que repintarlo, porque si no
+             el `readOnly` del precio y el boton activo vienen del billete anterior y el ✓ coloca lo que
+             la persona no esta viendo. */
+          B.el('bfBilleteChips').hidden = !B.editar;
+          B.el('bfBilleteCancela').hidden = !B.editar;
+          document.querySelector('.bf-billete-riel').hidden = false;
+          [...document.querySelectorAll('#bfBillete .bf-billete-campo')][1].hidden = false;
+          B.el('bfBilleteTipo').hidden = false;
+          B.marcaTipo(B.tipoActivo);
+          /* Y las chispas se encienden con lo que ya lleva el formulario: abrir el menu de una linea y
+             no ver cual de los cinco botones esta puesto es media respuesta. */
+          if (B.sincChips) B.sincChips();
           const real = BIL.getBoundingClientRect();
           if (real.y - r.y + real.height > r.height - 8) {
             BIL.style.top = Math.max(8, Math.round(r.height - real.height - 8)) + 'px';
@@ -1512,7 +1532,12 @@
           B.el('bfBilleteQty').focus();
         },
         cierra() {
-          B.abierto = false; BIL.hidden = true;
+          B.abierto = false; BIL.hidden = true; B.editar = null;
+          const cancela = B.el('bfBilleteCancela'); if (cancela) cancela.hidden = true;
+          [...document.querySelectorAll('#bfBillete .bf-billete-campo')][1].hidden = false;
+          B.el('bfBilleteChips').hidden = true;
+          B.el('bfBilleteTipo').hidden = false;
+          document.querySelector('.bf-billete-riel').hidden = false;
           DT.ensenaTicket(null);
         },
         /* La cabecera del bilete dice lo que dice el formulario, con sus palabras: el campo de tamano
@@ -1545,13 +1570,86 @@
            solo si la cuenta cambio de verdad -si el formulario la rechaza, el billete se queda abierto
            con su motivo encima-, por eso se compara antes y despues en vez de fiarse del click. */
         coloca() {
+          const e = B.editar;
+          if (e && (e.tipo === 'sl' || e.tipo === 'tp')) {
+            /* Un nivel NO lleva tamano: lo pone la posicion. El ✓ escribe el precio en el motor, que es
+               quien valida (SL por debajo de la entrada, TP por encima) y quien avisa si el modo de
+               riesgo no deja quitarlo. */
+            const v = parseFloat(B.el('bfBilletePrecio').value);
+            if (!Number.isFinite(v)) { U.toast('Falta el precio del nivel', 'warn'); return; }
+            if (e.tipo === 'sl') TE.setSL(v); else TE.setTP(v);
+            UI.refreshPosition();
+            if (UI.syncTpSl) UI.syncTpSl();
+            U.log(`🖱️ ${e.tipo.toUpperCase()} editado desde la etiqueta de la carta a ${U.fmtPrice(v)}`, 'warn');
+            B.cierra();
+            return;
+          }
           B.escribeCampo();
-          if (UI.setOrderType) UI.setOrderType(B.tipoActivo);
+          if (UI.setOrderType) UI.setOrderType(e ? 'limite' : B.tipoActivo);
           const cuenta = () => (TE.state.position ? 1 : 0) + (TE.state.pending || []).length;
           const antes = cuenta();
+          if (e && e.tipo === 'limit') App.cancelOrder(e.id);   // editar = retirar la pendiente y volver a colocarla, como su menu
           const boton = B.el(B.ladoActivo === 'long' ? 'btnLong' : 'btnShort');
           if (boton) boton.click();
-          if (cuenta() > antes) B.cierra();
+          const despues = cuenta();
+          if (e && e.tipo === 'limit') {
+            /* Editar no suma: retira una pendiente y coloca otra, asi que el total tiene que salir el
+               mismo. Cerrar con `cuenta() > antes` nunca cerraba el billete (y el aviso de rechazo se
+               disparaba al reves), y dejar el billete abierto sobre la linea tapando su propio disco es
+               la peor manera de terminar una edicion. */
+            if (despues >= antes) B.cierra();
+            else U.toast('La orden nueva fue rechazada: la antigua queda retirada - revisa el aviso del formulario', 'err', 5200);
+          } else if (despues > antes) B.cierra();
+        },
+        /* El disco con + de una linea abre el billete SOBRE esa linea, con su contenido dentro. Es el
+           equivalente a su menu de orden visual (add alert / set order / trigger / cancel / to price),
+           del que SOLO se copian las filas que aqui tienen detras una accion real: no hay sistema de
+           alertas en este terminal, asi que esa fila no se inventa. */
+        desdeLinea(id, donde) {
+          const h = (DT.tradeHandles || []).find((x) => x.id === id);
+          if (!h) return;
+          B.editar = null;
+          const lim = /^limit:(\d+)$/.exec(id);
+          if (lim) {
+            const o = (TE.state.pending || []).find((x) => String(x.id) === lim[1]);
+            if (!o) return;
+            B.editar = { tipo: 'limit', id: o.id };
+            B.ladoActivo = o.side === 'short' ? 'short' : 'long';
+            B.tipoActivo = 'limite';
+          } else if (id === 'sl' || id === 'tp') {
+            B.editar = { tipo: id };
+            B.ladoActivo = (TE.state.position && TE.state.position.side === 'short') ? 'short' : 'long';
+          }
+          /* El billete se sienta a la IZQUIERDA del disco, no encima: si lo anclasemos al punto del
+             golpe, el panel taparia la linea que esta editando (y su propio + para volver a abrirlo). */
+          B.abre({ x: (donde.x || 0) - 306, y: donde.y, xDerecha: donde.x, price: h.price });
+          const cancela = B.el('bfBilleteCancela');
+          if (cancela) {
+            cancela.hidden = !B.editar;
+            cancela.textContent = B.editar ? (B.editar.tipo === 'limit' ? 'Cancelar orden'
+              : (B.editar.tipo === 'sl' ? 'Quitar SL' : 'Quitar TP')) : 'Cancelar orden';
+          }
+          /* En modo nivel el tamano no pinta: se esconde su campo, sus chispas y su riel, en vez de
+             dejarlos alli mudos. */
+          const sinTamano = !!(B.editar && (B.editar.tipo === 'sl' || B.editar.tipo === 'tp'));
+          [...document.querySelectorAll('#bfBillete .bf-billete-campo')][1].hidden = sinTamano;
+          /* El tipo, fuera en modo edicion: una pendiente es por definicion limite, y ofrecer
+             `Mercado` aqui significaria prometer una orden que no puede quedar colgada. Su menu si
+             trae un segmentado (Limit | Fixed Risk), pero ese segundo boton es el modo de riesgo del
+             margen, que aqui vive en otro sitio: preferimos no copiar la fila a copiarla mintiendo. */
+          B.el('bfBilleteTipo').hidden = !!B.editar;
+          B.el('bfBilleteChips').hidden = sinTamano || !B.editar;
+          document.querySelector('.bf-billete-riel').hidden = sinTamano || !B.editar;
+        },
+        quita() {
+          const e = B.editar;
+          if (!e) return;
+          if (e.tipo === 'limit') App.cancelOrder(e.id);
+          else if (e.tipo === 'sl') { TE.setSL(null); const c = B.el('slInput'); if (c) c.value = ''; }
+          else { TE.setTP(null); const c = B.el('tpInput'); if (c) c.value = ''; }
+          if (UI.syncTpSl) UI.syncTpSl();
+          UI.refreshPosition();
+          B.cierra();
         },
         marcaLado(v) {
           B.ladoActivo = v;
@@ -1593,6 +1691,31 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && B.abierto) { B.cierra(); e.stopPropagation(); }
       });
+      DT.onTradePlus = (id, donde) => B.desdeLinea(id, donde);
+      B.el('bfBilleteCancela').addEventListener('click', () => B.quita());
+      /* Las chispas de tamano se clonan de #quickSize: mismo texto, mismo numero y MISIMO boton, que es
+         el que hace la cuenta contra el saldo. No hay lista de porcentajes propia que se pueda separar. */
+      const origen = [...document.querySelectorAll('#quickSize [data-pct]')];
+      if (origen.length) {
+        const caja = B.el('bfBilleteChips');
+        caja.innerHTML = '';
+        origen.forEach((b) => {
+          const c = document.createElement('button');
+          c.type = 'button'; c.className = 'bf-chip'; c.dataset.pct = b.dataset.pct;
+          c.textContent = b.dataset.pct + ' %';   // la cifra viene del boton clonado; el signo, del riel
+          c.title = 'Igual que el acceso rápido del formulario: ' + c.textContent;
+          c.addEventListener('click', () => {
+            b.click();
+            B.el('bfBilleteQty').value = B.el('sizeInput').value || '';
+            B.cuesta(); B.sincChips();
+          });
+          caja.appendChild(c);
+        });
+        B.sincChips = () => {
+          const activo = document.querySelector('#quickSize [data-pct].active');
+          [...caja.children].forEach((c) => c.classList.toggle('active', !!activo && c.dataset.pct === activo.dataset.pct));
+        };
+      }
       B.marcaTipo('limite');
     }
 

@@ -66,6 +66,7 @@
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
   DT.onTradeClear = null;   // callback(id) → la × de la etiqueta quita el nivel (lo conecta uiController)
   DT.onTicket = null;       // callback({x, y, price}) → la herramienta «orden» abre el billete flotante
+  DT.onTradePlus = null;    // callback(id, {x, y}) → el disco con + del extremo de la linea
   DT.onChange = null;       // callback al cambiar la lista de dibujos
 
   /* ============================== INICIALIZACIÓN ============================== */
@@ -118,6 +119,13 @@
     canvas.addEventListener('touchstart', (e) => {
       if (!e.touches || !e.touches.length) return;
       const tp = DT._touchPos(e.touches[0]);
+      const masT = DT._hitTradePlus(tp.x, tp.y);
+      if (masT) {                       // el + tactil tambien abre el billete en la linea
+        if (DT.onTradePlus) DT.onTradePlus(masT.id, { x: masT.x, y: masT.y + masT.h / 2, caja: masT });
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const cruce = DT._hitTradeX(tp.x, tp.y);
       if (cruce) {                       // el dedo en la ×: quita el nivel y no inicia el arrastre
         if (DT.onTradeClear) DT.onTradeClear(cruce.id);
@@ -302,9 +310,13 @@
     // Las pestañas de SL/TP y de órdenes límite también capturan: sin esto el
     // canvas quedaba con pointerEvents:none sobre ellas y no se podía empezar
     // el arrastre (falla el mousedown antes de llegar a _onDown).
+    const mas = DT._hitTradePlus(p.x, p.y);
     const th = DT._hitTradeHandle(p.x, p.y);
-    DT.canvas.style.pointerEvents = (hit || th) ? 'auto' : 'none';
-    DT.canvas.style.cursor = DT._hitTradeX(p.x, p.y) ? 'pointer'
+    /* El disco con + va en la condicion por el mismo motivo que las pestanas: si el hover no lo
+       conoce, el lienzo sigue con pointerEvents:none y el mousedown no llega nunca a _onDown (que es
+       como se abria el billete... pero solo cuando se llamaba a DT.onTradePlus a mano). */
+    DT.canvas.style.pointerEvents = (hit || th || mas) ? 'auto' : 'none';
+    DT.canvas.style.cursor = (DT._hitTradeX(p.x, p.y) || DT._hitTradePlus(p.x, p.y)) ? 'pointer'
       : th ? 'grab'
       : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
@@ -323,6 +335,13 @@
     }
 
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
+    /* --- 0a) El disco con + del extremo de una linea: abre el billete SOBRE esa linea, en modo
+           edicion, como su menu de orden visual. Manda sobre la x y sobre el arrastre. --- */
+    const mas = DT._hitTradePlus(p.x, p.y);
+    if (mas) {
+      if (DT.onTradePlus) DT.onTradePlus(mas.id, { x: mas.x, y: mas.y + mas.h / 2, caja: mas });
+      return;
+    }
     const cruce = DT._hitTradeX(p.x, p.y);
     if (cruce) {          // la × de una etiqueta manda sobre el arrastre: clic = quitar el nivel
       if (DT.onTradeClear) DT.onTradeClear(cruce.id);
@@ -643,10 +662,21 @@
    * - En modo cursor vale además toda la línea horizontal, para poder pincharla
    *   en cualquier punto del gráfico como en un terminal de trading.
    */
+  /** El disco con + se clica (abre el billete en la linea): nunca inicia arrastre. */
+  DT._hitTradePlus = function (x, y) {
+    const cs = DT._cajasPlus;
+    if (!cs) return null;
+    for (const c of cs) {
+      if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return c;
+    }
+    return null;
+  };
+
   DT._hitTradeHandle = function (x, y) {
     const w = DT.width || 800;
     const hx = w - 92;
     if (DT._hitTradeX(x, y)) return null;      // la × se clica, no se arrastra
+    if (DT._hitTradePlus(x, y)) return null;   // idem con el disco del extremo
     for (const h of DT.tradeHandles) {
       const hy = DT._yOf(h.price);
       if (hy === null) continue;
@@ -1372,12 +1402,29 @@
     const ALTO = 30, RADIO = 4, PAD = 9, CRUZ = 26;
     const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
     const w = DT.width || 800, alto = DT.height || 400;
-    DT._cajasCruz = [];
+    DT._cajasCruz = []; DT._cajasPlus = [];
     DT.tradeHandles.forEach((h) => {
       const y = DT._yOf(h.price);
       h._grupo = null;
       if (y === null) return;
       ctx.save();
+      /* El disco con + del extremo: en el vídeo es un círculo gris sentado sobre la línea, pegado al
+         eje de precio, y es lo que abre su menú de orden. Su tamaño NO puede salir del mock (las cifras
+         del mock no son CSS), así que se toma el de los iconos de cabecera MEDIDOS en el sitio: `Velas`,
+         `Indicadores técnicos`, `Crear alerta` miden 24×24 en y=161. Aro y relleno son tokens nuestros
+         (#222324 sobre #4a4d55, el + en #919499). Vale para los dos tipos de línea: en el vídeo el menú
+         es justamente el de la orden pendiente. */
+      const disco = (c2, dcy) => {
+        const D = 24, dcx = w - D - 2;
+        c2.beginPath(); c2.arc(dcx + D / 2, dcy + D / 2, D / 2 - 1, 0, Math.PI * 2);
+        c2.fillStyle = '#222324'; c2.fill();
+        c2.strokeStyle = '#4a4d55'; c2.lineWidth = 1; c2.stroke();
+        c2.strokeStyle = TX3; c2.beginPath();
+        c2.moveTo(dcx + D / 2 - 5, dcy + D / 2); c2.lineTo(dcx + D / 2 + 5, dcy + D / 2);
+        c2.moveTo(dcx + D / 2, dcy + D / 2 - 5); c2.lineTo(dcx + D / 2, dcy + D / 2 + 5);
+        c2.stroke();
+        DT._cajasPlus.push({ id: h.id, x: dcx, y: dcy, w: D, h: D });
+      };
       if (String(h.id).indexOf('limit:') === 0) {
         /* Pendientes: conservan la pestaña del borde derecho. Su editor visual -el panel de cantidad
            con el riel 0/25/50/75/100 % que sale en el vídeo- todavía no está copiado. */
@@ -1392,6 +1439,7 @@
         ctx.fillStyle = '#0a0a0b';
         ctx.font = 'bold 10px ui-monospace, monospace';
         ctx.fillText(txt, bx + 5, y + 3.5);
+        disco(ctx, Math.round(y - 12));
         ctx.restore();
         return;
       }
@@ -1434,6 +1482,7 @@
       ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), y + 0.5);
       DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
       h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
+      disco(ctx, cy);
       ctx.restore();
     });
   };

@@ -2710,3 +2710,24 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
      área de carta y deja el riel de marcas en la misma tipografía medida. */
   #chartWrap .bf-billete { left: 8px !important; right: 8px; width: auto; }
 }
+
+/* ═════════ BLOQUE 26 · el billete en modo edición (§5.9) ═════════
+   La fila de accesos rápidos de tamaño y la fila roja de cancelar. La altura de fila es la de sus
+   `nav-link` medidos hoy en el DOM (58×28 en la caja de los enlaces, 12/400 en la de los porcentajes),
+   el chip sale de #222324 con radio 4 como todo lo demás y el rojo es el del lado perdedor medido en
+   el sitio (#f14b3f). El disco con + del extremo no está aquí: se pinta en el lienzo, en
+   DT._drawTradeHandles. */
+.bf-billete-chips { display: flex; gap: 8px; margin-top: 12px; }
+.bf-billete-chips .bf-chip { height: 28px; min-width: 40px; padding: 0 8px; box-sizing: border-box;
+  border: 0; border-radius: 4px; background: var(--bg-3); color: var(--tx-3);
+  font: 400 12px/28px var(--font-panel); cursor: pointer; }
+/* `display:flex` en la clase gana al `[hidden]` del navegador: sin esta linea el contenedor sigue
+   ocupando sus 28 px + 12 de margen en el billete de colocacion, que es exactamente los 40 px con los
+   que el panel de §5.8 paso de 279 a 319. La fila roja de al lado ya tenia su guarda. */
+.bf-billete-chips[hidden] { display: none; }
+.bf-billete-chips .bf-chip:hover, .bf-billete-chips .bf-chip.active { color: #fff; background: #272829; }
+.bf-billete-accion { display: block; width: 100%; margin-top: 12px; height: 28px; padding: 0;
+  border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none;
+  color: var(--down); font: 500 14px/28px var(--font-panel); cursor: pointer; text-align: left; }
+.bf-billete-accion:hover { text-decoration: underline; }
+.bf-billete-accion[hidden] { display: none; }

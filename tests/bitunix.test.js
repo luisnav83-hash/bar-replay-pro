@@ -1934,7 +1934,11 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     if (UI.setOrderType) UI.setOrderType(prev.otype || 'market');
     document.body.hidden1 = 0;
     delete document.body.dataset.billeteLado;
-    if (UI.billete) { UI.billete.abierto = false; B('bfBillete').hidden = true; }
+    if (UI.billete) { UI.billete.abierto = false; UI.billete.editar = null; B('bfBillete').hidden = true;
+      /* El billete recuerda el tipo a proposito (es lo que hace el suyo), pero un bloque de prueba no
+         puede dejarlo en «mercado»: el siguiente colocaria una orden a mercado en lugar de una
+         pendiente y la ancla fallaria por un estado heredado, no por el codigo. */
+      if (UI.billete.marcaTipo) UI.billete.marcaTipo('limite'); }
     DT.ensenaTicket(null);
     document.getElementById('overlayCanvas').dispatchEvent(new Event('resize'));
     window.dispatchEvent(new Event('resize'));
@@ -1971,8 +1975,255 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(tipo.readOnly === true && tipo.activo === 'market' && tipo.orderType === 'market',
     `pasar el billete a Mercado deja el precio fuera de juego y mueve el formulario a la vez (activo ${tipo.activo})`);
   ok(tipo.cerradoPorEsc && !tipo.preview, 'Escape cierra el billete y borra su línea');
+  const bilReposo = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    DT.onTicket({ x: 300, y: 200, price: 1234.5 });
+    const out = { alto: Math.round(B('bfBillete').getBoundingClientRect().height),
+      chips: B('bfBilleteChips').hidden, cancela: B('bfBilleteCancela').hidden, tipo: B('bfBilleteTipo').hidden };
+    B('bfBillete').hidden = true; DT.ensenaTicket(null); UI.billete.abierto = false;
+    return out;
+  });
+  ok(bilReposo.chips === true && bilReposo.cancela === true && bilReposo.tipo === false
+    && bilReposo.alto <= 285,
+    `abierto desde la herramienta, el billete es el de §5.8 y no ha crecido: ${bilReposo.alto} px, sin chispas ni fila roja (${bilReposo.chips}/${bilReposo.cancela})`);
   ok(movil.cabe && movil.hueco <= 17 && movil.ocultoEnOperar,
     `en el telefono el billete cabe en la carta (${movil.ancho}px de ${movil.wrap}px, hueco ${movil.hueco}) y en la vista de operar no se ve`);
+
+
+  /* ── K) el disco ⊕ del extremo de la línea y el billete en modo edición (§5.9) ─────────────
+     El vídeo de `visual-orders` enseña que en el borde derecho de cada línea de orden hay un círculo
+     con +, y que al picarlo sale un menú pegado a esa línea (add alert · set order · trigger · cancel
+     order · to price). De esas cinco filas copiamos las dos que aquí tienen acción detrás (recolocar la
+     orden y cancelarla) y NO la de alertas: en este terminal no hay sistema de alertas -`grep alerta` en
+     js/ solo encuentra las de aviso- ni sentido en «ir al precio», porque la carta se autoajusta en cada
+     barra. Lo que sí se copia es el gesto: disco en el eje, billete encima de la línea, y el billete
+     cambiando de forma según qué línea lo abrió. */
+  const kAntes = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    return { pending: (TE.state.pending || []).length, pos: !!TE.state.position,
+      size: B('sizeInput').value, limit: B('limitInput') ? B('limitInput').value : '',
+      pct: (document.querySelector('#quickSize [data-pct].active') || { dataset: {} }).dataset.pct || null,
+      modo: (document.querySelector('#sizeModoSeg [data-mode].active') || document.querySelector('[data-mode].active') || { dataset: {} }).dataset.mode || null,
+      otype: (document.querySelector('#segOrderType .seg-btn.active') || { dataset: {} }).dataset.otype || null,
+      sl: TE.state.position ? TE.state.position.sl : null, tp: TE.state.position ? TE.state.position.tp : null,
+      chk: B('chkTpSl') ? B('chkTpSl').checked : null };
+  });
+  await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    DT.onTicket({ x: 300, y: 150, price: 71000 });
+    document.querySelector('#bfBilleteTipo [data-btipo="limite"]').click();
+    B('bfBilleteOk').click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
+  const discos = await page.evaluate(() => {
+    const w = Math.round(document.getElementById('overlayCanvas').getBoundingClientRect().width);
+    return { w, lienzo: w, cajas: (DT._cajasPlus || []).map((k) => ({ id: k.id, x: Math.round(k.x), y: Math.round(k.y), w: k.w, h: k.h })),
+      ids: (DT.tradeHandles || []).map((h) => h.id).join(','),
+      precio: (TE.state.pending[TE.state.pending.length - 1] || {}).limitPrice,
+      id: (TE.state.pending[TE.state.pending.length - 1] || {}).id };
+  });
+  const disco = discos.cajas.find((k) => k.id === 'limit:' + discos.id) || discos.cajas[0] || { id: null, x: 0, y: 0, w: 0, h: 0 };
+  const puntoK = await page.evaluate((d) => {
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { x: Math.round(r.x + d.x + d.w / 2), y: Math.round(r.y + d.y + d.h / 2), sinPendiente: !d.id };
+  }, disco);
+  /* El tamano del formulario se pone a 50 % ANTES de abrir el menu: la carta debe venir con esa chispa
+     encendida, no con las cinco apagadas. */
+  await page.evaluate(() => { document.querySelector('#quickSize [data-pct="50"]').click(); });
+  await new Promise((r) => setTimeout(r, 200));
+  await page.mouse.click(puntoK.x, puntoK.y);
+  await new Promise((r) => setTimeout(r, 380));
+  const editK = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const cs = (e) => getComputedStyle(e);
+    const caja = (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; };
+    const b = caja(B('bfBillete')), wrap = caja(B('chartWrap'));
+    const chip = document.querySelector('#bfBilleteChips .bf-chip');
+    const can = B('bfBilleteCancela');
+    return {
+      abierto: !B('bfBillete').hidden, editar: JSON.parse(JSON.stringify(UI.billete.editar || {})),
+      precio: B('bfBilletePrecio').value, qty: B('bfBilleteQty').value,
+      noTapa: (() => { const k = (DT._cajasPlus || []).find((z) => /^limit:/.test(z.id));
+        const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+        return { dentroDeLaCarta: b.x >= wrap.x - 1 && b.y >= wrap.y - 1 && b.y + b.h <= wrap.y + wrap.h + 1,
+          aLaIzquierdaDelDisco: !!k && b.x + b.w <= Math.round(r.x + k.x) }; })(),
+      tipoOculto: B('bfBilleteTipo').hidden, ladoVisible: !B('bfBilleteLado').hidden,
+      chips: [...document.querySelectorAll('#bfBilleteChips .bf-chip')].map((c) => c.textContent.trim()),
+      chipsVisibles: !B('bfBilleteChips').hidden, rielVisible: !document.querySelector('.bf-billete-riel').hidden,
+      chispaEncendida: ((document.querySelector('#bfBilleteChips .bf-chip.active') || { dataset: {} }).dataset.pct) || null,
+      formActivo: ((document.querySelector('#quickSize [data-pct].active') || { dataset: {} }).dataset.pct) || null,
+      chipsDelFormulario: [...document.querySelectorAll('#quickSize [data-pct]')].map((c) => c.dataset.pct),
+      chipsMismos: [...document.querySelectorAll('#bfBilleteChips .bf-chip')].map((c) => c.dataset.pct).join(',')
+        === [...document.querySelectorAll('#quickSize [data-pct]')].map((c) => c.dataset.pct).join(','),
+      chip: { alto: chip ? caja(chip).h : 0, ancho: chip ? caja(chip).w : 0, fondo: chip ? cs(chip).backgroundColor : '', radio: chip ? cs(chip).borderRadius : '',
+        pelo: chip ? cs(chip).borderTopWidth + ' ' + cs(chip).borderTopColor : '',
+        f: chip ? cs(chip).fontSize + '/' + cs(chip).fontWeight : '',
+        pila: chip ? cs(chip).fontFamily.split(',')[0].replace(/"/g, '') : '' },
+      cancela: { texto: can.textContent.trim(), oculto: can.hidden, alto: caja(can).h, color: cs(can).color,
+        f: cs(can).fontSize + '/' + cs(can).fontWeight, pelo: cs(can).borderTopWidth + ' ' + cs(can).borderTopColor,
+        alineado: cs(can).textAlign },
+    };
+  });
+  const delega = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const antes = (TE.state.equity ? 1 : 0) + document.getElementById('sizeInput').value;
+    const c50 = document.querySelector('#bfBilleteChips .bf-chip[data-pct="50"]');
+    if (!c50) return { error: 'sin chispa de 50 %' };
+    c50.click();
+    const porChip = B('sizeInput').value;
+    const espejo = B('bfBilleteQty').value;
+    const activo = (document.querySelector('#bfBilleteChips .bf-chip.active') || { dataset: {} }).dataset.pct;
+    /* Y el MISMO numero tiene que salir por el boton del formulario, arrancando del mismo reposo:
+       es la comprobacion de que la chispa no trae su propia cuenta. */
+    document.querySelector('#quickSize [data-pct="0"]').click();
+    document.querySelector('#quickSize [data-pct="50"]').click();
+    return { porChip, porForm: B('sizeInput').value, espejo, activo,
+      riel: !document.querySelector('.bf-billete-riel').hidden, antes };
+  });
+  const reemplaza = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const vieja = UI.billete.editar.id, cuenta = () => (TE.state.pending || []).length;
+    const antes = cuenta();
+    B('bfBilletePrecio').value = '71250';
+    B('bfBilletePrecio').dispatchEvent(new Event('input', { bubbles: true }));
+    B('bfBilleteOk').click();
+    const vivas = TE.state.pending || [];
+    return { antes, despues: vivas.length, sigueLaVieja: vivas.some((o) => o.id === vieja),
+      precio: (vivas[vivas.length - 1] || {}).limitPrice, cerrado: B('bfBillete').hidden,
+      sinDiscoViejo: !(DT._cajasPlus || []).some((k) => k.id === 'limit:' + vieja),
+      otype: document.querySelectorAll('#segOrderType [data-otype]').length };
+  });
+  /* Y la fila roja: `Cancelar orden`, que es la que cierra el menú sin dejar nada detras. */
+  await page.mouse.click(puntoK.x, puntoK.y);
+  await new Promise((r) => setTimeout(r, 320));
+  const cancelaK = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const antes = (TE.state.pending || []).length;
+    B('bfBilleteCancela').click();
+    return { antes, despues: (TE.state.pending || []).length, cerrado: B('bfBillete').hidden,
+      discosDePendientes: (DT._cajasPlus || []).filter((k) => /^limit:/.test(k.id)).length };
+  });
+  /* Un nivel (SL/TP) usa el mismo disco pero el billete cambia de forma: sin tamano, porque el nivel lo
+     lleva la posición, y con `Quitar SL` en la fila roja. */
+  await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    if (!TE.state.position) {
+      if (UI.setOrderType) UI.setOrderType('market');
+      const chk = B('chkTpSl'); if (chk && !chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change', { bubbles: true })); }
+      B('sizeInput').value = 60; B('sizeInput').dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-slpct="1"]').click();
+      document.querySelector('[data-tppct="2"]').click();
+      B('btnLong').click();
+    }
+  });
+  await new Promise((r) => setTimeout(r, 600));
+  const discoSL = await page.evaluate(() => {
+    const k = (DT._cajasPlus || []).find((z) => z.id === 'sl');
+    if (!k) return null;
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { x: Math.round(r.x + k.x + k.w / 2), y: Math.round(r.y + k.y + k.h / 2),
+      ids: (DT._cajasPlus || []).map((z) => z.id).join(',') };
+  });
+  await page.mouse.click(discoSL.x, discoSL.y);
+  await new Promise((r) => setTimeout(r, 340));
+  const nivelK = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const campos = [...document.querySelectorAll('#bf-billete, #bfBillete')].length;
+    return { editar: (UI.billete.editar || {}).tipo, cancela: B('bfBilleteCancela').textContent.trim(),
+      abierto: !B('bfBillete').hidden,
+      campoTap: [...document.querySelectorAll('#bfBillete .bf-billete-campo')][1].hidden,
+      chips: B('bfBilleteChips').hidden, riel: document.querySelector('.bf-billete-riel').hidden,
+      precio: B('bfBilletePrecio').value, sl: TE.state.position.sl, campos,
+      entrada: TE.state.position.entryPrice, tp: TE.state.position.tp };
+  });
+  const mueveNivel = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const v = Math.round(TE.state.position.entryPrice * 0.99 * 100) / 100;
+    B('bfBilletePrecio').value = String(v);
+    B('bfBilletePrecio').dispatchEvent(new Event('input', { bubbles: true }));
+    B('bfBilleteOk').click();
+    return { pedido: v, sl: TE.state.position.sl, entrada: TE.state.position.entryPrice,
+      tp: TE.state.position.tp, cerrado: B('bfBillete').hidden };
+  });
+  await page.mouse.click(discoSL.x, discoSL.y);
+  await new Promise((r) => setTimeout(r, 340));
+  const quitaNivel = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    B('bfBilleteCancela').click();
+    return { sl: TE.state.position ? TE.state.position.sl : null,
+      form: B('slInput').value, abierto: !B('bfBillete').hidden,
+      discos: (DT._cajasPlus || []).map((z) => z.id).join(',') };
+  });
+  await page.evaluate(() => { document.querySelector('[data-tool="cursor"]').click(); });
+  /* REPOSO del bloque K: se cierra la posición abierta por el bloque, se devuelven el SL/TP, el
+     formulario y su modo, y se deja el billete como estaba. */
+  await page.evaluate((prev) => {
+    const B = (id) => document.getElementById(id);
+    if (TE.state.position && !prev.pos) {
+      try { TE.closePosition(TE.state.position.entryPrice, 'manual', App.currentTime()); } catch (e) {}
+    }
+    if (TE.state.position) { TE.setSL(prev.sl); TE.setTP(prev.tp); }
+    (TE.state.pending || []).slice(prev.pending).forEach((o) => { try { TE.cancelOrder(o.id); } catch (e) {} });
+    B('sizeInput').value = prev.size;
+    if (B('limitInput')) B('limitInput').value = prev.limit;
+    if (prev.pct) { const b = document.querySelector('#quickSize [data-pct="' + prev.pct + '"]'); if (b) b.click(); }
+    else { const c = document.querySelector('#quickSize [data-pct].active'); if (c) c.classList.remove('active'); }
+    if (UI.setSizeMode && prev.modo) UI.setSizeMode(prev.modo);
+    if (UI.setOrderType) UI.setOrderType(prev.otype || 'market');
+    const chk = B('chkTpSl'); if (chk && chk.checked !== prev.chk) { chk.checked = !!prev.chk; chk.dispatchEvent(new Event('change', { bubbles: true })); }
+    if (UI.syncTpSl) UI.syncTpSl();
+    delete document.body.dataset.billeteLado;
+    if (UI.billete) { UI.billete.abierto = false; UI.billete.editar = null; B('bfBillete').hidden = true; B('bfBilleteCancela').hidden = true; B('bfBilleteChips').hidden = true; B('bfBilleteTipo').hidden = false; }
+    DT.ensenaTicket(null);
+    window.dispatchEvent(new Event('resize'));
+    if (UI.refreshAll) UI.refreshAll();
+    return true;
+  }, kAntes);
+
+  ok(discos.cajas.length >= 1 && discos.cajas.every((k) => k.w === 24 && k.h === 24)
+    && disco.x === discos.lienzo - 24 - 2 && disco.y > 0,
+    `el disco con + mide 24x24 (los iconos de cabecera medidos en el sitio) y esta pegado al eje: x=${disco.x} de un lienzo de ${discos.lienzo}`);
+  ok(editK.abierto && editK.editar.tipo === 'limit' && String(editK.editar.id) === String(discos.id)
+    && Math.abs(parseFloat(editK.precio) - discos.precio) < 0.51,
+    `el clic en el disco abre el billete EN MODO EDICION de esa orden (${editK.editar.tipo} #${editK.editar.id}, precio ${editK.precio})`);
+  ok(editK.noTapa.aLaIzquierdaDelDisco && editK.noTapa.dentroDeLaCarta,
+    'y lo ancla a la izquierda del disco, sin tapar ni la línea que edita ni su propio +');
+  ok(editK.tipoOculto === true && editK.ladoVisible === true,
+    'en edición la fila de tipo se apaga: una pendiente es límite por definición, y ofrecer Mercado sería prometer una orden que no puede quedar colgada');
+  ok(editK.chips.join(' ') === '0 % 25 % 50 % 75 % 100 %' && editK.chipsMismos
+    && editK.chips.length === editK.chipsDelFormulario.length,
+    `las chispas de tamaño no son una lista nueva: son los botones de #quickSize clonados (${editK.chips.join(' ')})`);
+  ok(editK.chispaEncendida === '50' && editK.formActivo === '50',
+    `al abrir el menu de la linea viene encendida la chispa que ya lleva el formulario (${editK.chispaEncendida} %), no las cinco apagadas`);
+  ok(editK.chipsVisibles === true && editK.rielVisible === true,
+    `las chispas salen solo en el menu de edicion: alli estan, y el riel sigue con ellas (${editK.chips.join(' ')})`);
+  ok(editK.chip.alto === 28 && editK.chip.fondo === 'rgb(34, 35, 36)' && editK.chip.radio === '4px'
+    && editK.chip.pelo.indexOf('0px') === 0 && editK.chip.f === '12px/400' && editK.chip.pila === 'Geist',
+    `chip de 28 px de alto -la altura de fila medida en el sitio- sobre #222324, radio 4, sin pelo y ${editK.chip.f} ${editK.chip.pila}`);
+  ok(editK.cancela.alto === 28 && editK.cancela.color === 'rgb(241, 75, 63)' && editK.cancela.f === '14px/500'
+    && editK.cancela.texto === 'Cancelar orden' && /^1px /.test(editK.cancela.pelo) && editK.cancela.alineado === 'left',
+    `la fila roja del menú, con su pelo superior y su texto en rojo medido: «${editK.cancela.texto}» (${editK.cancela.alto}px, ${editK.cancela.color}, ${editK.cancela.f}, ${editK.cancela.pelo})`);
+  ok(String(delega.porChip) === String(delega.porForm) && delega.espejo === delega.porForm
+    && delega.activo === '50' && delega.riel === true,
+    `la chispa no calcula nada: 50 % en el billete vale lo mismo que en el formulario (${delega.porChip} = ${delega.porForm} USDT), enciende el riel (${delega.espejo}) y el riel sigue ahi (${delega.riel})`);
+  ok(reemplaza.despues === reemplaza.antes && !reemplaza.sigueLaVieja
+    && Math.abs(reemplaza.precio - 71250) < 0.51 && reemplaza.cerrado === true
+    && reemplaza.sinDiscoViejo && reemplaza.otype === 4,
+    `el ✓ retira la pendiente vieja y coloca la nueva sin cambiar la cuenta (${reemplaza.antes} -> ${reemplaza.despues}, a ${reemplaza.precio}) y deja de existir su disco`);
+  ok(cancelaK.despues === cancelaK.antes - 1 && cancelaK.cerrado === true
+    && cancelaK.discosDePendientes === 0,
+    `«Cancelar orden» cancela de verdad: ${cancelaK.antes} -> ${cancelaK.despues} pendientes y el billete se cierra`);
+  ok(discoSL.ids === 'sl,tp' && nivelK.editar === 'sl' && nivelK.abierto
+    && Math.abs(parseFloat(nivelK.precio) - nivelK.sl) < 0.51,
+    `el disco de un nivel abre la misma carta en modo nivel (${nivelK.editar}, precio ${nivelK.precio} = SL ${nivelK.sl})`);
+  ok(nivelK.campoTap === true && nivelK.chips === true && nivelK.riel === true && nivelK.cancela === 'Quitar SL',
+    'y allí el tamaño no pinta: fuera el campo de importe, las chispas y el riel, y la fila roja pasa a decir Quitar SL');
+  ok(Math.abs(mueveNivel.sl - mueveNivel.pedido) < 0.51 && Math.abs(mueveNivel.entrada - nivelK.entrada) < 1e-6
+    && Math.abs(mueveNivel.tp - nivelK.tp) < 1e-6 && mueveNivel.cerrado === true,
+    `confirmar un nivel mueve SOLO ese nivel: SL ${mueveNivel.sl}, entrada ${mueveNivel.entrada} y TP ${mueveNivel.tp} intactos`);
+  ok(quitaNivel.sl === null && quitaNivel.form === '' && quitaNivel.abierto === false
+    && quitaNivel.discos === 'tp',
+    `«Quitar SL» borra el nivel del motor y del formulario (${quitaNivel.form === '' ? 'campo vacío' : quitaNivel.form}) y su disco desaparece: ${quitaNivel.discos}`);
 
   console.log('\n' + '─'.repeat(62));
   console.log(`Piel Bitunix: ${pasan} superadas, ${fallan} fallidas`);

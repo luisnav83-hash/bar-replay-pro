@@ -319,10 +319,17 @@
           <button type="button" class="seg-btn" data-blado="short">Vender</button>
         </div>
       </div>
+      <!-- Los accesos rapidos de tamano NO son botones nuevos: se clonan de #quickSize en JS, asi que
+           no hay cifras inventadas ni dos sitios que se separan. En su menu salen como chispas
+           `10% 20% 50% 100%` debajo del campo. -->
+      <div class="bf-billete-chips" id="bfBilleteChips" hidden></div>
       <div class="bf-billete-riel">
         <input type="range" id="bfBilletePct" min="0" max="100" step="25" value="0" aria-label="Porcentaje del saldo comprometido">
         <div class="bf-billete-marcas"><span>0 %</span><span>25 %</span><span>50 %</span><span>75 %</span><span>100 %</span></div>
       </div>
+      <!-- La fila roja, que en su menu es `Cancel order`: solo aparece en modo edicion (billete abierto
+           desde el disco de una linea). -->
+      <button type="button" class="bf-billete-accion" id="bfBilleteCancela" hidden>Cancelar orden</button>
     </div>
 
       <!-- Leyenda OHLC flotante -->
