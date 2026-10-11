@@ -2225,6 +2225,178 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     && quitaNivel.discos === 'tp',
     `«Quitar SL» borra el nivel del motor y del formulario (${quitaNivel.form === '' ? 'campo vacío' : quitaNivel.form}) y su disco desaparece: ${quitaNivel.discos}`);
 
+
+  /* ── L) la pastilla `Límite | precio | ×` de las pendientes (§5.10) ──────────────────────
+     En el fotograma de t=17 cada línea de orden lleva un cartel sentado SOBRE la línea, de tres
+     compartimentos separados por un pelo de 1 px -`Trigger | 64 175,1 | ×`-. Aquí la palabra del
+     primer compartimento no se inventa: es la que el propio formulario tiene para ese tipo de orden, y la
+     x del tercero cancela la orden (no «quita un nivel»: una pendiente puede colgar sin posición). La
+     pestaña ámbar con `⇕` que había en este sitio era invento de §5.7 y hacía lo mismo con menos
+     información: se retira. Y este bloque es también la prueba de que las x se clicaN DE VERDAD con el
+     ratón, cosa que la ancla de §5.7 preguntaba solo al predicado. */
+  const LAntes = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    return { pending: (TE.state.pending || []).length, pos: !!TE.state.position,
+      sl: TE.state.position ? TE.state.position.sl : null,
+      size: B('sizeInput').value, limit: B('limitInput') ? B('limitInput').value : '',
+      pct: (document.querySelector('#quickSize [data-pct].active') || { dataset: {} }).dataset.pct || null,
+      otype: (document.querySelector('#segOrderType .seg-btn.active') || { dataset: {} }).dataset.otype || null };
+  });
+  await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    DT.onTicket({ x: 300, y: 150, price: 71000 });
+    document.querySelector('#bfBilleteTipo [data-btipo="limite"]').click();
+    B('bfBilleteOk').click();
+  });
+  await new Promise((r) => setTimeout(r, 650));
+  await page.click('[data-tool="cursor"]');
+  await new Promise((r) => setTimeout(r, 200));
+  const Lpasta = await page.evaluate(() => {
+    const h = (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)) || {};
+    const g = h._grupo || null;
+    const cv = document.getElementById('overlayCanvas'), ctx = cv.getContext('2d');
+    const dpr = cv.width / cv.getBoundingClientRect().width;
+    const hex = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+      return '#' + [d[0], d[1], d[2]].map((n) => n.toString(16).padStart(2, '0')).join(''); };
+    const cruz = (DT._cajasCruz || []).find((k) => /^limit:/.test(k.id)) || null;
+    const disco = (DT._cajasPlus || []).find((k) => /^limit:/.test(k.id)) || null;
+    const tonos = [];
+    if (g) for (let x = g.x; x < g.x + g.w; x++) for (const y of [g.y + 4, g.y + Math.round(g.h / 2), g.y + g.h - 5]) tonos.push(hex(x, y));
+    const cerca = (a, b) => parseInt(a.slice(1, 3), 16) - parseInt(b.slice(1, 3), 16) <= 12
+      && parseInt(a.slice(3, 5), 16) - parseInt(b.slice(3, 5), 16) <= 12
+      && parseInt(a.slice(5, 7), 16) - parseInt(b.slice(5, 7), 16) <= 12;
+    const tienede = (c) => tonos.some((t) => cerca(t, c));
+    return { id: h.id, precio: h.price, color: h.color, tipo: h.tipo, palabra: DT._palabraTipo(h.tipo),
+      grupo: g ? { x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.w), h: Math.round(g.h) } : null,
+      relleno: g ? hex(g.x + 3, g.y + 3) : null,
+      x: cruz ? { id: cruz.id, w: cruz.w, h: cruz.h, x: Math.round(cruz.x), derecha: Math.round(cruz.x + cruz.w) } : null,
+      disco: disco ? { x: Math.round(disco.x), w: disco.w } : null,
+      lienzo: Math.round(cv.getBoundingClientRect().width),
+      /* La fila que la libreria le da a ese precio AHORA: si el lienzo no se volvio a pintar con la
+         escala ya asentada, la pastilla queda flotando sobre otra vela (es lo que delataba una captura
+         tomada mientras la autoescala animaba). */
+      yDeLibreria: (() => { try { const c = CM.series.candles.priceToCoordinate(h.price);
+        return c === null || c === undefined ? null : Math.round(c); } catch (e) { return null; } })(),
+      xBarra: h.t === undefined || h.t === null ? null : Math.round(DT._xOf(h.t)),
+      tonos: { fondo: tienede('#1a1b1c'), pelo: tienede('#292a2b'), blanco: tienede('#ffffff'),
+        ambar: tienede('#ffab00'), gris: tienede('#919499') },
+      etiquetasConX: (DT._cajasCruz || []).map((k) => k.id).join(',') };
+  });
+  /* Un clic (pulsar y soltar sin mover) en el numero abre el mismo editor que el + del eje. */
+  const Lclic = await page.evaluate(() => {
+    const h = (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)); const g = h._grupo;
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { x: Math.round(r.x + g.x + g.w - 26 - 34), y: Math.round(r.y + g.y + g.h / 2) };
+  });
+  await page.mouse.click(Lclic.x, Lclic.y);
+  await new Promise((r) => setTimeout(r, 360));
+  const Ledit = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const h = (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)); const g = h._grupo;
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    const b = B('bfBillete').getBoundingClientRect();
+    return { abierto: !B('bfBillete').hidden, editar: JSON.parse(JSON.stringify(UI.billete.editar || {})),
+      precio: B('bfBilletePrecio').value, orden: h.price,
+      noTapaLaPastilla: b.right <= Math.round(r.x + g.x) };
+  });
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 200));
+  /* Y la × de la pastilla cancela la ORDEN con el raton de verdad (el pointer-events del lienzo tiene
+     que conocerla: si no, el mousedown se queda en el envoltorio y la ancla de predicado lo tapa). */
+  const Lcruz = await page.evaluate(() => {
+    const k = (DT._cajasCruz || []).find((z) => /^limit:/.test(z.id));
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { antes: (TE.state.pending || []).length, hover: (() => { const e = DT.canvas.style.pointerEvents; return e; })(),
+      x: Math.round(r.x + k.x + k.w / 2), y: Math.round(r.y + k.y + k.h / 2) };
+  });
+  await page.mouse.move(Lcruz.x, Lcruz.y);
+  await new Promise((r) => setTimeout(r, 120));
+  const Lhabilitado = await page.evaluate(() => DT.canvas.style.pointerEvents);
+  await page.mouse.down(); await page.mouse.up();
+  await new Promise((r) => setTimeout(r, 500));
+  const Lcancelada = await page.evaluate(() => ({ antes: (window.__Lantes || 0),
+    pendientes: (TE.state.pending || []).length,
+    pastillas: (DT._cajasCruz || []).filter((k) => /^limit:/.test(k.id)).length,
+    discos: (DT._cajasPlus || []).filter((k) => /^limit:/.test(k.id)).length,
+    canceloEnElMotor: !(TE.state.pending || []).length }));
+  /* Arrastrar la pastilla sigue moviendo la orden, y el numero pinta el precio en vivo. */
+  await page.evaluate(() => { DT.onTicket({ x: 300, y: 150, price: 71000 });
+    document.querySelector('#bfBilleteTipo [data-btipo="limite"]').click();
+    document.getElementById('bfBilleteOk').click(); });
+  await new Promise((r) => setTimeout(r, 650));
+  await page.click('[data-tool="cursor"]'); await new Promise((r) => setTimeout(r, 200));
+  const Larr = await page.evaluate(() => {
+    const h = (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)); const g = h._grupo;
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { x: Math.round(r.x + g.x + 10), y: Math.round(r.y + g.y + g.h / 2), antes: h.price, yAntes: Math.round(g.y) };
+  });
+  await page.mouse.move(Larr.x, Larr.y); await new Promise((r) => setTimeout(r, 120));
+  await page.mouse.down(); await new Promise((r) => setTimeout(r, 80));
+  await page.mouse.move(Larr.x, Larr.y + 26, { steps: 6 }); await new Promise((r) => setTimeout(r, 160));
+  const Lvivo = await page.evaluate(() => ({ arrastrando: !!(DT.drag && DT.drag.tradeHandle),
+    ultimo: DT.drag && DT.drag.lastPrice, pendientes: (TE.state.pending || []).length }));
+  await page.mouse.up(); await new Promise((r) => setTimeout(r, 500));
+  const Lmovida = await page.evaluate((a) => {
+    const h = (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)) || {};
+    return { ahora: (TE.state.pending[0] || {}).limitPrice, antes: a.antes, pendientes: (TE.state.pending || []).length,
+      yAhora: h._grupo ? Math.round(h._grupo.y) : null, yAntes: a.yAntes };
+  }, Larr);
+  /* Donde no hay linea no hay pastilla: un `Activador` sin limite asociado no tiene que rotularse
+     encima de la nada (y no se le escribe en `limitPrice` al arrastrarlo: el panel lee ese campo como
+     precio de la orden). Se comprueba alimentando al pintor, sin tocar el formulario. */
+  const Ltrigger = await page.evaluate(() => {
+    const reales = (TE.state.pending || []).slice();
+    DT.setPendingHandles([{ id: 990, limitPrice: null, tipo: 'trigger', side: 'long' },
+      { id: 991, limitPrice: 71000, tipo: 'limite', side: 'long' }]);
+    DT.render();
+    const out = {
+      handles: (DT.tradeHandles || []).filter((h) => /^limit:/.test(h.id)).map((h) => h.id + ':' + h.price).join(','),
+      cruces: (DT._cajasCruz || []).filter((k) => /^limit:/.test(k.id)).map((k) => k.id).join(','),
+      pastillas: (DT.tradeHandles || []).filter((h) => /^limit:/.test(h.id) && h._grupo).map((h) => h.id).join(','),
+    };
+    DT.setPendingHandles(reales); DT.render();
+    return out;
+  });
+  /* REPOSO de L: se deshace la pendiente del bloque y se deja el formulario como estaba. */
+  await page.evaluate((prev) => {
+    const B = (id) => document.getElementById(id);
+    (TE.state.pending || []).slice(prev.pending).forEach((o) => { try { TE.cancelOrder(o.id); } catch (e) {} });
+    B('sizeInput').value = prev.size;
+    if (B('limitInput')) B('limitInput').value = prev.limit;
+    if (prev.pct) { const b = document.querySelector('#quickSize [data-pct="' + prev.pct + '"]'); if (b) b.click(); }
+    if (UI.setOrderType) UI.setOrderType(prev.otype || 'market');
+    delete document.body.dataset.billeteLado;
+    if (UI.billete) { UI.billete.abierto = false; UI.billete.editar = null; B('bfBillete').hidden = true;
+      if (UI.billete.marcaTipo) UI.billete.marcaTipo('limite'); }
+    DT.ensenaTicket(null);
+    window.dispatchEvent(new Event('resize'));
+    if (UI.refreshAll) UI.refreshAll();
+    return true;
+  }, LAntes);
+
+  ok(Lpasta.grupo && Lpasta.grupo.h === 30 && Lpasta.x && Lpasta.x.w === 26 && Lpasta.x.h === 30
+    && Lpasta.grupo.w > 120,
+    `la pendiente lleva pastilla de 30 px de alto y tres compartimentos (grupo ${Lpasta.grupo.w}×${Lpasta.grupo.h} con su × de ${Lpasta.x.w}) - no los 14 de la pestana inventada`);
+  ok(Lpasta.palabra === 'Límite' && Lpasta.tonos.ambar && Lpasta.tonos.blanco,
+    `la palabra del primer compartimento es la del formulario para ese tipo («${Lpasta.palabra}», en el color de su línea) y el número va en blanco`);
+  ok(Lpasta.relleno === '#1a1b1c' && Lpasta.tonos.fondo && Lpasta.tonos.pelo && Lpasta.tonos.gris,
+    `su caja es la de las etiquetas de la carta: relleno ${Lpasta.relleno} muestreado en el lienzo, pelo ${Lpasta.tonos.pelo ? '#292a2b' : 'NINGUNO'} y × en ${Lpasta.tonos.gris ? '#919499' : 'NINGUNO'}`);
+  ok(Lpasta.xBarra !== null && Lpasta.grupo.x <= Lpasta.xBarra && Lpasta.x.derecha < Lpasta.disco.x,
+    `nace en la x de su barra (${Lpasta.xBarra} → pastilla en ${Lpasta.grupo.x}) y su × termina antes de que empiece el disco ⊕ (${Lpasta.x.derecha} < ${Lpasta.disco.x}), que era como se tapaban el uno al otro`);
+  ok(Ledit.abierto && Ledit.editar.tipo === 'limit' && Math.abs(parseFloat(Ledit.precio) - Ledit.orden) < 0.51
+    && Ledit.noTapaLaPastilla,
+    `un clic real en el número abre el mismo editor que el + (${Ledit.editar.tipo} #${Ledit.editar.id}, precio ${Ledit.precio}) sin tapar la pastilla`);
+  ok(Lhabilitado === 'auto' && Lcancelada.pendientes === Lcruz.antes - 1
+    && Lcancelada.pastillas === 0 && Lcancelada.discos === 0,
+    `y un clic real en su × cancela la ORDEN (${Lcruz.antes} → ${Lcancelada.pendientes} pendientes, pastilla y disco fuera) porque el hover ahora la conoce (pointer-events ${Lhabilitado})`);
+  ok(Lvivo.arrastrando && Math.abs(Lvivo.ultimo - Larr.antes) > 50 && Lmovida.pendientes === 1
+    && Math.abs(Lmovida.ahora - Lvivo.ultimo) < 0.51,
+    `arrastrar la pastilla mueve la orden y el número pinta el precio en vivo (${Larr.antes} → ${Lmovida.ahora}, una sola pendiente) y la etiqueta le sigue (${Larr.yAntes} → ${Lmovida.yAhora} px)`);
+  ok(Lpasta.yDeLibreria !== null && Math.abs((Lpasta.grupo.y + Lpasta.grupo.h / 2) - Lpasta.yDeLibreria) <= 2,
+    `la pastilla esta sentada SOBRE su linea: su centro (fila ${Lpasta.grupo.y + Lpasta.grupo.h / 2}) cae en la fila que la libreria da para ese precio (${Lpasta.yDeLibreria}) - y si la autoescala se mueve, el lienzo se repinta`);
+  ok(Ltrigger.pastillas === 'limit:991' && Ltrigger.cruces === 'limit:991' && Ltrigger.handles === 'limit:991:71000',
+    `donde la carta no pinta línea no hay pastilla: el Activador sin límite se queda sin cartel, sin × y sin handle (handles ${Ltrigger.handles} · pastillas ${Ltrigger.pastillas} · cruces ${Ltrigger.cruces}) - y así se arregla de paso la pestaña que se le clavaba arriba del todo`);
+
   console.log('\n' + '─'.repeat(62));
   console.log(`Piel Bitunix: ${pasan} superadas, ${fallan} fallidas`);
   if (fallan === 0) console.log('✅ El terminal replica la estructura y la piel del panel de futuros sin perder función.');

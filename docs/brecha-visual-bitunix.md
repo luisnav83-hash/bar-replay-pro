@@ -536,7 +536,8 @@ Lo que **no** se copia todavía, que el vídeo también enseña (apuntado para n
 2. **El `⊕` del extremo de la línea y su menú** (t=2-3 y 13-16) — **HECHO en §5.9** en lo que aquí
    tiene acción de motor detrás (recolocar y cancelar); `add alert` y `To price` quedan sin copiar por
    ausencia de función, y la pastilla `[Trigger | precio | ×]` sigue abierta. Las órdenes límite
-   pendientes conservan su pestaña ámbar en el borde derecho, y ahora abren el billete en modo edición.
+   pendientes: su pestaña ámbar del borde derecho fue RETIRADA en §5.10 y sustituida por el cartel de tres
+   compartimentos que sale en el fotograma, que es además el agarre del arrastre.
 3. **El riel con imán / lápiz+candado / candado / ojo** y la **hora actual en negrita** en el eje de
    tiempo, más la insignia circular de TradingView: son de la carta, no de la orden.
 
@@ -605,9 +606,9 @@ billete se salía 2 px del área de carta) y el `max-height: calc(100% - 16px)` 
 interno, para que en la franja móvil o con los paneles de indicadores abiertos nunca desborde.
 
 **Lo que NO se copia aquí**: el **menú del `⊕`** en el extremo de la línea -que es justo lo que se hizo
-en §5.9, con sus dos acciones de motor y lo que no se puede copiar razonablemente-. Sigue abierto el
-pastilla `[Trigger | 64 175,1 | ×]` sentada sobre la línea con su pelo verde (fotograma de t=17), y del
-riel ajeno: imán, lápiz+candado, candado y ojo, y la hora actual en negrita en el eje de tiempo.
+en §5.9, con sus dos acciones de motor y lo que no se puede copiar razonablemente-. Sigue abierto del riel
+ajeno: imán, lápiz+candado, candado y ojo, y la hora actual en negrita en el eje de tiempo. (El cartel
+`[Trigger | 64 175,1 | ×]` sobre la línea quedó HECHO en §5.10, con su `×` y su palabra del formulario.)
 
 ### 5.9 · el `⊕` del extremo de la línea y su menú (el billete en modo edición)
 
@@ -638,7 +639,8 @@ ni el otro nivel (anclado).
   aquí vive en `#segMarginMode`; copiar el segmentado dentro del billete crearía un segundo sitio donde
   se puede contradecir al primero. En su lugar **la fila de tipo se apaga** en modo edición: una pendiente
   es límite por definición y ofrecer `Mercado` ahí sería prometer una orden que no puede quedar colgada.
-- La pastilla `[Trigger | 64 175,1 | ×]` sobre la línea sigue abierta.
+- La pastilla `[Trigger | 64 175,1 | ×]` sobre la línea: **hecha en §5.10** (con su `×` que cancela la
+  orden y su palabra tomada del formulario); lo que no se copia es editar el número **dentro** del lienzo.
 
 **Las medidas, y de dónde salen.** El disco mide **24×24**: no hay forma de sacarle una geometría al mock
 (su panel de fotograma mide ~428 px CSS, que no es CSS), así que el tamaño es el de los iconos de
@@ -688,6 +690,76 @@ formulario (anclado: `sl === null` y `#slInput` vacío, y su disco desaparece de
 (billete abierto desde el `⊕` de una pendiente, con su chispa de 50 % encendida y `Cancelar orden`
 debajo). La sonda funcional con la que se verificó el flujo antes de anclarlo quedó en
 `tools/sonda-5-9.js`.
+
+### 5.10 · la pastilla `Límite | precio | ×` sobre la línea de la orden
+
+**Qué enseña el fotograma.** Leído a resolución nativa (el `.mp4` da 4800×2700; el recorte de t=17 en
+`/tmp/nativo17.png`), sobre la línea de orden hay un **cartel de tres compartimentos** -`Trigger |
+64,175.1 | ×`- con dos pelos de 1 px entre ellos, sentado **encima de la línea**, y en el extremo derecho
+el disco `⊕` que ya tenía su sitio pegado al eje. Es decir: la línea se etiqueta, se edita y se cancela
+desde su propio cartel, sin ir al panel.
+
+**Qué se copia.** El cartel, con sus tres compartimentos y su `×`. En nosotros dice
+`Límite | 68,007.40 | ×`, y la palabra **no la inventa el pintor**: es la que el propio formulario tiene
+para el tipo de esa orden (`#segOrderType [data-otype="limite"]` → `DT._palabraTipo(h.tipo)`; para un
+`Activador` saldría `Activador`). copiar literalmente `Trigger` sería mentir: una pendiente nuestra es
+límite. La `×` **cancela la orden** (`App.cancelOrder`), no «quita un nivel»: una pendiente puede colgar
+sin ninguna posición abierta, y ese era el caso que el `onTradeClear` de §5.7 devolvía por `!pos`.
+
+**Qué se retira.** La pestaña ámbar con `⇕` que había en este sitio era invento de §5.7: hacía lo mismo
+(agarrar y mover) con menos información y 14 px de alto en vez de los 30 de una etiqueta. Al quitarla
+salió un bug viejo suyo: `CM.priceToY(null)` **no** devuelve `null`, devuelve un número, así que un
+`Activador` o un `Trailing` pendiente -cuya línea la carta no pinta porque `CM.setPendingLines` solo lee
+`o.limitPrice`- recibía su pestaña clavada arriba del todo. Ahora `DT.setPendingHandles` filtra las
+órdenes sin precio de línea: donde no hay línea no hay etiqueta (y no se le escribe `limitPrice` al
+arrastrar, porque el panel lee ese campo como el precio de la orden).
+
+**El color del número, dicho con su medición**: en el fotograma el texto del cartel muestreado sale
+`#838287` (gris), así que de ahí no se puede afirmar que fuera verde; se queda el blanco de §5.7 para el
+número y el color de la línea (`COLORS.limit` = `#ffab00`, el `--warn` de siempre) para la palabra. Caja
+`#1a1b1c`, pelos `#292a2b`, `×` en `#919499` - los mismos tokens medidos en el DOM que sujetan las
+etiquetas de SL/TP, verificados aquí muestreando el propio lienzo (el relleno de la pastilla sale
+`#1a1b1c` exacto).
+
+**Interacciones, y las tres que estaban rotas de antes:**
+
+- **Clic sin arrastre** (≤2 px de viaje) sobre el cartel abre el **mismo billete en modo edición** que el
+  `⊕`, anclado a la izquierda de la pastilla para no taparla (`_onUp` → `DT._clicPastilla`, que
+  además **no comite** el `end`: si el gesto no movió, no hay precio nuevo que soltar).
+- **La `×` cancela con el ratón**. Esto arreglaba un hueco de §5.7: su ancla preguntaba al predicado
+  (`DT._hitTradeX`) y el predicado estaba bien, pero el `mousedown` real nunca llegaba porque
+  `_onWrapMove` no encendía `pointer-events` para las `×` -el lienzo las cubría con `none`, y como
+  `_hitTradeHandle` devuelve `null` a propósito en la `×`, nada las habilitaba. Ahora el hover conoce la
+  `×` y el `+`, y el bloque L lo prueba clicando de verdad en los dos casos.
+- **Arrastrar el cartel mueve la orden** (`App.moveLimitOrder`, una sola pendiente antes y después) y el
+  número del cartel pinta el precio **en vivo** mientras dura el gesto.
+- **La pastilla no puede tapar el `⊕`**: su margen derecho es el borde izquierdo del disco
+  (`24 + 2 + 6`), no el borde del lienzo; con el margen viejo la `×` quedaba literalmente debajo del disco
+  -que se comprueba antes- y el clic abría el billete en lugar de cancelar.
+
+**Las dos lecciones de captura de esta pasada**, porque ambas eran falsos positivos míos y una de ellas
+casi me hace «arreglar» algo que no estaba roto:
+
+1. El lienzo de las velas se repinta en `requestAnimationFrame`; si el `screenshot` se dispara sin esperar,
+   la carta sale **negra** (0,31 % de píxeles no negros en la zona de velas) aunque el `overlayCanvas` -que
+   se pinta sincrónico- salga perfecto. Esperar dos frames deja la misma captura en 9,43 % ✓.
+2. Comparar la posición pintada con una medición posterior engaña: la autoescala de la carta **anima**
+   cuando entra una vela nueva, y la pastilla de la captura estaba en la fila que la escala tenía en su
+   momento. Cerrado con la ancla que compara las dos cosas en el mismo instante
+   (`DT._yOf(h.price)` contra `CM.series.candles.priceToCoordinate(h.price)`, tolerancia 2 px) y con la
+   verificación por píxeles de §5.7: la fila roja pintada en 61 ↔ `DT._yOf(sl)=61`, la verde en 31 ↔
+   `DT._yOf(tp)=31`.
+
+**Contrato**: 9 anclas nuevas en `tests/bitunix.test.js` (bloque L) ⇒ `test:bitunix` **292 ✓ · 0 ✗**.
+Vecinos, todos verdes: `limite-arrastrar` 26 (el arrastre sigue funcionando sin la pestaña), `dibujos` 18,
+`gesto` 12, `responsive` 200, `dom.smoke` 51, `formulario` 33, `limites` 14, `hedge` 74, `single`, y
+`browser.capture` 47 con 0 errores de JavaScript. Evidencia: `docs/evidencia-5-10-pastilla.png` (cartel +
+`⊕` sobre la línea ámbar, con la carta pintada). Sonda del flujo: `tools/sonda-5-10.js`.
+
+**Lo que queda abierto de este vídeo**: que el número del cartel sea un **campo editable en el lienzo**
+(como el suyo, que se teclea ahí) - nosotros abrimos el billete, que es el camino que ya valida y coloca -;
+y que el cartel aparezca siguiendo la cruz del cursor durante el ajuste en vez de quedarse en la barra de
+creación.
 
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 

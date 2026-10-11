@@ -9404,7 +9404,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       const th = DT._hitTradeHandle(tp.x, tp.y);
       if (!th) return;
       DT._touchDrag = true;
-      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price, x0: tp.x, y0: tp.y, x1: tp.x, y1: tp.y };
       if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
       e.preventDefault();
       e.stopPropagation();
@@ -9424,7 +9424,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const finTactil = () => {
       if (!DT._touchDrag) return;
       DT._touchDrag = false;
-      if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, DT.drag.lastPrice, 'end');
+      if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) {
+        const clicT = DT._clicPastilla();
+        DT.onTradeHandle(DT.drag.id, clicT ? null : DT.drag.lastPrice, 'end');
+      }
       DT.drag = null;
       DT.render();
     };
@@ -9579,12 +9582,16 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // canvas quedaba con pointerEvents:none sobre ellas y no se podía empezar
     // el arrastre (falla el mousedown antes de llegar a _onDown).
     const mas = DT._hitTradePlus(p.x, p.y);
+    const cruz = DT._hitTradeX(p.x, p.y);
     const th = DT._hitTradeHandle(p.x, p.y);
-    /* El disco con + va en la condicion por el mismo motivo que las pestanas: si el hover no lo
-       conoce, el lienzo sigue con pointerEvents:none y el mousedown no llega nunca a _onDown (que es
-       como se abria el billete... pero solo cuando se llamaba a DT.onTradePlus a mano). */
-    DT.canvas.style.pointerEvents = (hit || th || mas) ? 'auto' : 'none';
-    DT.canvas.style.cursor = (DT._hitTradeX(p.x, p.y) || DT._hitTradePlus(p.x, p.y)) ? 'pointer'
+    /* El disco con + y la x de las etiquetas van en la condicion por el mismo motivo que las pestanas: si
+       el hover no los conoce, el lienzo sigue con pointerEvents:none y el mousedown no llega nunca a
+       _onDown. Que _hitTradeHandle devuelva null en la x (para que no inicie arrastre) NO habilita el
+       lienzo: hace falta comprobarla aqui tambien. Y es un bug que la suite de §5.7 no veia porque su
+       ancla preguntaba al predicado (DT._hitTradeX) en vez de clicar con el raton: con el raton, ni la x
+       del SL/TP ni la de la pastilla nueva respondian. */
+    DT.canvas.style.pointerEvents = (hit || th || mas || cruz) ? 'auto' : 'none';
+    DT.canvas.style.cursor = (cruz || mas) ? 'pointer'
       : th ? 'grab'
       : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
@@ -9620,7 +9627,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       // lastPrice: el último precio visto durante el arrastre. Al soltar no se
       // puede recalcular desde una coordenada guardada a medias (DT._lastY no
       // existía y devolvía el precio de arriba del todo: el log mentía).
-      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price };
+      DT.drag = { tradeHandle: th, id: th.id, lastPrice: th.price, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
       DT.canvas.style.cursor = 'grabbing';
       if (DT.onTradeHandle) DT.onTradeHandle(th.id, null, 'start');
       return;
@@ -9692,6 +9699,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     /* --- Arrastrando un handle de SL/TP --- */
     if (DT.drag && DT.drag.tradeHandle) {
       const price = DT._snapPrice(CM.yToPrice(p.y));
+      DT.drag.x1 = p.x; DT.drag.y1 = p.y;
       if (price !== null) {
         DT.drag.lastPrice = price;
         if (DT.onTradeHandle) DT.onTradeHandle(DT.drag.id, price, 'move');
@@ -9730,9 +9738,26 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }
   };
 
+  /* Pulsar y soltar SIN mover el puntero sobre la pastilla de una pendiente no es un arrastre: es un
+     clic, y abre el mismo billete en modo edicion que el + del eje (en su carta el cartel y el boton
+     abren lo mismo). Cuando el gesto si movio, se suelta el precio nuevo. */
+  DT._clicPastilla = function () {
+    const d = DT.drag;
+    if (!d || !d.tradeHandle || !DT.onTradePlus) return false;
+    if (String(d.id).indexOf('limit:') !== 0) return false;
+    const g = d.tradeHandle._grupo;
+    if (!g || d.x0 === undefined) return false;
+    if (Math.abs((d.x1 === undefined ? d.x0 : d.x1) - d.x0) >= 3) return false;
+    if (Math.abs((d.y1 === undefined ? d.y0 : d.y1) - d.y0) >= 3) return false;
+    DT.onTradePlus(d.id, { x: g.x, y: g.y + g.h / 2, caja: g });
+    return true;
+  };
+
   DT._onUp = function () {
     if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) {
-      const endPrice = DT.drag.lastPrice !== undefined ? DT.drag.lastPrice : DT._snapPrice(CM.yToPrice(p0().y));
+      const clic = DT._clicPastilla();
+      const endPrice = clic ? null
+        : (DT.drag.lastPrice !== undefined ? DT.drag.lastPrice : DT._snapPrice(CM.yToPrice(p0().y)));
       DT.onTradeHandle(DT.drag.id, endPrice, 'end');
     }
     if (DT.drag && DT.drag.drawing) DT._emitChange();
@@ -9909,12 +9934,27 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * sepa a qué aplicar el precio.
    */
   DT.setPendingHandles = function (ordenes) {
-    DT._pendingHandles = (ordenes || []).map((o) => ({
+    /* `t` (la barra en que se creo) es lo que hace que la pastilla nazca ahi, como en su carta, en vez
+       de estar clavada en el borde derecho; `tipo` es lo que hace que el cartel diga la palabra del
+       formulario y no una inventada. La pastilla solo existe donde existe la linea: `CM.setPendingLines`
+       pinta en `o.limitPrice`, asi que un `Activador` sin limite asociado no tiene linea que rotular (y
+       no se le va a dar una encima de la nada, ni escribirle el precio arrastrado en `limitPrice`: eso le
+       mentiria al panel, que lee ese campo como precio de la orden). */
+    DT._pendingHandles = (ordenes || []).filter((o) => Number.isFinite(+o.limitPrice) && +o.limitPrice > 0)
+      .map((o) => ({
       id: 'limit:' + o.id,
-      price: o.limitPrice,
+      price: +o.limitPrice,
       color: '#ffab00',
       label: '⏳' + (o.side === 'long' ? '▲' : '▼'),
+      t: o.creada === undefined ? null : o.creada,
+      tipo: o.tipo || 'limite',
     }));
+    /* El filtro de arriba arregla de paso un bug viejo: `CM.priceToY(null)` no devuelve null sino un
+       numero, asi que un `Activador` o un `Trailing` pendiente -cuya linea la carta no la pinta, porque
+       `CM.setPendingLines` solo lee `o.limitPrice`- recibia su pestana clavada arriba del todo. Con la
+       pastilla habria pasado lo mismo, y encima con un precio 0 escrito en el cartel. Y no se le va a
+       escribir `limitPrice` al arrastrarlo: el panel lee ese campo como el precio de la orden, y mentirle
+       ahi es peor que no darle etiqueta. */
     DT._rebuildHandles();
   };
 
@@ -9938,6 +9978,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return c;
     }
     return null;
+  };
+
+  /** La palabra del compartmento de la izquierda: la del propio formulario para ese tipo de orden,
+      no una cadena nueva del pintor (`Limite`, `Activador`, `Trailing`). */
+  DT._palabraTipo = function (tipo) {
+    const b = document.querySelector('#segOrderType [data-otype="' + (tipo || 'limite') + '"]');
+    const t = b ? (b.textContent || '').trim() : '';
+    return t || 'Límite';
   };
 
   DT._hitTradeHandle = function (x, y) {
@@ -10694,20 +10742,47 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         DT._cajasPlus.push({ id: h.id, x: dcx, y: dcy, w: D, h: D });
       };
       if (String(h.id).indexOf('limit:') === 0) {
-        /* Pendientes: conservan la pestaña del borde derecho. Su editor visual -el panel de cantidad
-           con el riel 0/25/50/75/100 % que sale en el vídeo- todavía no está copiado. */
-        ctx.fillStyle = h.color;
-        ctx.globalAlpha = 0.9;
-        const txt = h.label + ' ⇕';
-        const bw = Math.max(46, Math.ceil((ctx.measureText(txt).width || 24) + 12)), bh = 14;
-        const bx = w - 92, by = y - bh / 2;
+        /* La pastilla de la orden pendiente (t=17 del video): un cartel sentado SOBRE la linea, de tres
+           compartimentos -`Trigger | 64 175,1 | x`- separados por un pelo de 1 px, con el borde del cuadro
+           en el mismo gris que el resto de las cajas flotantes. Aqui: la palabra del tipo (la del
+           formulario), el precio y la x que cancela la orden. La pestaña ambar con `⇕` que habia en este
+           sitio era invento de §5.7 y hacia lo mismo -agarrar y mover- con menos informacion: se retira.
+           El color del NUMERO no se copia del fotograma: muestreado, su texto sale `#838287` (gris), o sea
+           que la compresion del video no deja afirmar que fuera verde; se queda el blanco de §5.7 para el
+           numero y el color de la linea para la palabra. */
+        const etq = DT._palabraTipo(h.tipo);
+        const txt = U.fmtPrice(h.price);
+        ctx.font = '12px "noto sans", system-ui, sans-serif';
+        ctx.textBaseline = 'middle';
+        const anE = Math.max(52, Math.ceil((ctx.measureText(etq).width || 24) + PAD * 2));
+        const anP = Math.max(56, Math.ceil((ctx.measureText(txt).width || 24) + PAD * 2));
+        const anchoGrupo = anE + anP + CRUZ;
+        const xe = (h.t === null || h.t === undefined) ? null : DT._xOf(h.t);
+        /* El margen derecho no es el borde del lienzo: es el borde IZQUIERDO del disco con +. Sin esto,
+           cuando la barra de creacion cae en el tercio derecho la pastilla se anclaba a 10 px del borde y
+           su propio compartimento de la x quedaba TAPADO por el disco -que se comprueba antes-: el golpe
+           abria el billete en lugar de cancelar la orden. */
+        const margenDcha = 24 + 2 + 6;
+        const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
+        const cy = Math.round(y - ALTO / 2);
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 3); else ctx.rect(bx, by, bw, bh);
-        ctx.fill();
-        ctx.fillStyle = '#0a0a0b';
-        ctx.font = 'bold 10px ui-monospace, monospace';
-        ctx.fillText(txt, bx + 5, y + 3.5);
-        disco(ctx, Math.round(y - 12));
+        if (ctx.roundRect) ctx.roundRect(gx, cy, anchoGrupo, ALTO, RADIO); else ctx.rect(gx, cy, anchoGrupo, ALTO);
+        ctx.fillStyle = FONDO; ctx.fill();
+        ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(gx + anE + 0.5, cy + 6); ctx.lineTo(gx + anE + 0.5, cy + ALTO - 6);
+        ctx.moveTo(gx + anE + anP + 0.5, cy + 6); ctx.lineTo(gx + anE + anP + 0.5, cy + ALTO - 6);
+        ctx.stroke();
+        ctx.fillStyle = h.color;
+        ctx.fillText(etq, gx + PAD, y + 0.5);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(txt, gx + anE + PAD, y + 0.5);
+        const xx = gx + anE + anP;
+        ctx.fillStyle = TX3;
+        ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), y + 0.5);
+        DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
+        h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
+        disco(ctx, cy);
         ctx.restore();
         return;
       }
@@ -13205,6 +13280,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
        se refleja en los campos del formulario -si no, la carta diria una cosa y la caja otra- y se
        cuenta en el registro. */
     DT.onTradeClear = (id) => {
+      /* La x del final de la pastilla. Para una pendiente es `cancelar la orden` (que es lo que significa
+         ese compartimento en su cartel), no «quitar un nivel»: se comprueba antes de mirar a la posicion,
+         porque una orden puede estar colgada sin ninguna posicion abierta. */
+      const lim = /^limit:(\d+)$/.exec(String(id));
+      if (lim) {
+        App.cancelOrder(+lim[1]);
+        return;
+      }
       const pos = TE.state.position;
       if (!pos) return;
       if (id !== 'sl' && id !== 'tp') return;

@@ -1724,6 +1724,14 @@
        se refleja en los campos del formulario -si no, la carta diria una cosa y la caja otra- y se
        cuenta en el registro. */
     DT.onTradeClear = (id) => {
+      /* La x del final de la pastilla. Para una pendiente es `cancelar la orden` (que es lo que significa
+         ese compartimento en su cartel), no «quitar un nivel»: se comprueba antes de mirar a la posicion,
+         porque una orden puede estar colgada sin ninguna posicion abierta. */
+      const lim = /^limit:(\d+)$/.exec(String(id));
+      if (lim) {
+        App.cancelOrder(+lim[1]);
+        return;
+      }
       const pos = TE.state.position;
       if (!pos) return;
       if (id !== 'sl' && id !== 'tp') return;
