@@ -796,6 +796,17 @@ build `file://` sale sin velas porque el reproductor no carga H.264 aquí).
 §5.9 (el disco pegado al eje, como en el vídeo); el vídeo tiene el mismo solape, pero no lo tomamos como
 argumento para dejarlo.
 
+#### 5.10 · tercera pasada (sexto enlace al mismo vídeo, fotograma t=18,5 a 4800×2700)
+
+- **Etiqueta del eje de la orden pendiente**: en el vídeo es una caja OSCURA con el precio en el color del lado
+  (`64,175.1` en verde, la posición `64,088` en rojo), no una lima rellena. Ahora `axisLabelColor` = `#1a1b1c` y
+  `axisLabelTextColor` = verde/rojo según el lado. Anclado en el bloque L (`295 ✓ · 0 ✗`).
+- **Lo que queda aproximado**: el vídeo pone un borde fino del color del lado alrededor de esa caja; la librería
+  no pinta bordes en la etiqueta del eje, así que la caja sale sin borde.
+- **Lo que NO se cambia**: la línea sigue en lima (`COLORS.limit`, «lima de la marca»). En el fotograma la línea
+  del Trigger es gris discontinua, pero eso es un estado de creación, no una orden colocada; cambiar el color de
+  marca sin medirlo en el sitio sería inventar.
+
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 
 **Aplicado y medido después de aplicar:**

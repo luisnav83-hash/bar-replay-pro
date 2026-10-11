@@ -2389,6 +2389,11 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
     `la palabra («${Lpasta.palabra}», la del formulario para ese tipo) va sobre el relleno del lado ${Lpasta.relleno} (esperado ${colorDelLado}) en blanco, como el «Limit» rojo del vídeo`);
   ok(/^(Largo|Corto) \d[\d.,]* \/ \S+/.test(Lpasta.centro || '') && (Lpasta.lado === 'long' ? /^Largo/ : /^Corto/).test(Lpasta.centro || ''),
     `el centro dice lado, precio y tamaño como el «Open short 64,216.6 / 0.1592» del vídeo («${Lpasta.centro}»); el tamaño va en la unidad del formulario, sin inventar monedas`);
+  const Leje = await page.evaluate(() => { const l = (CM._pendingLines || [])[0];
+    const o = l && l.options ? l.options() : {};
+    return { fondo: o.axisLabelColor, texto: o.axisLabelTextColor, linea: o.color, lado: (DT.tradeHandles || []).find((z) => /^limit:/.test(z.id)) ? 'ok' : null }; });
+  ok(Leje.fondo === '#1a1b1c' && Leje.texto === colorDelLado,
+    `la etiqueta del eje es como la del vídeo: caja oscura ${Leje.fondo} con el precio en el color del lado ${Leje.texto} (la línea sigue en ${Leje.linea})`);
   ok(Lpasta.enBitmap === colorDelLado && Lpasta.yDeLibreria !== null && Math.abs((Lpasta.grupo.y + Lpasta.grupo.h / 2) - Lpasta.yDeLibreria) <= 2,
     `el bitmap del lienzo tiene el chip del lado (${Lpasta.enBitmap}) justo en la fila del precio (centro ${Lpasta.grupo.y + Lpasta.grupo.h / 2}, librería ${Lpasta.yDeLibreria})`);
   ok(Lpasta.tonos.fondo && Lpasta.tonos.pelo && Lpasta.tonos.gris,

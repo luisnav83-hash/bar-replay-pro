@@ -8219,6 +8219,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
         lineWidth: 1,
         lineStyle: 1,                 // 1 = punteada
         axisLabelVisible: true,
+        /* La etiqueta del eje del vídeo (t=18,5): caja OSCURA con el precio en el color del lado, no una
+           lima rellena. Verde para el largo, rojo para el corto (los de la marca medidos en el sitio). El
+           borde fino de su caja no lo pinta la librería: queda como aproximación y se dice en el doc. */
+        axisLabelColor: '#1a1b1c',
+        axisLabelTextColor: o.side === 'long' ? '#24c18d' : '#f14b3f',
         title: i === 0 ? etiqueta : '⏳ ' + U.fmtPrice(o.limitPrice),
       });
       CM._pendingLines.push(line);
