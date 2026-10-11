@@ -2108,6 +2108,10 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
   color: var(--down); font: 500 14px/28px var(--font-panel); cursor: pointer; text-align: left; }
 .bf-billete-accion:hover { text-decoration: underline; }
 .bf-billete-accion[hidden] { display: none; }
+.pd-bloque { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--bd-1, #292a2b); }
+.pd-bloque:first-of-type { border-top: 0; }
+.pd-cab { display: flex; align-items: center; justify-content: space-between; }
+.pd-bloque input[type=range] { width: 100%; }
 </style>
 </head>
 <body>
@@ -3151,6 +3155,10 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
                 <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
                 <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
               </div>
+              <div class="pm-row" title="TP y SL de la posición completa, como el «Position TP/SL» de Bitunix">
+                <span class="pm-label">TP/SL</span>
+                <button class="mini-btn" id="btnPosTpSl">Editar TP/SL…</button>
+              </div>
               <div id="tpLevelsList" class="tp-levels"></div>
             </div>
           </div>
@@ -3534,6 +3542,35 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
 <div id="toasts"></div>
 
 <!-- ============ SCRIPTS (orden de dependencias) ============ -->
+<div class="modal" id="modalPosTpSl">
+  <div class="modal-box">
+    <div class="modal-head"><h3>TP/SL de la posición</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="seg" role="tablist" aria-label="Tipo de TP/SL"><button class="seg-btn active" role="tab" aria-selected="true">Posición</button></div>
+      <div class="modal-note" id="pdInfo"></div>
+      <div class="pd-bloque">
+        <div class="pd-cab"><span class="field-label">Take profit</span><button class="mini-btn" data-quitar="tp">Quitar</button></div>
+        <div class="grid-2-min">
+          <label class="field"><span class="field-label">Precio de disparo</span><input type="number" id="pdTpPrecio" step="any" placeholder="precio"></label>
+          <label class="field"><span class="field-label">Retorno (% sobre margen)</span><input type="number" id="pdTpRoi" step="0.1" placeholder="%"></label>
+        </div>
+        <input type="range" id="pdTpRango" min="0" max="300" step="0.1" value="0" aria-label="Retorno del take profit">
+        <div class="modal-note">PnL bruto estimado: <b id="pdTpPnl">—</b> · cambio de precio <b id="pdTpCambio">—</b></div>
+      </div>
+      <div class="pd-bloque">
+        <div class="pd-cab"><span class="field-label">Stop loss</span><button class="mini-btn" data-quitar="sl">Quitar</button></div>
+        <div class="grid-2-min">
+          <label class="field"><span class="field-label">Precio de disparo</span><input type="number" id="pdSlPrecio" step="any" placeholder="precio"></label>
+          <label class="field"><span class="field-label">Retorno (% sobre margen)</span><input type="number" id="pdSlRoi" step="0.1" placeholder="%"></label>
+        </div>
+        <input type="range" id="pdSlRango" min="-100" max="0" step="0.1" value="0" aria-label="Retorno del stop loss">
+        <div class="modal-note">PnL bruto estimado: <b id="pdSlPnl">—</b> · cambio de precio <b id="pdSlCambio">—</b></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button></div>
+  </div>
+</div>
+
 
 
 
@@ -16949,6 +16986,107 @@ ${rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).joi
 
   global.App = App;
 })(window);
+
+
+/* ==================== js/posTpSl.js ==================== */
+/* TP/SL de la posición completa (pestaña «Posición» del diálogo de Bitunix).
+ * Solo hace de puente entre el diálogo y el motor: los niveles se fijan con TE.setTP y TE.setSL,
+ * que ya validan el lado y dejan el nivel en la carta. Retorno = % sobre el MARGEN:
+ *   precio = entrada · (1 ± retorno / 100 / apalancamiento)   (+ en LONG, − en SHORT)
+ * El PnL que se muestra es BRUTO (sin comisiones), y así se rotula. */
+(function (global) {
+  const PD = {};
+  const $ = (id) => document.getElementById(id);
+  const K = { tp: 'Tp', sl: 'Sl' };
+  const RANGO = { tp: [0, 300], sl: [-100, 0] };      // retorno en % del margen que cubre el deslizador
+
+  const dirOf = (p) => (p.side === 'long' ? 1 : -1);
+  const levOf = (p) => (Number.isFinite(+p.leverage) && +p.leverage > 0 ? +p.leverage : 1);
+  const precioDeRoi = (p, roi) => p.entryPrice * (1 + dirOf(p) * (roi / 100) / levOf(p));
+  const roiDePrecio = (p, precio) => dirOf(p) * (precio / p.entryPrice - 1) * levOf(p) * 100;
+  const numOrNull = (el) => { const v = el.value.trim(); if (v === '') return null; const n = +v; return Number.isFinite(n) ? n : NaN; };
+
+  /* Rellena precio, retorno y deslizador de una fila a partir de uno de los tres. Origen: 'precio' | 'roi' | 'rango' | null */
+  function sincroniza(k, origen) {
+    const p = TE.state.position; if (!p) return;
+    const L = K[k], [min, max] = RANGO[k];
+    let precio = null, roi = null;
+    if (origen === 'precio') {
+      precio = numOrNull($('pd' + L + 'Precio'));
+      if (precio !== null && Number.isFinite(precio) && precio > 0) roi = roiDePrecio(p, precio);
+    } else if (origen === 'roi' || origen === 'rango') {
+      roi = origen === 'rango' ? +$('pd' + L + 'Rango').value : numOrNull($('pd' + L + 'Roi'));
+      if (roi !== null && Number.isFinite(roi)) precio = precioDeRoi(p, roi);
+    }
+    if (origen !== 'precio') $('pd' + L + 'Precio').value = precio !== null && Number.isFinite(precio) ? precio.toFixed(2) : '';
+    if (origen !== 'roi') $('pd' + L + 'Roi').value = roi !== null && Number.isFinite(roi) ? roi.toFixed(2) : '';
+    if (origen !== 'rango') {
+      const r = roi !== null && Number.isFinite(roi) ? Math.min(max, Math.max(min, roi)) : 0;
+      $('pd' + L + 'Rango').value = String(r);
+    }
+    const pnl = precio !== null && Number.isFinite(precio) && precio > 0 ? TE.pnlBrutoEn(precio, p) : null;
+    $('pd' + L + 'Pnl').textContent = pnl === null ? '—' : U.fmtMoney(pnl, true);
+    $('pd' + L + 'Cambio').textContent = precio === null || !Number.isFinite(precio) || precio <= 0 ? '—'
+      : U.fmtPct(((precio - p.entryPrice) / p.entryPrice) * 100, 2, true);
+  }
+
+  function pintaFila(k, nivel) {
+    const L = K[k];
+    $('pd' + L + 'Precio').value = nivel ? (+nivel).toFixed(2) : '';
+    sincroniza(k, nivel ? 'precio' : null);
+    if (!nivel) { $('pd' + L + 'Roi').value = ''; $('pd' + L + 'Rango').value = '0'; $('pd' + L + 'Pnl').textContent = '—'; $('pd' + L + 'Cambio').textContent = '—'; }
+  }
+
+  PD.abrir = function () {
+    const p = TE.state.position;
+    const sinPos = !p;
+    $('pdInfo').textContent = sinPos ? 'No hay posición abierta: abre una para fijar su TP/SL.'
+      : `${p.side === 'long' ? 'LONG' : 'SHORT'} · ${levOf(p)}X · entrada ${U.fmtPrice(p.entryPrice)} · ${U.num(p.qty, 6)} ${App.baseAsset()}`;
+    ['pdTpPrecio', 'pdTpRoi', 'pdTpRango', 'pdSlPrecio', 'pdSlRoi', 'pdSlRango', 'pdConfirmar'].forEach((id) => { $(id).disabled = sinPos; });
+    document.querySelectorAll('[data-quitar]').forEach((b) => { b.disabled = sinPos; });
+    if (sinPos) { pintaFila('tp', null); pintaFila('sl', null); return; }
+    pintaFila('tp', p.tp || null);
+    pintaFila('sl', p.sl || null);
+  };
+
+  PD.confirmar = function () {
+    const p = TE.state.position; if (!p) return false;
+    const pedidos = [['tp', TE.setTP], ['sl', TE.setSL]];
+    let algunoFallo = false, cambios = 0;
+    for (const [k, fn] of pedidos) {
+      const L = K[k];
+      const txt = $('pd' + L + 'Precio').value.trim();
+      const actual = p[k] || null;
+      if (txt === '') {                                   // vacío = quitar el nivel (si lo había)
+        if (actual !== null) { fn.call(TE, null); cambios++; }
+        continue;
+      }
+      const precio = +txt;
+      if (!Number.isFinite(precio) || precio <= 0) { U.toast(`${k.toUpperCase()}: el precio no es válido`, 'warn'); algunoFallo = true; continue; }
+      if (actual !== null && Math.abs(precio - actual) < 1e-9) continue;   // sin cambios: no se toca
+      if (fn.call(TE, precio)) cambios++; else algunoFallo = true;
+    }
+    if (!algunoFallo) { UI.closeModal('modalPosTpSl'); if (cambios) U.toast('TP/SL actualizados', 'info'); }
+    return !algunoFallo;
+  };
+
+  function enlaza() {
+    const b = $('btnPosTpSl');
+    if (b) b.addEventListener('click', () => { PD.abrir(); UI.openModal('modalPosTpSl'); });
+    ['tp', 'sl'].forEach((k) => {
+      const L = K[k];
+      $('pd' + L + 'Precio').addEventListener('input', () => sincroniza(k, 'precio'));
+      $('pd' + L + 'Roi').addEventListener('input', () => sincroniza(k, 'roi'));
+      $('pd' + L + 'Rango').addEventListener('input', () => sincroniza(k, 'rango'));
+    });
+    document.querySelectorAll('[data-quitar]').forEach((btn) => btn.addEventListener('click', () => pintaFila(btn.dataset.quitar, null)));
+    const c = $('pdConfirmar'); if (c) c.addEventListener('click', () => PD.confirmar());
+  }
+
+  PD.enlaza = enlaza;
+  global.PosTpSl = PD;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enlaza); else enlaza();
+})(typeof window !== 'undefined' ? window : globalThis);
 
 
 /* ==================== js/liveFeed.js ==================== */

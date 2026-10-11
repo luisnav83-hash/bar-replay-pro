@@ -2734,3 +2734,9 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
   color: var(--down); font: 500 14px/28px var(--font-panel); cursor: pointer; text-align: left; }
 .bf-billete-accion:hover { text-decoration: underline; }
 .bf-billete-accion[hidden] { display: none; }
+
+/* TP/SL de la posición (diálogo «Editar TP/SL»): bloques de TP y SL con su deslizador */
+.pd-bloque { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--bd-1, #292a2b); }
+.pd-bloque:first-of-type { border-top: 0; }
+.pd-cab { display: flex; align-items: center; justify-content: space-between; }
+.pd-bloque input[type=range] { width: 100%; }

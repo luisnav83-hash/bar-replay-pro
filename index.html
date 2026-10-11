@@ -1053,6 +1053,10 @@
                 <button class="mini-btn" id="btnTrailOn" title="Activar / re-ajustar el trailing (tecla V)">Activar</button>
                 <button class="mini-btn" id="btnTrailOff" title="Quitar el trailing stop" disabled>✕</button>
               </div>
+              <div class="pm-row" title="TP y SL de la posición completa, como el «Position TP/SL» de Bitunix">
+                <span class="pm-label">TP/SL</span>
+                <button class="mini-btn" id="btnPosTpSl">Editar TP/SL…</button>
+              </div>
               <div id="tpLevelsList" class="tp-levels"></div>
             </div>
           </div>
@@ -1436,6 +1440,34 @@
 <div id="toasts"></div>
 
 <!-- ============ SCRIPTS (orden de dependencias) ============ -->
+<div class="modal" id="modalPosTpSl">
+  <div class="modal-box">
+    <div class="modal-head"><h3>TP/SL de la posición</h3><button class="modal-x" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="seg" role="tablist" aria-label="Tipo de TP/SL"><button class="seg-btn active" role="tab" aria-selected="true">Posición</button></div>
+      <div class="modal-note" id="pdInfo"></div>
+      <div class="pd-bloque">
+        <div class="pd-cab"><span class="field-label">Take profit</span><button class="mini-btn" data-quitar="tp">Quitar</button></div>
+        <div class="grid-2-min">
+          <label class="field"><span class="field-label">Precio de disparo</span><input type="number" id="pdTpPrecio" step="any" placeholder="precio"></label>
+          <label class="field"><span class="field-label">Retorno (% sobre margen)</span><input type="number" id="pdTpRoi" step="0.1" placeholder="%"></label>
+        </div>
+        <input type="range" id="pdTpRango" min="0" max="300" step="0.1" value="0" aria-label="Retorno del take profit">
+        <div class="modal-note">PnL bruto estimado: <b id="pdTpPnl">—</b> · cambio de precio <b id="pdTpCambio">—</b></div>
+      </div>
+      <div class="pd-bloque">
+        <div class="pd-cab"><span class="field-label">Stop loss</span><button class="mini-btn" data-quitar="sl">Quitar</button></div>
+        <div class="grid-2-min">
+          <label class="field"><span class="field-label">Precio de disparo</span><input type="number" id="pdSlPrecio" step="any" placeholder="precio"></label>
+          <label class="field"><span class="field-label">Retorno (% sobre margen)</span><input type="number" id="pdSlRoi" step="0.1" placeholder="%"></label>
+        </div>
+        <input type="range" id="pdSlRango" min="-100" max="0" step="0.1" value="0" aria-label="Retorno del stop loss">
+        <div class="modal-note">PnL bruto estimado: <b id="pdSlPnl">—</b> · cambio de precio <b id="pdSlCambio">—</b></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button></div>
+  </div>
+</div>
 <script src="js/utils.js"></script>
 <script src="js/indicators.js"></script>
 <script src="js/dataService.js"></script>
@@ -1450,6 +1482,7 @@
 <script src="js/uiController.js"></script>
 <script src="js/orderTemplates.js"></script>
 <script src="js/app.js"></script>
+<script src="js/posTpSl.js"></script>
 <script src="js/liveFeed.js"></script>
 </body>
 </html>
