@@ -1777,12 +1777,24 @@
       ctx.lineJoin = 'round';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(gx + anP, cy, anC + CRUZ, ALTO, RADIO); else ctx.rect(gx + anP, cy, anC + CRUZ, ALTO);
+      /* Mientras se arrastra el nivel, la pastilla es de contorno discontinuo con el color del nivel (como
+         en la captura de Bitunix); al soltar vuelve a bloque sólido. */
+      const tirando = !!(DT.drag && DT.drag.tradeHandle && DT.drag.tradeHandle.id === h.id);
+      ctx.setLineDash(tirando ? [4, 3] : []);
       ctx.fillStyle = FONDO; ctx.fill();
-      ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = tirando ? h.color : PELO; ctx.lineWidth = 1; ctx.stroke();
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(gx, cy, anP, ALTO, RADIO); else ctx.rect(gx, cy, anP, ALTO);
-      ctx.fillStyle = h.color; ctx.fill();
-      ctx.fillStyle = '#ffffff'; ctx.fillText(txt, gx + PAD, cy + ALTO / 2 + 0.5);
+      if (tirando) {
+        ctx.fillStyle = FONDO; ctx.fill();
+        ctx.strokeStyle = h.color; ctx.stroke();
+        ctx.fillStyle = h.color;
+      } else {
+        ctx.fillStyle = h.color; ctx.fill();
+        ctx.fillStyle = '#ffffff';
+      }
+      ctx.fillText(txt, gx + PAD, cy + ALTO / 2 + 0.5);
+      ctx.setLineDash([]);
       if (txtPnl) { ctx.fillStyle = h.color; ctx.fillText(txtPnl, gx + anP + PAD, cy + ALTO / 2 + 0.5); }
       const xx = gx + anP + anC;
       ctx.strokeStyle = PELO; ctx.beginPath();
