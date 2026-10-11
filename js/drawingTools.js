@@ -660,6 +660,8 @@
     const lado = pos && pos.side === 'short' ? 'short' : 'long';
     const extra = pos ? {
       qty: pos.qty, entryPrice: pos.entryPrice, side: lado,
+      /* Margen = nocional / apalancamiento: la base del ROI que enseña Bitunix (`+56,04%` con 20X). */
+      margen: (pos.notional > 0 && pos.leverage > 0) ? pos.notional / pos.leverage : null,
       t: (pos.entryTime === undefined ? null : pos.entryTime),
     } : null;
     const mk = (id, price, color, label, nivel) => Object.assign({ id, price, color, label, nivel }, extra);
@@ -1574,9 +1576,16 @@
         if (h.id === 'tp') ctx.fillRect(0, 0, w, y); else ctx.fillRect(0, y, w, Math.max(0, alto - y));
         ctx.globalAlpha = 1;
       }
-      const txt = h.label + ' ' + (Number.isFinite(h.qty) && h.qty > 0 ? U.num(h.qty, 4) : U.fmtPrice(h.price));
+      /* Pastilla como en Bitunix (capturas del artículo de TP/SL): la palabra en el bloque de color,
+         el PnL en USDT y % sobre el margen en el centro, y la × a la derecha. Antes ponía la cantidad
+         en BTC (`TP 0.0648`), que no es lo que el usuario mira en un nivel. */
+      const txt = h.label;
       const pnl = TE.pnlBrutoEn(h.price, h);
-      const txtPnl = pnl === null ? '' : (pnl < 0 ? '-' : '+') + U.num(Math.abs(pnl), 2);
+      const signo = pnl === null ? '' : (pnl < 0 ? '-' : '+');
+      const roi = (pnl !== null && Number.isFinite(h.margen) && h.margen > 0) ? pnl / h.margen * 100 : null;
+      const txtPnl = pnl === null ? '' : (roi === null
+        ? signo + U.num(Math.abs(pnl), 2) + ' USDT'
+        : signo + U.num(Math.abs(pnl), 2) + ' USDT (' + signo + U.num(Math.abs(roi), 2) + '%)');
       ctx.font = '12px "noto sans", system-ui, sans-serif';
       ctx.textBaseline = 'middle';
       const anP = Math.max(56, Math.ceil(ctx.measureText(txt).width) + PAD * 2);
