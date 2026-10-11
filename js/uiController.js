@@ -1446,6 +1446,11 @@
     // órdenes límite (estas últimas se delegan en App.moveLimitOrder, que además
     // ejecuta el límite si al soltarlo queda cruzado con el precio).
     UI.initPositionManagement();
+    /* × del chip: cierra la posición a mercado, como «Cerrar» del panel. El ⇅ (invertir) todavía no hace
+       nada: la inversión de hoy pasa por el formulario y usa su tamaño, no el de la posición. */
+    DT.onChipAccion = (accion) => {
+      if (accion === 'cerrar' && TE.state.position) App.flatten('manual');
+    };
     DT.onTradeHandle = (id, price, phase) => {
       if (typeof id === 'string' && id.indexOf('limit:') === 0) {
         const oid = +id.slice(6);

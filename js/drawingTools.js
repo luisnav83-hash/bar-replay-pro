@@ -63,6 +63,7 @@
     armed: false,      // true mientras se dibuja el trazo
     lastScreen: null,
   };
+  DT.onChipAccion = null;   // callback(accion) para el ⇅ y la × del chip de la posición → lo conecta uiController
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
   DT.onTradeClear = null;   // callback(id) → la × de la etiqueta quita el nivel (lo conecta uiController)
   DT.onTicket = null;       // callback({x, y, price}) → la herramienta «orden» abre el billete flotante
@@ -134,6 +135,12 @@
         return;
       }
       const boton = DT._hitChip(tp.x, tp.y);
+      if (boton && boton !== 'tp' && boton !== 'sl') {
+        if (DT.onChipAccion) DT.onChipAccion(boton);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (boton) {
         DT._touchDrag = true;
         DT.drag = DT._arrastreCreacion(boton, tp);
@@ -336,7 +343,8 @@
     const boton = DT._hitChip(p.x, p.y);
     DT.canvas.style.pointerEvents = (hit || th || mas || cruz || boton) ? 'auto' : 'none';
     DT.canvas.style.cursor = (cruz || mas) ? 'pointer'
-      : (th || boton) ? 'grab'
+      : (boton === 'tp' || boton === 'sl' || th) ? 'grab'
+      : boton ? 'pointer'
       : (hit ? (hit.handle && hit.handle !== 'body' ? 'grab' : 'move') : 'default');
   };
 
@@ -369,10 +377,14 @@
     /* Botones TP / SL del chip de la posición: arrastrar desde ellos CREA el nivel (como en Bitunix,
        «pulsar el botón TP/SL y arrastrar»). Van antes que las líneas: el chip está sobre la de entrada. */
     const boton = DT._hitChip(p.x, p.y);
-    if (boton) {
+    if (boton === 'tp' || boton === 'sl') {
       DT.drag = DT._arrastreCreacion(boton, p);
       DT.canvas.style.cursor = 'grabbing';
       if (DT.onTradeHandle) DT.onTradeHandle(boton, null, 'start');
+      return;
+    }
+    if (boton) {                       // ⇅ o ×: acción directa, sin arrastre
+      if (DT.onChipAccion) DT.onChipAccion(boton);
       return;
     }
     const th = DT._hitTradeHandle(p.x, p.y);
@@ -1564,51 +1576,73 @@
     const y = DT._yOf(c.price);
     if (y === null || y === undefined || !Number.isFinite(y)) return;
     const w = DT.width || 800;
-    const ALTO = 24, PAD = 8, RADIO = 4, GAP = 4;
-    const FONDO = '#1a1b1c', PELO = '#292a2b';
+    const ALTO = 24, PAD = 8, RADIO = 4, GAP = 4, ANCHO_BOTON = 36, ANCHO_ICONO = 28;
+    const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
     const verde = '#24c18d', rojo = '#f14b3f';
     const colorLado = c.side === 'short' ? rojo : verde;
     const px = (window.App && App.currentPrice) ? App.currentPrice() : c.price;
     const pnl = (Number.isFinite(px) && TE.pnlBrutoEn) ? TE.pnlBrutoEn(px, c) : null;
-    const signo = pnl === null ? '' : (pnl < 0 ? '-' : '+');
     const txtQty = U.num(c.qty, c.qty >= 1 ? 4 : 6);
-    const txtPnl = pnl === null ? '—' : signo + U.num(Math.abs(pnl), 2) + ' USDT';
-    const colorPnl = pnl === null || pnl === 0 ? '#919499' : (pnl > 0 ? verde : rojo);
+    const txtPnl = pnl === null ? '—' : (pnl > 0 ? '+' : (pnl < 0 ? '-' : '')) + U.num(Math.abs(pnl), 2);
+    const colorPnl = (pnl === null || pnl === 0) ? TX3 : (pnl > 0 ? verde : rojo);
     ctx.save();
     ctx.font = '12px "noto sans", system-ui, sans-serif';
     ctx.textBaseline = 'middle';
     const a1 = Math.max(56, Math.ceil(ctx.measureText(txtQty).width) + PAD * 2);
     const a2 = Math.max(64, Math.ceil(ctx.measureText(txtPnl).width) + PAD * 2);
-    const aT = 36, aS = 36;
-    const total = a1 + a2 + GAP + aT + GAP + aS;
+    /* Orden de izquierda a derecha, como en la captura del usuario: TP | SL | tamaño | PnL | ⇅ | × */
+    const oSL = ANCHO_BOTON + GAP;
+    const oQty = oSL + ANCHO_BOTON + GAP;
+    const oPnl = oQty + a1;
+    const oInv = oPnl + a2;
+    const oCerr = oInv + ANCHO_ICONO;
+    const total = oCerr + ANCHO_ICONO;
     const margenDcha = DT._anchoEje() + 24 + 2 + 6;
     const xe = (c.t === null || c.t === undefined) ? null : DT._xOf(c.t);
     const gx0 = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - total - margenDcha)));
     const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, total, w, margenDcha);
-    /* Tamaño: bloque sólido del lado con el número en blanco */
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(gx, cy, a1, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx, cy, a1, ALTO);
-    ctx.fillStyle = colorLado; ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.fillText(txtQty, gx + PAD, cy + ALTO / 2 + 0.5);
-    /* PnL: caja oscura con el número del color de su signo */
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(gx + a1, cy, a2, ALTO, [0, RADIO, RADIO, 0]); else ctx.rect(gx + a1, cy, a2, ALTO);
-    ctx.fillStyle = FONDO; ctx.fill();
-    ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = colorPnl; ctx.fillText(txtPnl, gx + a1 + PAD, cy + ALTO / 2 + 0.5);
-    /* Botones TP y SL: contorno del color del nivel */
+    const yTxt = cy + ALTO / 2 + 0.5;
+    /* Botón TP o SL: contorno del color del nivel. Arrastrarlo CREA el nivel. */
     const boton = (x0, texto, color, kind) => {
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(x0 + 0.5, cy + 0.5, aT - 1, ALTO - 1, RADIO); else ctx.rect(x0 + 0.5, cy + 0.5, aT - 1, ALTO - 1);
+      if (ctx.roundRect) ctx.roundRect(x0 + 0.5, cy + 0.5, ANCHO_BOTON - 1, ALTO - 1, RADIO); else ctx.rect(x0 + 0.5, cy + 0.5, ANCHO_BOTON - 1, ALTO - 1);
       ctx.fillStyle = FONDO; ctx.fill();
       ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = color;
-      ctx.fillText(texto, x0 + Math.round((aT - ctx.measureText(texto).width) / 2), cy + ALTO / 2 + 0.5);
-      DT._cajasChip.push({ kind, x: x0, y: cy, w: aT, h: ALTO });
+      ctx.fillText(texto, x0 + Math.round((ANCHO_BOTON - ctx.measureText(texto).width) / 2), yTxt);
+      DT._cajasChip.push({ kind, x: x0, y: cy, w: ANCHO_BOTON, h: ALTO });
     };
-    const xT = gx + a1 + a2 + GAP;
-    boton(xT, 'TP', verde, 'tp');
-    boton(xT + aT + GAP, 'SL', rojo, 'sl');
+    boton(gx, 'TP', verde, 'tp');
+    boton(gx + oSL, 'SL', rojo, 'sl');
+    /* Tamaño: bloque sólido del color del lado, número en blanco */
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(gx + oQty, cy, a1, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx + oQty, cy, a1, ALTO);
+    ctx.fillStyle = colorLado; ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillText(txtQty, gx + oQty + PAD, yTxt);
+    /* PnL: caja oscura con el número del color de su signo */
+    ctx.beginPath(); ctx.rect(gx + oPnl, cy, a2, ALTO);
+    ctx.fillStyle = FONDO; ctx.fill();
+    ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = colorPnl; ctx.fillText(txtPnl, gx + oPnl + PAD, yTxt);
+    /* ⇅ (invertir): dibujado con dos flechas, no con el glifo, que la fuente no trae siempre */
+    ctx.beginPath(); ctx.rect(gx + oInv, cy, ANCHO_ICONO, ALTO);
+    ctx.fillStyle = FONDO; ctx.fill(); ctx.stroke();
+    {
+      const cx = gx + oInv + ANCHO_ICONO / 2, my = cy + ALTO / 2;
+      ctx.strokeStyle = TX3; ctx.lineWidth = 1.2; ctx.beginPath();
+      ctx.moveTo(cx - 3, my + 5); ctx.lineTo(cx - 3, my - 5);
+      ctx.moveTo(cx - 6, my - 2); ctx.lineTo(cx - 3, my - 5); ctx.lineTo(cx, my - 2);
+      ctx.moveTo(cx + 3, my - 5); ctx.lineTo(cx + 3, my + 5);
+      ctx.moveTo(cx, my + 2); ctx.lineTo(cx + 3, my + 5); ctx.lineTo(cx + 6, my + 2);
+      ctx.stroke();
+    }
+    DT._cajasChip.push({ kind: 'invertir', x: gx + oInv, y: cy, w: ANCHO_ICONO, h: ALTO });
+    /* × (cerrar la posición a mercado) */
+    ctx.beginPath(); ctx.rect(gx + oCerr, cy, ANCHO_ICONO, ALTO);
+    ctx.fillStyle = FONDO; ctx.fill(); ctx.strokeStyle = PELO; ctx.stroke();
+    ctx.fillStyle = TX3;
+    ctx.fillText('×', gx + oCerr + Math.round((ANCHO_ICONO - ctx.measureText('×').width) / 2), yTxt);
+    DT._cajasChip.push({ kind: 'cerrar', x: gx + oCerr, y: cy, w: ANCHO_ICONO, h: ALTO });
     ctx.restore();
   };
 
