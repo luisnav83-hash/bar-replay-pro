@@ -126,6 +126,50 @@ const cerca = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   const quitado = await p.evaluate(() => ({ tp: TE.state.position.tp, sl: TE.state.position.sl, abierto: document.getElementById('modalPosTpSl').classList.contains('open') }));
   ok(quitado.tp === null && !quitado.abierto && quitado.sl !== null, 'Quitar el TP lo borra en el motor y el SL se queda');
 
+  /* ---- Pestaña Parcial: niveles de TP escalonados ---- */
+  await p.evaluate(() => { document.getElementById('btnPosTpSl').click(); }); await ESP(150);
+  await p.evaluate(() => { document.getElementById('pdTabPar').click(); }); await ESP(100);
+  const enPar = await p.evaluate(() => ({ parVisible: !document.getElementById('pdPanelPar').hidden, posOculto: document.getElementById('pdPanelPos').hidden, confirmarOculto: document.getElementById('pdConfirmar').hidden }));
+  ok(enPar.parVisible && enPar.posOculto && enPar.confirmarOculto, 'la pestaña Parcial muestra su panel y oculta Confirmar');
+
+  const setVal = (id, v) => p.evaluate((i, val) => { const el = document.getElementById(i); el.value = val; el.dispatchEvent(new Event('input')); }, id, String(v));
+  await setVal('pdParPrecio', (entrada * 1.01).toFixed(2));
+  const roiPar = await p.evaluate(() => +document.getElementById('pdParRoi').value);
+  ok(cerca(roiPar, 10, 0.05), `precio +1 % con 10X da retorno +10 % en el nivel parcial (${roiPar})`);
+  await setVal('pdParPct', 50);
+  const pnlPar = await p.evaluate(() => document.getElementById('pdParPnl').textContent);
+  ok(/^\+/.test(pnlPar) && /50 %/.test(await p.evaluate(() => document.getElementById('pdParPctTxt').textContent)),
+    `el tramo muestra su PnL bruto (${pnlPar}) y el % elegido`);
+  await p.evaluate(() => document.getElementById('pdParAnadir').click()); await ESP(150);
+  const n1 = await p.evaluate(() => ({ n: TE.state.position.tpLevels.length, pct: TE.state.position.tpLevels[0].pct, precio: TE.state.position.tpLevels[0].price, cartel: document.querySelectorAll('#tpLevelsList .tp-lvl').length, lista: document.querySelectorAll('#pdParLista .tp-lvl').length }));
+  ok(n1.n === 1 && cerca(n1.pct, 0.5, 1e-9) && cerca(n1.precio, entrada * 1.01, 0.02) && n1.cartel === 1 && n1.lista === 1,
+    `«Añadir nivel» crea el parcial en el motor (50 %, ${n1.precio}) y lo ven la lista del diálogo y la tarjeta`);
+
+  await setVal('pdParPrecio', (entrada * 1.03).toFixed(2));
+  await setVal('pdParPct', 100);
+  await p.evaluate(() => document.getElementById('pdParAnadir').click()); await ESP(150);
+  const n2 = await p.evaluate(() => TE.state.position.tpLevels.map((l) => [l.price, l.pct]));
+  ok(n2.length === 2 && n2[0][0] < n2[1][0] && cerca(n2[1][1], 1, 1e-9), `el segundo nivel queda ordenado por precio y cierra el 100 % (${n2.map((x) => x[0].toFixed(0) + '/' + x[1]).join(' · ')})`);
+
+  await setVal('pdParPrecio', (entrada * 0.99).toFixed(2));
+  await p.evaluate(() => document.getElementById('pdParAnadir').click()); await ESP(150);
+  const invalido = await p.evaluate(() => TE.state.position.tpLevels.length);
+  ok(invalido === 2, 'un parcial por debajo de la entrada en LONG se rechaza (siguen 2 niveles)');
+
+  await p.evaluate(() => document.querySelector('[data-par-quitar="0"]').click()); await ESP(150);
+  const quitado1 = await p.evaluate(() => TE.state.position.tpLevels.length);
+  ok(quitado1 === 1, 'Quitar en la lista borra solo ese nivel');
+
+  await p.evaluate(() => document.getElementById('pdTabPos').click()); await ESP(100);
+  const vuelta = await p.evaluate(() => ({ pos: !document.getElementById('pdPanelPos').hidden, confirmar: !document.getElementById('pdConfirmar').hidden }));
+  ok(vuelta.pos && vuelta.confirmar, 'volver a la pestaña Posición muestra otra vez Confirmar');
+
+  await p.evaluate(() => UI.closeModal('modalPosTpSl'));
+  await p.evaluate(() => { document.getElementById('btnPosTpSl').click(); }); await ESP(150);
+  const reinicio = await p.evaluate(() => !document.getElementById('pdPanelPos').hidden);
+  ok(reinicio, 'al reabrir el diálogo vuelve a la pestaña Posición');
+  await p.evaluate(() => UI.closeModal('modalPosTpSl'));
+
   // Limpieza: cerrar la posición y comprobar el estado sin posición
   await p.evaluate(() => { TE.closePosition(TE.state.position.entryPrice, 'manual'); });
   await ESP(200);

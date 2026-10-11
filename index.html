@@ -1444,8 +1444,9 @@
   <div class="modal-box">
     <div class="modal-head"><h3>TP/SL de la posición</h3><button class="modal-x" data-close>✕</button></div>
     <div class="modal-body">
-      <div class="seg" role="tablist" aria-label="Tipo de TP/SL"><button class="seg-btn active" role="tab" aria-selected="true">Posición</button></div>
+      <div class="seg" role="tablist" aria-label="Tipo de TP/SL"><button class="seg-btn active" role="tab" aria-selected="true" id="pdTabPos">Posición</button><button class="seg-btn" role="tab" aria-selected="false" id="pdTabPar">Parcial</button></div>
       <div class="modal-note" id="pdInfo"></div>
+      <div id="pdPanelPos">
       <div class="pd-bloque">
         <div class="pd-cab"><span class="field-label">Take profit</span><button class="mini-btn" data-quitar="tp">Quitar</button></div>
         <div class="grid-2-min">
@@ -1464,9 +1465,25 @@
         <input type="range" id="pdSlRango" min="-100" max="0" step="0.1" value="0" aria-label="Retorno del stop loss">
         <div class="modal-note">PnL bruto estimado: <b id="pdSlPnl">—</b> · cambio de precio <b id="pdSlCambio">—</b></div>
       </div>
+      </div><!-- /pdPanelPos -->
+      <div id="pdPanelPar" hidden>
+        <div class="modal-note">Niveles parciales de TP: cada uno cierra su % de la posición y el resto sigue vivo con su SL. Los parciales de SL no los admite el motor todavía.</div>
+        <div id="pdParLista" class="tp-levels"></div>
+        <div class="pd-bloque">
+          <div class="pd-cab"><span class="field-label">Nuevo nivel</span></div>
+          <div class="grid-2-min">
+            <label class="field"><span class="field-label">Precio de disparo</span><input type="number" id="pdParPrecio" step="any" placeholder="precio"></label>
+            <label class="field"><span class="field-label">Retorno (% sobre margen)</span><input type="number" id="pdParRoi" step="0.1" placeholder="%"></label>
+          </div>
+          <label class="field"><span class="field-label">Parte de la posición que cierra: <b id="pdParPctTxt">50 %</b></span>
+            <input type="range" id="pdParPct" min="1" max="100" step="1" value="50" aria-label="Porcentaje de la posición que cierra este nivel"></label>
+          <div class="modal-note">PnL bruto de este tramo: <b id="pdParPnl">—</b></div>
+          <div class="pd-cab"><span></span><button class="btn btn-primary" id="pdParAnadir">Añadir nivel</button></div>
+        </div>
+      </div>
       <div class="modal-note" id="pdRevision" hidden></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-ghost" id="pdVolver" hidden>Volver</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-ghost" id="pdVolver" hidden>Volver</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button><button class="btn btn-ghost" id="pdCerrarPar" hidden data-close>Cerrar</button></div>
   </div>
 </div>
 <script src="js/utils.js"></script>

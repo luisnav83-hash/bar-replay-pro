@@ -48,6 +48,9 @@
 
   PD.abrir = function () {
     PD._salirRevision();
+    PD.setTab('pos');
+    if (TE.state.position) { $('pdParPct').value = '50'; $('pdParPrecio').value = ''; $('pdParRoi').value = ''; sincronizaPar(null); }
+    $('pdParAnadir').disabled = !TE.state.position;
     const p = TE.state.position;
     const sinPos = !p;
     $('pdInfo').textContent = sinPos ? 'No hay posición abierta: abre una para fijar su TP/SL.'
@@ -127,7 +130,74 @@
     const c = $('pdConfirmar'); if (c) c.addEventListener('click', () => PD.confirmar());
   }
 
-  PD.enlaza = enlaza;
+  /* ---------- Pestaña Parcial: niveles de TP escalonados (TE.addTpLevel / TE.removeTpLevel) ---------- */
+  PD.setTab = function (nombre) {
+    const esPar = nombre === 'par';
+    $('pdPanelPos').hidden = esPar; $('pdPanelPar').hidden = !esPar;
+    $('pdTabPos').classList.toggle('active', !esPar); $('pdTabPos').setAttribute('aria-selected', String(!esPar));
+    $('pdTabPar').classList.toggle('active', esPar); $('pdTabPar').setAttribute('aria-selected', String(esPar));
+    $('pdConfirmar').hidden = esPar; $('pdVolver').hidden = true; $('pdRevision').hidden = true;
+    $('pdCerrarPar').hidden = !esPar;
+    if (esPar) PD.renderPar();
+  };
+
+  PD.renderPar = function () {
+    const p = TE.state.position, lista = $('pdParLista');
+    if (!p) { lista.innerHTML = '<div class="hint hint-tiny">No hay posición abierta.</div>'; return; }
+    const lvs = p.tpLevels || [];
+    if (!lvs.length) { lista.innerHTML = '<div class="hint hint-tiny">Sin niveles parciales. Añade uno abajo.</div>'; return; }
+    const dir = dirOf(p);
+    lista.innerHTML = lvs.map((l, i) => {
+      const pnl = TE.pnlBrutoEn(l.price, p) * l.pct;
+      const roi = roiDePrecio(p, l.price);
+      return `<div class="tp-lvl"><span class="tp-dot">${i + 1}</span><b>${U.fmtPrice(l.price)}</b>` +
+        `<span class="tp-meta">${U.num(l.pct * 100, 0)}% · ${U.fmtPct(roi, 2, true)} · ${U.fmtMoney(pnl, true)}</span>` +
+        `<button class="mini-btn" data-par-quitar="${i}">Quitar</button></div>`;
+    }).join('');
+    lista.querySelectorAll('[data-par-quitar]').forEach((b) => b.addEventListener('click', () => {
+      TE.removeTpLevel(+b.dataset.parQuitar); PD.renderPar();
+    }));
+  };
+
+  function sincronizaPar(origen) {
+    const p = TE.state.position; if (!p) return;
+    let precio = null, roi = null;
+    if (origen === 'precio' || origen === 'pct') {          // el % no mueve el precio
+      precio = numOrNull($('pdParPrecio'));
+      if (precio !== null && Number.isFinite(precio) && precio > 0 && origen === 'precio') roi = roiDePrecio(p, precio);
+    } else {                                                 // origen 'roi'
+      roi = numOrNull($('pdParRoi'));
+      if (roi !== null && Number.isFinite(roi)) precio = precioDeRoi(p, roi);
+      $('pdParPrecio').value = precio !== null && Number.isFinite(precio) ? precio.toFixed(2) : '';
+    }
+    if (origen === 'precio') $('pdParRoi').value = roi !== null && Number.isFinite(roi) ? roi.toFixed(2) : '';
+    const pct = +$('pdParPct').value;
+    $('pdParPctTxt').textContent = pct + ' %';
+    const pnl = precio !== null && Number.isFinite(precio) && precio > 0 ? TE.pnlBrutoEn(precio, p) * (pct / 100) : null;
+    $('pdParPnl').textContent = pnl === null ? '—' : U.fmtMoney(pnl, true);
+  }
+
+  PD.anadirParcial = function () {
+    const p = TE.state.position; if (!p) return false;
+    const precio = numOrNull($('pdParPrecio'));
+    if (precio === null || !Number.isFinite(precio) || precio <= 0) { U.toast('Nivel parcial: escribe un precio válido', 'warn'); return false; }
+    const ok = TE.addTpLevel(precio, +$('pdParPct').value);   // valida el lado y los duplicados
+    if (!ok) return false;
+    $('pdParPrecio').value = ''; $('pdParRoi').value = ''; sincronizaPar(null);
+    PD.renderPar();
+    return true;
+  };
+
+  function enlazaPar() {
+    $('pdTabPos').addEventListener('click', () => PD.setTab('pos'));
+    $('pdTabPar').addEventListener('click', () => PD.setTab('par'));
+    $('pdParPrecio').addEventListener('input', () => sincronizaPar('precio'));
+    $('pdParRoi').addEventListener('input', () => sincronizaPar('roi'));
+    $('pdParPct').addEventListener('input', () => sincronizaPar('pct'));
+    $('pdParAnadir').addEventListener('click', () => PD.anadirParcial());
+  }
+
+  PD.enlaza = function () { enlaza(); enlazaPar(); };
   global.PosTpSl = PD;
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enlaza); else enlaza();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => PD.enlaza()); else PD.enlaza();
 })(typeof window !== 'undefined' ? window : globalThis);
