@@ -1521,8 +1521,11 @@
         const etq = DT._palabraTipo(h.tipo);
         const colorLado = h.lado === 'long' ? '#24c18d' : '#f14b3f';   // los verdes/rojos medidos del sitio
         const sufijo = { pct: '%', qty: ' uds', notional: ' USD' }[h.modo] || ' USD';
-        const txt = (h.lado === 'long' ? 'Largo ' : 'Corto ') + U.fmtPrice(h.price) +
-          (h.tam ? ' / ' + h.tam + sufijo : '');
+        /* Mientras se arrastra, el centro enseña SOLO el precio (t≈9–11 s del vídeo: `64,086.7`, sin
+           «Open short» ni cantidad); al soltar vuelve el lado, el precio y el tamaño. */
+        const arrastrando = !!(DT.drag && DT.drag.tradeHandle && DT.drag.tradeHandle.id === h.id);
+        const txt = arrastrando ? U.fmtPrice(h.price) :
+          (h.lado === 'long' ? 'Largo ' : 'Corto ') + U.fmtPrice(h.price) + (h.tam ? ' / ' + h.tam + sufijo : '');
         ctx.font = '12px "noto sans", system-ui, sans-serif';
         ctx.textBaseline = 'middle';
         const anE = Math.max(52, Math.ceil((ctx.measureText(etq).width || 24) + PAD * 2));

@@ -23,3 +23,13 @@ se cambió para exigir lo que importa: que se desplace, que el botón siga pulsa
 desbloqueo, ojo que oculta y muestra sin borrar. Limitación: el punto del dibujo de prueba cae en x=0 (fuera
 de la vista en ese momento), así que la comprobación de selección se apoya en que la línea horizontal ocupa
 todo el ancho; no prueba la posición.
+
+## Cartel de la orden mientras se arrastra (fotogramas t=9, 10 y 11 s)
+
+- **El cartel no sigue el cursor en horizontal.** Se queda en la vela en la que nació (x fija) y sube o baja
+  con el precio mientras se arrastra. Lo que sigue al ratón es la cruz punteada, no el cartel. Eso ya lo
+  hacemos desde §5.10: el cartel se mueve con el precio y el número se actualiza en vivo.
+- **Durante el arrastre el centro muestra solo el precio** (`64,086.7`, sin «Open short» ni cantidad). Al soltar
+  vuelve lado, precio y tamaño. Copiado en `DT._drawTradeHandles` con `arrastrando`.
+- **Sin ancla automática todavía**: lo comprobé mirando el resultado (las suites `bitunix` 295 ✓ y
+  `limite-arrastrar` 26 ✓ siguen verdes), pero ninguna comprobación lee el texto durante el arrastre.
