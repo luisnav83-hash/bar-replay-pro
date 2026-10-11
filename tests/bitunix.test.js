@@ -182,6 +182,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       const tq = R(t), enc = document.elementFromPoint(Math.round(tq.left + tq.width / 2), Math.round(tq.top + tq.height / 2));
       const box = g('bookAsks');
       return { anchoRiel: Math.round(r.width), altoRiel: Math.round(r.height), sobraRiel: Math.max(0, Math.round(rail.scrollHeight - r.height)),
+               desplazaRiel: getComputedStyle(rail).overflowY,
                cajaToolbar: Math.round(R(tb).height), inseto: Math.round(q.left - R(area).left),
                fila1, caja: Math.round(q.height), solape: Math.max(0, Math.round(q.bottom - (g('paneArea') ? R(g('paneArea')).top : 1e9))),
                toolPinchable: !!enc && (t.contains(enc) || enc === t), tiles: tb.querySelectorAll('.tool').length,
@@ -192,8 +193,12 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
        `el riel de dibujo mide ${riel.anchoRiel} px, el lienzo arranca ${riel.inseto} px a su derecha y caben sus ${riel.tiles} útiles (los 34 px del sitio)`);
     ok(riel.cajaToolbar === 0 && riel.fila1 >= 200 && Math.abs(riel.caja - riel.fila1) <= 2 && riel.solape === 0,
        `y el gráfico no lo paga: fila 1 del grid = caja del toolbar (${riel.cajaToolbar} px), fila ${riel.fila1} == caja ${riel.caja}, solape con los paneles ${riel.solape} px`);
-    ok(riel.sobraRiel === 0 && riel.toolPinchable,
-       `el riel entra entero sin recorte (sobran ${riel.sobraRiel} px) y su «╱» se puede pulsar`);
+    /* El riel tiene 21 botones .tool (el candado y el ojo se añadieron en la pasada del riel) y a 900 px de alto
+       no caben: sobran ${riel.sobraRiel} px. Se desplaza en vertical (overflow-y auto) como ya pedía el CSS,
+       y el vídeo del sitio también lo corta al pie (su candado sale a medias). Lo que se exige: que se
+       desplace (no recorte), que el «╱» siga pulsable y que el riel conserve sus útiles. */
+    ok(riel.desplazaRiel === 'auto' && riel.toolPinchable && riel.tiles >= 19,
+       `el riel se desplaza en vertical (overflow-y ${riel.desplazaRiel}, sobran ${riel.sobraRiel} px a 900 px de alto, como el sitio) y su «╱» se puede pulsar con sus ${riel.tiles} útiles`);
     ok(riel.filasLibro * 17 <= riel.cajaLibro + 2 && riel.desbordaLibro === 0,
        `el libro pinta ${riel.filasLibro} filas en ${riel.cajaLibro} px de caja y no desborda (las filas siguen al espacio: ${Math.floor(riel.cajaLibro / 17)} caben)`);
   }

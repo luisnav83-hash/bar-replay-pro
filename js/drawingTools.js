@@ -549,6 +549,8 @@
   };
 
   DT.deleteDrawing = function (drawing) {
+    /* Candado: un dibujo bloqueado no se borra (el borrado de la orden o de la posición no pasa por aquí). */
+    if (DT.locked) { U.toast('🔒 Dibujos bloqueados: desbloquéalos para borrarlos', 'warn', 2200); return; }
     const i = DT.drawings.indexOf(drawing);
     if (i < 0) return;
     DT.drawings.splice(i, 1);
@@ -610,6 +612,16 @@
     d.hidden = !!on;
     if (d.hidden && DT.selected === d) DT.selected = null;
     DT.render(); DT._emitChange();
+  };
+
+  /** Candado del riel: bloquea los dibujos (no se seleccionan, no se mueven ni se borran). Las órdenes
+      y las líneas de posición no son dibujos y siguen funcionando. */
+  DT.toggleLock = function () {
+    DT.locked = !DT.locked;
+    if (DT.locked) DT.selected = null;
+    DT.render();
+    U.toast(DT.locked ? '🔒 Dibujos bloqueados' : '🔓 Dibujos desbloqueados', 'info', 1600);
+    return DT.locked;
   };
 
   /** Muestra u oculta TODOS los dibujos de golpe. */
@@ -765,7 +777,7 @@
     const tol = 7;
     for (let i = DT.drawings.length - 1; i >= 0; i--) {
       const d = DT.drawings[i];
-      if (d.hidden) continue;                     // oculto = no seleccionable
+      if (d.hidden || DT.locked) continue;        // oculto o bloqueado = no seleccionable ni movible
       const h = DT._hitHandle(d, x, y, tol);
       if (h !== null) return { drawing: d, handle: h };
       if (DT._hitBody(d, x, y, tol)) return { drawing: d, handle: 'body' };

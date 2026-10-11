@@ -124,6 +124,13 @@
     document.getElementById('btnDeleteDrawing').addEventListener('click', () => DT.deleteSelected());
     document.getElementById('btnClearDrawings').addEventListener('click', () => DT.clearAll());
     document.getElementById('btnSnap').addEventListener('click', () => DT.toggleSnap());
+    /* Candado y ojo del riel: el estado se enseña en el propio botón (aria-pressed y el icono). */
+    document.getElementById('btnLockDrawings').addEventListener('click', (e) => {
+      const on = DT.toggleLock();
+      e.currentTarget.setAttribute('aria-pressed', on ? 'true' : 'false');
+      e.currentTarget.textContent = on ? '🔒' : '🔓';
+    });
+    document.getElementById('btnHideDrawings').addEventListener('click', () => DT.toggleAllHidden());
 
     document.getElementById('btnAutoScale').addEventListener('click', (e) => {
       const on = !UI._autoScale;
