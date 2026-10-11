@@ -520,10 +520,10 @@
   };
   CM._lineasDePosicion = function (pos) {
     if (!pos) return;
-    const mk = (price, color, title, style) => {
+    const mk = (price, color, title, style, opt) => {
       const line = CM.series.candles.createPriceLine({
         price, color, lineWidth: 1, lineStyle: style === undefined ? 2 : style,
-        axisLabelVisible: true, title,
+        axisLabelVisible: !(opt && opt.sinEtiquetaEje), title,
       });
       CM._priceLines.push(line);
     };
@@ -533,7 +533,8 @@
        nosotros (`SL 0,1592` + PnL + ×), que nace en la x de la vela de entrada y se comería ese texto
        (docs/brecha-visual-bitunix.md §5.7, medido sobre su vídeo de órdenes visuales). El precio sigue
        visible en el eje (axisLabelVisible). */
-    mk(pos.entryPrice, COLORS.entry, entryLabel, 1);
+    // La caja blanca del eje con «LONG precio» se quita (pedido del usuario): la línea y su título siguen.
+    mk(pos.entryPrice, COLORS.entry, entryLabel, 1, { sinEtiquetaEje: true });
     if (pos.tp !== null && pos.tp !== undefined) mk(pos.tp, COLORS.tp, '', 2);
     if (pos.sl !== null && pos.sl !== undefined) mk(pos.sl, COLORS.sl, '', 2);
     const liq = TE.liquidationPrice(pos);
