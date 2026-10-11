@@ -2266,9 +2266,13 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
       && parseInt(a.slice(3, 5), 16) - parseInt(b.slice(3, 5), 16) <= 12
       && parseInt(a.slice(5, 7), 16) - parseInt(b.slice(5, 7), 16) <= 12;
     const tienede = (c) => tonos.some((t) => cerca(t, c));
-    return { id: h.id, precio: h.price, color: h.color, tipo: h.tipo, palabra: DT._palabraTipo(h.tipo),
+    return { id: h.id, precio: h.price, color: h.color, tipo: h.tipo, lado: h.lado, palabra: DT._palabraTipo(h.tipo), centro: (h._cartel || {}).centro,
       grupo: g ? { x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.w), h: Math.round(g.h) } : null,
       relleno: g ? hex(g.x + 3, g.y + 3) : null,
+      /* El BITMAP del lienzo, en el centro vertical del chip: lo que de verdad esta pintado en la fila del
+         precio. (La captura del navegador headless no sirve para esto: la misma escena sale con la pastilla
+         en la fila 194 en una captura y en la 110 en otra; el lienzo siempre dice 194.) */
+      enBitmap: g ? hex(g.x + 3, g.y + Math.round(g.h / 2)) : null,
       x: cruz ? { id: cruz.id, w: cruz.w, h: cruz.h, x: Math.round(cruz.x), derecha: Math.round(cruz.x + cruz.w) } : null,
       disco: disco ? { x: Math.round(disco.x), w: disco.w } : null,
       lienzo: Math.round(cv.getBoundingClientRect().width),
@@ -2377,10 +2381,18 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(Lpasta.grupo && Lpasta.grupo.h === 30 && Lpasta.x && Lpasta.x.w === 26 && Lpasta.x.h === 30
     && Lpasta.grupo.w > 120,
     `la pendiente lleva pastilla de 30 px de alto y tres compartimentos (grupo ${Lpasta.grupo.w}×${Lpasta.grupo.h} con su × de ${Lpasta.x.w}) - no los 14 de la pestana inventada`);
-  ok(Lpasta.palabra === 'Límite' && Lpasta.tonos.ambar && Lpasta.tonos.blanco,
-    `la palabra del primer compartimento es la del formulario para ese tipo («${Lpasta.palabra}», en el color de su línea) y el número va en blanco`);
-  ok(Lpasta.relleno === '#1a1b1c' && Lpasta.tonos.fondo && Lpasta.tonos.pelo && Lpasta.tonos.gris,
-    `su caja es la de las etiquetas de la carta: relleno ${Lpasta.relleno} muestreado en el lienzo, pelo ${Lpasta.tonos.pelo ? '#292a2b' : 'NINGUNO'} y × en ${Lpasta.tonos.gris ? '#919499' : 'NINGUNO'}`);
+  /* Cartel del vídeo: el compartimento de la palabra va RELLENO del color del lado (verde si es largo, rojo
+     si es corto), con la palabra del formulario en blanco; el del centro es la caja #1a1b1c con su pelo y
+     la × en gris. */
+  const colorDelLado = Lpasta.lado === 'long' ? '#24c18d' : '#f14b3f';
+  ok(Lpasta.palabra === 'Límite' && Lpasta.relleno === colorDelLado && Lpasta.tonos.blanco,
+    `la palabra («${Lpasta.palabra}», la del formulario para ese tipo) va sobre el relleno del lado ${Lpasta.relleno} (esperado ${colorDelLado}) en blanco, como el «Limit» rojo del vídeo`);
+  ok(/^(Largo|Corto) \d[\d.,]* \/ \S+/.test(Lpasta.centro || '') && (Lpasta.lado === 'long' ? /^Largo/ : /^Corto/).test(Lpasta.centro || ''),
+    `el centro dice lado, precio y tamaño como el «Open short 64,216.6 / 0.1592» del vídeo («${Lpasta.centro}»); el tamaño va en la unidad del formulario, sin inventar monedas`);
+  ok(Lpasta.enBitmap === colorDelLado && Lpasta.yDeLibreria !== null && Math.abs((Lpasta.grupo.y + Lpasta.grupo.h / 2) - Lpasta.yDeLibreria) <= 2,
+    `el bitmap del lienzo tiene el chip del lado (${Lpasta.enBitmap}) justo en la fila del precio (centro ${Lpasta.grupo.y + Lpasta.grupo.h / 2}, librería ${Lpasta.yDeLibreria})`);
+  ok(Lpasta.tonos.fondo && Lpasta.tonos.pelo && Lpasta.tonos.gris,
+    `el centro y la × siguen la caja de las etiquetas: #1a1b1c ${Lpasta.tonos.fondo ? 'sí' : 'NO'}, pelo #292a2b ${Lpasta.tonos.pelo ? 'sí' : 'NO'}, × #919499 ${Lpasta.tonos.gris ? 'sí' : 'NO'}`);
   ok(Lpasta.xBarra !== null && Lpasta.grupo.x <= Lpasta.xBarra && Lpasta.x.derecha < Lpasta.disco.x,
     `nace en la x de su barra (${Lpasta.xBarra} → pastilla en ${Lpasta.grupo.x}) y su × termina antes de que empiece el disco ⊕ (${Lpasta.x.derecha} < ${Lpasta.disco.x}), que era como se tapaban el uno al otro`);
   ok(Ledit.abierto && Ledit.editar.tipo === 'limit' && Math.abs(parseFloat(Ledit.precio) - Ledit.orden) < 0.51

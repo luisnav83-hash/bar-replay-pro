@@ -2708,7 +2708,10 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
 @media (max-width: 640px) {
   /* En el teléfono el billete no puede colgar del punto del dedo: se ancha de borde a borde del
      área de carta y deja el riel de marcas en la misma tipografía medida. */
-  #chartWrap .bf-billete { left: 8px !important; right: 8px; width: auto; }
+  /* En el telefono el billete ocupa la carta entera. `right` va con !important porque el JS le pone
+     `right:auto` en linea al abrirlo (para anclarlo al punto del golpe en escritorio); sin esto, con
+     `width:auto` el panel se encoge a su contenido y el texto del saldo decidia su ancho. */
+  #chartWrap .bf-billete { left: 8px !important; right: 8px !important; width: auto; }
 }
 
 /* ═════════ BLOQUE 26 · el billete en modo edición (§5.9) ═════════

@@ -1540,15 +1540,20 @@
           document.querySelector('.bf-billete-riel').hidden = false;
           DT.ensenaTicket(null);
         },
-        /* La cabecera del bilete dice lo que dice el formulario, con sus palabras: el campo de tamano
-           del sitio cambia de unidad segun el modo (porcentaje / por costo / contratos), asi que aqui se
-           presta el rotulo y el sufijo de SIZE_LABELS -la misma fuente- y el porcentaje del saldo solo se
-           calcula cuando el numero es dinero (en modo `pct` el numero YA es un porcentaje). */
+        /* La linea de arriba del panel suyo es el SALDO («Available 3,946.1 USDT ⇄», fotograma 18,6 s
+           del clip), no un rótulo: aqui repetia el rotulo y el numero del campo de abajo, que ya estan
+           escritos en su propia fila -la captura del §5.8 lo dejo ver-. El importe se lee de `#bfAvail`,
+           el numero que la barra de la cabecera calcula y refresca el propio `refreshAll`, asi que el
+           billete no puede separarse de el, y la etiqueta es la suya misma («Balance libre»). El porcentaje
+           del saldo solo se calcula cuando el numero es dinero (en modo `pct` el numero YA es un
+           porcentaje); el rotulo de la unidad (SIZE_LABELS) ya no se presta, porque el saldo no la lleva. */
         cuesta() {
           const modo = App.sizeMode;
           const lab = (UI.SIZE_LABELS && UI.SIZE_LABELS[modo]) || ['Importe (USDT)', ''];
           const v = parseFloat(B.el('bfBilleteQty').value) || 0;
-          let txt = lab[0] + ' ' + (B.el('bfBilleteQty').value || '0') + (lab[1] ? ' ' + lab[1] : '');
+          const av = B.el('acFree') || B.el('bfAvail');
+          const saldo = av ? String(av.textContent || '').trim() : '';
+          let txt = 'Balance libre ' + (saldo || '—');
           if (modo === 'notional') {
             const eq = TE.state.equity || 0;
             if (eq > 0) txt += ' · ' + U.num((v / eq) * 100, 2) + ' % del saldo';

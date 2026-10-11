@@ -680,6 +680,13 @@
       label: '⏳' + (o.side === 'long' ? '▲' : '▼'),
       t: o.creada === undefined ? null : o.creada,
       tipo: o.tipo || 'limite',
+      /* Lado y tamaño para el cartel `Límite | Corto 64 216,6 / 25 % | ×`: en el vídeo el compartimento
+         de la izquierda va relleno del color del lado y el del centro dice lado, precio y cantidad. Las
+         pendientes no guardan la cantidad en monedas, así que se enseña el tamaño en la unidad del
+         formulario (%, uds o USD), no uno calculado a ciegas. */
+      lado: o.side === 'long' ? 'long' : 'short',
+      tam: o.size === undefined || o.size === null ? '' : String(o.size),
+      modo: o.mode || 'notional',
     }));
     /* El filtro de arriba arregla de paso un bug viejo: `CM.priceToY(null)` no devuelve null sino un
        numero, asi que un `Activador` o un `Trailing` pendiente -cuya linea la carta no la pinta, porque
@@ -1451,10 +1458,18 @@
     const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
     const w = DT.width || 800, alto = DT.height || 400;
     DT._cajasCruz = []; DT._cajasPlus = [];
+    let movido = false;   // alguna `y` cambió desde el último pintado (la escala se asentó tras un gesto)
     DT.tradeHandles.forEach((h) => {
       const y = DT._yOf(h.price);
       h._grupo = null;
       if (y === null) return;
+      /* Repintado por escala: la autoescala de la carta se asienta DESPUÉS del `mouse.up` (y al entrar
+         velas), y el overlay no se repinta solo cuando no cambian los handles. Una pastilla pintada en la
+         fila vieja se queda ~80 px fuera de su línea (medido en el fotograma de evidencia). Si la `y` de
+         este frame no es la del anterior, se pide otro repintado en el siguiente; con tope, para no
+         entrar en bucle si el precio se mueve sin parar. */
+      if (h._yPintada !== undefined && h._yPintada !== y) movido = true;
+      h._yPintada = y;
       ctx.save();
       /* El disco con + del extremo: en el vídeo es un círculo gris sentado sobre la línea, pegado al
          eje de precio, y es lo que abre su menú de orden. Su tamaño NO puede salir del mock (las cifras
@@ -1483,12 +1498,16 @@
            que la compresion del video no deja afirmar que fuera verde; se queda el blanco de §5.7 para el
            numero y el color de la linea para la palabra. */
         const etq = DT._palabraTipo(h.tipo);
-        const txt = U.fmtPrice(h.price);
+        const colorLado = h.lado === 'long' ? '#24c18d' : '#f14b3f';   // los verdes/rojos medidos del sitio
+        const sufijo = { pct: '%', qty: ' uds', notional: ' USD' }[h.modo] || ' USD';
+        const txt = (h.lado === 'long' ? 'Largo ' : 'Corto ') + U.fmtPrice(h.price) +
+          (h.tam ? ' / ' + h.tam + sufijo : '');
         ctx.font = '12px "noto sans", system-ui, sans-serif';
         ctx.textBaseline = 'middle';
         const anE = Math.max(52, Math.ceil((ctx.measureText(etq).width || 24) + PAD * 2));
         const anP = Math.max(56, Math.ceil((ctx.measureText(txt).width || 24) + PAD * 2));
         const anchoGrupo = anE + anP + CRUZ;
+        h._cartel = { palabra: etq, centro: txt };   // lo que se pinta, para que la suite lo lea sin adivinarlo
         const xe = (h.t === null || h.t === undefined) ? null : DT._xOf(h.t);
         /* El margen derecho no es el borde del lienzo: es el borde IZQUIERDO del disco con +. Sin esto,
            cuando la barra de creacion cae en el tercio derecho la pastilla se anclaba a 10 px del borde y
@@ -1505,7 +1524,12 @@
         ctx.moveTo(gx + anE + 0.5, cy + 6); ctx.lineTo(gx + anE + 0.5, cy + ALTO - 6);
         ctx.moveTo(gx + anE + anP + 0.5, cy + 6); ctx.lineTo(gx + anE + anP + 0.5, cy + ALTO - 6);
         ctx.stroke();
-        ctx.fillStyle = h.color;
+        /* Compartimento de la palabra: relleno del color del lado, con las esquinas izquierdas redondeadas
+           (la caja entera ya tiene el radio) y el texto en blanco, como su `Limit` en rojo. */
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(gx, cy, anE, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx, cy, anE, ALTO);
+        ctx.fillStyle = colorLado; ctx.fill();
+        ctx.fillStyle = '#ffffff';
         ctx.fillText(etq, gx + PAD, y + 0.5);
         ctx.fillStyle = '#ffffff';
         ctx.fillText(txt, gx + anE + PAD, y + 0.5);
@@ -1560,6 +1584,10 @@
       disco(ctx, cy);
       ctx.restore();
     });
+    if (movido && (DT._reintentosEscala || 0) < 8) {
+      DT._reintentosEscala = (DT._reintentosEscala || 0) + 1;
+      requestAnimationFrame(() => { if (DT.render) DT.render(); });
+    } else if (!movido) DT._reintentosEscala = 0;
   };
 
   /* ============================== LISTA / UI ============================== */

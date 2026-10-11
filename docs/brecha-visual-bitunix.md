@@ -761,6 +761,41 @@ Vecinos, todos verdes: `limite-arrastrar` 26 (el arrastre sigue funcionando sin 
 y que el cartel aparezca siguiendo la cruz del cursor durante el ajuste en vez de quedarse en la barra de
 creación.
 
+#### 5.10 · segunda pasada (quinto enlace al mismo vídeo)
+
+Releído el fotograma a 4800×2700 con la anatomía completa (`/tmp/vf2`, t=9,5–19,5 s):
+
+- **El cartel de la orden** lleva la palabra del tipo en una caja **rellena del color del lado** (verde si es
+  largo, rojo si es corto) con el texto en blanco (`Limit` en rojo en el vídeo), y el centro dice
+  `lado · precio / tamaño` (`Open short 64,216.6 / 0.1592`). Aquí: `Límite | Largo 68,007.40 / 50% | ×`.
+  El tamaño va en la unidad del formulario (`%`, `uds` o `USD`): las pendientes no guardan la cantidad en
+  monedas y no la calculamos a ciegas. Verde/rojo son `#24c18d`/`#f14b3f`, medidos en el sitio.
+- **Lo que NO se copia**: los botoncitos `TP` / `SL` del cartel. El motor no tiene setter de SL/TP sobre una
+  orden pendiente (sólo sobre la posición), y un botón que no hace nada sería mentira.
+- **El billete**: su cabecera del vídeo es el saldo (`Available 3,946.1 USDT ⇄`), no un rótulo repetido. La
+  nuestra pasa a `Balance libre <saldo>`, leído de `#acFree`, el mismo número que el panel.
+- **Repintado por escala (defecto de esta pasada)**: tras un arrastre la escala se asienta después del
+  `mouse.up`, y el overlay no se repintaba si no cambiaban los handles: la pastilla quedaba en su fila vieja.
+  `_drawTradeHandles` ahora compara la `y` de cada handle con la última pintada y, si cambió, pide otro repintado
+  en el siguiente frame (tope de 8).
+- **Móvil**: el JS pone `right:auto` en línea al abrir el billete; con `width:auto` el panel se encogía a su
+  contenido. La regla del móvil lleva `!important` en `right`, así el billete vuelve a ocupar la carta.
+
+**Contrato**: anclas nuevas en el bloque L: la palabra sobre el relleno del lado, el centro con lado/precio/tamaño,
+y **el bitmap del lienzo** con el chip justo en la fila del precio (centro 184, librería 184). `test:bitunix`
+**294 ✓ · 0 ✗**; vecinos verdes (`limite-arrastrar` 26, `dibujos` 18, `gesto` 12, `responsive` 200, `formulario` 33,
+`limites` 14, `hedge` 74, `dom.smoke` 51, `browser.capture` 47).
+
+**Lo que la captura engaña (y por eso el ancla va al bitmap)**: en el navegador headless, dos capturas de la
+misma escena separadas 1,5 s dieron la pastilla en la fila 194 y en la 110, mientras el lienzo y el estado
+decían 194 todo el rato. La prueba que vale es la del bitmap (`getImageData` en el centro del chip); la captura
+de evidencia se toma tras dos `requestAnimationFrame`, con las velas cargadas (servidor de código en 8080; el
+build `file://` sale sin velas porque el reproductor no carga H.264 aquí).
+
+**Pendiente visible**: el `⊕` del eje tapa parte de la etiqueta del precio de la orden (`68,007.40`). Viene de
+§5.9 (el disco pegado al eje, como en el vídeo); el vídeo tiene el mismo solape, pero no lo tomamos como
+argumento para dejarlo.
+
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 
 **Aplicado y medido después de aplicar:**
