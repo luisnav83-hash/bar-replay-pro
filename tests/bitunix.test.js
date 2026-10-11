@@ -1775,6 +1775,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
         arriba: H(lee(x, g.y - 5)), abajo: H(lee(x, g.y + g.h + 5)) };
       o.yaQueNoPisa = !cerca(lee(x, g.y - 5), tinta) && !cerca(lee(x, g.y + g.h + 5), tinta);
       const cruz = DT._cajasCruz.find((k) => k.id === h.id);
+      if (!cruz) { out['m' + h.id] = o; return; }   // sin × (la liquidación no la lleva): ya medida arriba
       o.enCruz = (() => { const k = DT._hitTradeX(cruz.x + 13, cruz.y + 13); return k ? k.id : null; })();
       o.arrastreEnCruz = (() => { const k = DT._hitTradeHandle(cruz.x + 13, cruz.y + 13); return k ? k.id : null; })();
       o.golpeEnPastilla = (() => { const k = DT._hitTradeHandle(x, g.y + Math.round(g.h / 2)); return k ? k.id : null; })();

@@ -700,6 +700,9 @@
     const mk = (id, price, color, label, nivel) => Object.assign({ id, price, color, label, nivel }, extra);
     /* TP parciales (Partial TP/SL): uno por nivel, con su cantidad (o «All» si cierra la posición entera).
        Son fijos: se quitan con su × y no se arrastran (un arrastre los confundiría con el TP entero). */
+    /* Liquidación: naranja, con su «Liq.» y el precio; sin × y sin arrastre (como en Bitunix). */
+    const LIQ_COLOR = '#f7931a';
+    const liqPx = (pos && pos.leverage > 1 && typeof TE.liquidationPrice === 'function') ? TE.liquidationPrice(pos) : null;
     const tramos = pos ? (pos.tpLevels || []).map((l, i) => Object.assign(
       mk('tplv:' + i, l.price, '#24c18d', 'TP', 'tp'),
       { tramo: true, fijo: true, pctTramo: l.pct, qty: pos.qty * l.pct })) : [];
@@ -707,6 +710,7 @@
       ...(pos.sl !== null ? [mk('sl', pos.sl, '#f14b3f', 'SL', 'sl')] : []),
       ...(pos.tp !== null ? [mk('tp', pos.tp, '#24c18d', 'TP', 'tp')] : []),
       ...tramos,
+      ...(liqPx !== null ? [Object.assign(mk('liq', liqPx, LIQ_COLOR, 'Liq.', 'liq'), { fijo: true, liqPill: true })] : []),
     ] : [];
     DT._rebuildHandles();
     /* Datos del chip de la posición (cantidad, entrada, lado y margen). Sin posición, no hay chip. */
@@ -1759,10 +1763,10 @@
          el PnL en USDT y % sobre el margen en el centro, y la × a la derecha. Antes ponía la cantidad
          en BTC (`TP 0.0648`), que no es lo que el usuario mira en un nivel. */
       const txt = h.label;
-      const pnl = h.tramo ? null : TE.pnlBrutoEn(h.price, h);
+      const pnl = (h.tramo || h.liqPill) ? null : TE.pnlBrutoEn(h.price, h);
       const signo = pnl === null ? '' : (pnl < 0 ? '-' : '+');
       const roi = (pnl !== null && Number.isFinite(h.margen) && h.margen > 0) ? pnl / h.margen * 100 : null;
-      const txtPnl = h.tramo ? (h.pctTramo >= 0.999 ? 'All' : U.num(h.qty, 4)) : (pnl === null ? '' : (roi === null
+      const txtPnl = h.liqPill ? U.fmtPrice(h.price) : h.tramo ? (h.pctTramo >= 0.999 ? 'All' : U.num(h.qty, 4)) : (pnl === null ? '' : (roi === null
         ? signo + U.num(Math.abs(pnl), 2) + ' USDT'
         : signo + U.num(Math.abs(pnl), 2) + ' USDT (' + signo + U.num(Math.abs(roi), 2) + '%)'));
       ctx.font = '12px "noto sans", system-ui, sans-serif';
@@ -1796,19 +1800,21 @@
         ctx.fillStyle = h.color;
       } else {
         ctx.fillStyle = h.color; ctx.fill();
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = h.liqPill ? FONDO : '#ffffff';   // «Liq.» en oscuro sobre naranja, como Bitunix
       }
       ctx.fillText(txt, gx + PAD, cy + ALTO / 2 + 0.5);
       ctx.setLineDash([]);
       if (txtPnl) { ctx.fillStyle = h.color; ctx.fillText(txtPnl, gx + anP + PAD, cy + ALTO / 2 + 0.5); }
       const xx = gx + anP + anC;
       ctx.strokeStyle = PELO; ctx.beginPath();
-      ctx.moveTo(xx + 0.5, cy + 6); ctx.lineTo(xx + 0.5, cy + ALTO - 6); ctx.stroke();
-      ctx.fillStyle = TX3;
-      ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), cy + ALTO / 2 + 0.5);
-      DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
+      if (!h.liqPill) {
+        ctx.moveTo(xx + 0.5, cy + 6); ctx.lineTo(xx + 0.5, cy + ALTO - 6); ctx.stroke();
+        ctx.fillStyle = TX3;
+        ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), cy + ALTO / 2 + 0.5);
+        DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
+      }
       h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
-      if (!h.tramo) disco(ctx, cy);
+      if (!h.tramo && !h.liqPill) disco(ctx, cy);
       ctx.restore();
     });
     DT._drawChip(ctx);

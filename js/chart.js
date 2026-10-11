@@ -26,7 +26,7 @@
     bg: '#121212', grid: '#1f2020', gridSoft: '#191a1a', border: '#292a2b',
     text: '#919499', crosshair: '#4a4d55',
     up: '#24c18d', down: '#f14b3f',
-    entry: '#ffffff', sl: '#f14b3f', tp: '#24c18d', liq: '#f0b90b',
+    entry: '#ffffff', sl: '#f14b3f', tp: '#24c18d', liq: '#f7931a',
     limit: '#b9f641',   // órdenes límite pendientes (lima de la marca, punteada)
   };
 
@@ -537,7 +537,8 @@
     if (pos.tp !== null && pos.tp !== undefined) mk(pos.tp, COLORS.tp, '', 2);
     if (pos.sl !== null && pos.sl !== undefined) mk(pos.sl, COLORS.sl, '', 2);
     const liq = TE.liquidationPrice(pos);
-    if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, 'LIQ ≈ ' + U.fmtPrice(liq), 1);
+    // Solo la línea: su etiqueta «Liq. | precio» la pinta la pastilla de la carta (drawingTools).
+    if (liq !== null && pos.leverage > 1) mk(liq, COLORS.liq, '', 1);
 
     // Precio de break-even (comisiones incluidas): la línea que Bitunix pinta en
     // la tarjeta de posición, para saber dónde dejar el SL una vez en profit.
