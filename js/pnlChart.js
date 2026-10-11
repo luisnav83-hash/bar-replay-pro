@@ -847,7 +847,9 @@
       banda.classList.toggle('neg', !ganando);
       banda.classList.toggle('pos', ganando);
     }
-    cls(b, 'hidden', !visible);
+    /* Con el chip de la posición en pantalla (DT._chip) esta etiqueta repite sus datos y le tapa la
+       x de TP/SL y de la ⇅: se oculta mientras haya chip. Sin chip sigue igual. */
+    cls(b, 'hidden', !visible || !!(window.DT && DT._chip));
     if (visible) {
       // La etiqueta se pega a la última vela; si no cabe, se mete hacia dentro.
       const anchoB = b.offsetWidth || 150;

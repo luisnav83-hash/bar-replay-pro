@@ -1584,7 +1584,7 @@
     const pnl = (Number.isFinite(px) && TE.pnlBrutoEn) ? TE.pnlBrutoEn(px, c) : null;
     const txtQty = U.num(c.qty, c.qty >= 1 ? 4 : 6);
     const txtPnl = pnl === null ? '—' : (pnl > 0 ? '+' : (pnl < 0 ? '-' : '')) + U.num(Math.abs(pnl), 2);
-    const colorPnl = (pnl === null || pnl === 0) ? TX3 : (pnl > 0 ? verde : rojo);
+    const colorPnl = pnl === null ? TX3 : (pnl === 0 ? '#c9ccd1' : (pnl > 0 ? verde : rojo));
     ctx.save();
     ctx.font = '12px "noto sans", system-ui, sans-serif';
     ctx.textBaseline = 'middle';
@@ -1603,17 +1603,18 @@
     const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, total, w, margenDcha);
     const yTxt = cy + ALTO / 2 + 0.5;
     /* Botón TP o SL: contorno del color del nivel. Arrastrarlo CREA el nivel. */
-    const boton = (x0, texto, color, kind) => {
+    const boton = (x0, texto, colorTexto, colorBorde, kind) => {
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(x0 + 0.5, cy + 0.5, ANCHO_BOTON - 1, ALTO - 1, RADIO); else ctx.rect(x0 + 0.5, cy + 0.5, ANCHO_BOTON - 1, ALTO - 1);
       ctx.fillStyle = FONDO; ctx.fill();
-      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = color;
+      ctx.strokeStyle = colorBorde; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = colorTexto;
       ctx.fillText(texto, x0 + Math.round((ANCHO_BOTON - ctx.measureText(texto).width) / 2), yTxt);
       DT._cajasChip.push({ kind, x: x0, y: cy, w: ANCHO_BOTON, h: ALTO });
     };
-    boton(gx, 'TP', verde, 'tp');
-    boton(gx + oSL, 'SL', rojo, 'sl');
+    /* Colores de la captura del usuario: TP en gris claro, SL en rojo */
+    boton(gx, 'TP', '#c9ccd1', '#3a3d44', 'tp');
+    boton(gx + oSL, 'SL', rojo, '#6b2a2e', 'sl');
     /* Tamaño: bloque sólido del color del lado, número en blanco */
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(gx + oQty, cy, a1, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx + oQty, cy, a1, ALTO);
@@ -1629,7 +1630,7 @@
     ctx.fillStyle = FONDO; ctx.fill(); ctx.stroke();
     {
       const cx = gx + oInv + ANCHO_ICONO / 2, my = cy + ALTO / 2;
-      ctx.strokeStyle = TX3; ctx.lineWidth = 1.2; ctx.beginPath();
+      ctx.strokeStyle = rojo; ctx.lineWidth = 1.2; ctx.beginPath();
       ctx.moveTo(cx - 3, my + 5); ctx.lineTo(cx - 3, my - 5);
       ctx.moveTo(cx - 6, my - 2); ctx.lineTo(cx - 3, my - 5); ctx.lineTo(cx, my - 2);
       ctx.moveTo(cx + 3, my - 5); ctx.lineTo(cx + 3, my + 5);
