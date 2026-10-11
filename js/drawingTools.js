@@ -1500,6 +1500,42 @@
      color y la × para quitar el nivel, separadas por un hilo #292a2b. Nosotros llevábamos una
      pestañita lisa con ⇕ pegada al borde derecho: sin cantidad, sin PnL y sin forma de borrar sin ir al
      formulario. */
+  /* La leyenda OHLC (#ohlcLegend) es HTML por encima del lienzo: lo que caiga bajo ella no se ve. Si el
+     grupo de la pastilla o el chip cae a la altura de la leyenda y a su izquierda, se desplaza a la
+     derecha de la leyenda, siempre que quepa antes del disco ⊕. Si no cabe, se queda donde estaba. */
+  /* Punto de colocación de un grupo (pastilla de la posición, chip o pastilla de orden límite): primero
+     se aparta de la leyenda OHLC y luego se baja si choca con un grupo ya pintado en este mismo frame
+     (TP y SL pueden caer en la misma fila al apartarse de la leyenda). Registra el rectángulo final. */
+  DT._colocaGrupo = function (gx, cy, alto, anchoGrupo, w, margenDcha) {
+    let r = DT._esquivaLeyenda(gx, cy, alto, anchoGrupo, w, margenDcha);
+    const ocup = DT._rectsPintados || [];
+    for (let guardia = 0; guardia < 12; guardia++) {
+      const choque = ocup.find((o) => r.gx < o.x + o.w && r.gx + anchoGrupo > o.x && r.cy < o.y + o.h && r.cy + alto > o.y);
+      if (!choque) break;
+      r = { gx: r.gx, cy: choque.y + choque.h + 4 };
+    }
+    ocup.push({ x: r.gx, y: r.cy, w: anchoGrupo, h: alto });
+    DT._rectsPintados = ocup;
+    return r;
+  };
+
+  DT._esquivaLeyenda = function (gx, cy, alto, anchoGrupo, w, margenDcha) {
+    const el = document.getElementById('ohlcLegend');
+    if (!el || !DT.canvas) return { gx, cy };
+    const L = el.getBoundingClientRect();
+    if (!L.width || !L.height) return { gx, cy };
+    const C = DT.canvas.getBoundingClientRect();
+    const x1 = L.right - C.left, y0 = L.top - C.top, y1 = L.bottom - C.top;
+    const solapa = cy < y1 && cy + alto > y0;
+    if (!solapa || gx >= x1 + 8) return { gx, cy };
+    const nuevo = Math.round(x1 + 8);
+    if (nuevo + anchoGrupo <= w - margenDcha) return { gx: nuevo, cy };
+    /* No cabe a la derecha (la leyenda ocupa casi toda la anchura en la carta pequeña): se baja el grupo
+       justo debajo de la leyenda. Sin esto la × y el PnL quedaban tapados. Su línea queda tapada por la
+       leyenda igualmente, así que se pierde la alineación exacta a cambio de que se pueda leer. */
+    return { gx, cy: Math.round(y1 + 4) };
+  };
+
   /* Chip de la posición sobre la línea de ENTRADA, como el de Bitunix: [tamaño | PnL no realizado | TP | SL].
      El tamaño va en el color del lado; el PnL en USDT con el signo de su color; TP y SL son los botones
      que se arrastran para crear el nivel (en Bitunix, «pulsar el botón TP/SL y arrastrar»). */
@@ -1547,19 +1583,19 @@
     const total = a1 + a2 + GAP + aT + GAP + aS;
     const margenDcha = DT._anchoEje() + 24 + 2 + 6;
     const xe = (c.t === null || c.t === undefined) ? null : DT._xOf(c.t);
-    const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - total - margenDcha)));
-    const cy = Math.round(y - ALTO / 2);
+    const gx0 = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - total - margenDcha)));
+    const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, total, w, margenDcha);
     /* Tamaño: bloque sólido del lado con el número en blanco */
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(gx, cy, a1, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx, cy, a1, ALTO);
     ctx.fillStyle = colorLado; ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.fillText(txtQty, gx + PAD, y + 0.5);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(txtQty, gx + PAD, cy + ALTO / 2 + 0.5);
     /* PnL: caja oscura con el número del color de su signo */
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(gx + a1, cy, a2, ALTO, [0, RADIO, RADIO, 0]); else ctx.rect(gx + a1, cy, a2, ALTO);
     ctx.fillStyle = FONDO; ctx.fill();
     ctx.strokeStyle = PELO; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = colorPnl; ctx.fillText(txtPnl, gx + a1 + PAD, y + 0.5);
+    ctx.fillStyle = colorPnl; ctx.fillText(txtPnl, gx + a1 + PAD, cy + ALTO / 2 + 0.5);
     /* Botones TP y SL: contorno del color del nivel */
     const boton = (x0, texto, color, kind) => {
       ctx.beginPath();
@@ -1567,7 +1603,7 @@
       ctx.fillStyle = FONDO; ctx.fill();
       ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = color;
-      ctx.fillText(texto, x0 + Math.round((aT - ctx.measureText(texto).width) / 2), y + 0.5);
+      ctx.fillText(texto, x0 + Math.round((aT - ctx.measureText(texto).width) / 2), cy + ALTO / 2 + 0.5);
       DT._cajasChip.push({ kind, x: x0, y: cy, w: aT, h: ALTO });
     };
     const xT = gx + a1 + a2 + GAP;
@@ -1580,7 +1616,7 @@
     const ALTO = 30, RADIO = 4, PAD = 9, CRUZ = 26;
     const FONDO = '#1a1b1c', PELO = '#292a2b', TX3 = '#919499';
     const w = DT.width || 800, alto = DT.height || 400;
-    DT._cajasCruz = []; DT._cajasPlus = [];
+    DT._cajasCruz = []; DT._cajasPlus = []; DT._rectsPintados = [];
     let movido = false;   // alguna `y` cambió desde el último pintado (la escala se asentó tras un gesto)
     DT.tradeHandles.forEach((h) => {
       const y = DT._yOf(h.price);
@@ -1643,8 +1679,8 @@
            su propio compartimento de la x quedaba TAPADO por el disco -que se comprueba antes-: el golpe
            abria el billete en lugar de cancelar la orden. */
         const margenDcha = DT._anchoEje() + 24 + 2 + 6;
-        const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
-        const cy = Math.round(y - ALTO / 2);
+        const gx0 = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
+        const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, anchoGrupo, w, margenDcha);
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(gx, cy, anchoGrupo, ALTO, RADIO); else ctx.rect(gx, cy, anchoGrupo, ALTO);
         ctx.fillStyle = FONDO; ctx.fill();
@@ -1659,12 +1695,12 @@
         if (ctx.roundRect) ctx.roundRect(gx, cy, anE, ALTO, [RADIO, 0, 0, RADIO]); else ctx.rect(gx, cy, anE, ALTO);
         ctx.fillStyle = colorLado; ctx.fill();
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(etq, gx + PAD, y + 0.5);
+        ctx.fillText(etq, gx + PAD, cy + ALTO / 2 + 0.5);
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(txt, gx + anE + PAD, y + 0.5);
+        ctx.fillText(txt, gx + anE + PAD, cy + ALTO / 2 + 0.5);
         const xx = gx + anE + anP;
         ctx.fillStyle = TX3;
-        ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), y + 0.5);
+        ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), cy + ALTO / 2 + 0.5);
         DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
         h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
         disco(ctx, cy);
@@ -1701,8 +1737,8 @@
       /* Como en las órdenes límite: el grupo termina ANTES del disco ⊕ (que va pegado al eje), con su
          margen. Con el margen de 10 px la × y el PnL quedaban debajo del disco. */
       const margenDcha = DT._anchoEje() + 24 + 2 + 6;
-      const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
-      const cy = Math.round(y - ALTO / 2);
+      const gx0 = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
+      const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, anchoGrupo, w, margenDcha);
       ctx.lineJoin = 'round';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(gx + anP, cy, anC + CRUZ, ALTO, RADIO); else ctx.rect(gx + anP, cy, anC + CRUZ, ALTO);
@@ -1711,13 +1747,13 @@
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(gx, cy, anP, ALTO, RADIO); else ctx.rect(gx, cy, anP, ALTO);
       ctx.fillStyle = h.color; ctx.fill();
-      ctx.fillStyle = '#ffffff'; ctx.fillText(txt, gx + PAD, y + 0.5);
-      if (txtPnl) { ctx.fillStyle = h.color; ctx.fillText(txtPnl, gx + anP + PAD, y + 0.5); }
+      ctx.fillStyle = '#ffffff'; ctx.fillText(txt, gx + PAD, cy + ALTO / 2 + 0.5);
+      if (txtPnl) { ctx.fillStyle = h.color; ctx.fillText(txtPnl, gx + anP + PAD, cy + ALTO / 2 + 0.5); }
       const xx = gx + anP + anC;
       ctx.strokeStyle = PELO; ctx.beginPath();
       ctx.moveTo(xx + 0.5, cy + 6); ctx.lineTo(xx + 0.5, cy + ALTO - 6); ctx.stroke();
       ctx.fillStyle = TX3;
-      ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), y + 0.5);
+      ctx.fillText('×', xx + Math.round((CRUZ - ctx.measureText('×').width) / 2), cy + ALTO / 2 + 0.5);
       DT._cajasCruz.push({ id: h.id, x: xx, y: cy, w: CRUZ, h: ALTO });
       h._grupo = { x: gx, y: cy, w: anchoGrupo, h: ALTO };
       disco(ctx, cy);
