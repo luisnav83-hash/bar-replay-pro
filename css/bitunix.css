@@ -19,6 +19,13 @@
    ========================================================================= */
 
 :root {
+  /* Pila de los CONTROLES del panel de futuros, MEDIDA en el sitio (tools/medir-concentrado-bitunix.js
+     → /tmp/concentrado.json): el `body` sigue en "noto sans", pero inputs y botones de la tarjeta de
+     orden resuelven a `Geist, "PingFang SC", OSPunctuation, …` y en document.fonts están Geist
+     400/500/600/700. No se impone al formulario entero -las 200 anclas de test:layout miden métricas
+     de texto con la pila actual y cambiarla ahí es una pasada en sí misma-: de momento solo la lleva
+     lo nuevo, y el fallback "noto sans" deja el aspecto idéntico donde Geist no esté instalado. */
+  --font-panel: Geist, "PingFang SC", "noto sans", system-ui, sans-serif;
   /* ═══════════════════════════════════════════════════════════════════════
      TOKENS MEDIDOS EN EL SITIO REAL, no en una captura.
     Arnés: tools/captura-bitunix.js → docs/bitunix/medida.json (2026-10-10,
@@ -2639,4 +2646,67 @@ body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-sp
   #topbar #tfQuick .tf-btn { height: 22px; min-width: 30px; padding: 0 5px; font-size: 12px;
     border: 0; border-radius: 4px; background: transparent; color: var(--tx-3); }
   #topbar #tfQuick .tf-btn.active { background: #272829; color: #fff; }
+}
+
+/* ═════════ BLOQUE 25 · el billete de orden visual (§5.8) ═════════
+   Mismo chasis que el panel de órdenes: cajas de 40 px con radio 4 sobre #222324 (medido en §2 y
+   §5.5b: los campos del sitio son 272×40 con padding 0 12 px), rótulo de campo 12/400 #919499 (las
+   etiquetas `Precio (USDT)` / `Cantidad (USDT)` / `Total (USDT)` de la caja flotante real: 86×14,
+   83×14 y 104×14), panel #131414 con pelo #292a2b (el widget flotante medido en §1) y riel de % de
+   272×25 con las cinco marcas `0/25/50/75/100 %` a 16 px del borde superior (el slider de Arco real:
+   caja 272×25 en y=490 y rótulos en y=506). El ✓ es un cuadrado de 40: en el vídeo es un recuadro
+   verde con el tick, y 40 es la altura que el sitio da a todo lo que se pulsa.
+   La pista del riel NO se mide (los selectores de Arco no casan con su marca de clase), así que se
+   deja la del navegador en vez de adivinar un grosor. */
+#chartWrap .bf-billete {
+  /* 298 = los 272 px de campo medidos en el panel + 12+12 de padding + 1+1 de pelo del propio billete:
+     con 296 el campo salia de 270 y no de los 272 que se quieren replicar. */
+  position: absolute; z-index: 9; width: 298px; max-width: calc(100% - 16px);
+  /* Techo de altura: con la carta apretada (paneles de indicadores abiertos, franja movil) el billete
+     no puede colgar por debajo del area -desborda el contenedor y se come las anclas de recorte-, asi
+     que cabe en lo que haya y lo que sobre se desplaza dentro de el. */
+  max-height: calc(100% - 16px); overflow: auto; overscroll-behavior: contain;
+  box-sizing: border-box; padding: 12px;
+  background: #131414; border: 1px solid var(--line); border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  font-family: var(--font-panel); color: var(--tx-1);
+}
+#chartWrap .bf-billete[hidden] { display: none; }
+.bf-billete-cab { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-size: 12px; font-weight: 400; color: var(--tx-3); margin-bottom: 12px; }
+.bf-billete-x { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 0;
+  background: none; color: var(--tx-3); font: 14px/1 var(--font-panel); cursor: pointer; }
+.bf-billete-x:hover { color: #fff; }
+.bf-billete-campos { display: flex; flex-direction: column; gap: 8px; }
+.bf-billete-campo { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* El rotulo del campo: 12/400 #919499 en una linea de 14 px, que es lo que miden las etiquetas reales
+   del panel (`Precio (USDT)` 86x14, `Cantidad (USDT)` 83x14, `Total (USDT)` 104x14). No se trunca ni
+   con ellipsis: si no cabria, esta fila esta mal, no el texto -y hay un ancla que lo vigila. */
+.bf-billete-campo > span { font-size: 12px; font-weight: 400; line-height: 14px; color: var(--tx-3);
+  white-space: nowrap; }
+.bf-billete-campo input { height: 40px; box-sizing: border-box; padding: 0 12px;
+  background: var(--bg-3); border: 1px solid transparent; border-radius: 4px;
+  color: var(--tx-1); font: 400 14px/20px var(--font-panel); }
+.bf-billete-campo input:focus { border-color: var(--line); outline: none; background: #1c1d1e; }
+.bf-billete-campo input[readonly] { color: var(--tx-3); }
+.bf-billete-ok { flex: 0 0 40px; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 4px;
+  background: var(--up); color: #06231a; font: 700 16px/1 var(--font-panel); cursor: pointer; }
+.bf-billete-ok:hover { filter: brightness(1.08); }
+body[data-billete-lado="short"] .bf-billete-ok { background: var(--down); color: #2b0b09; }
+.bf-billete-pie { display: flex; gap: 8px; margin-top: 12px; align-items: stretch; }
+.bf-billete-pie .seg { flex: 1 1 0; min-width: 0; }
+.bf-billete-pie .bf-billete-ok { flex: 0 0 40px; }
+.bf-billete-pie .seg-btn { height: 40px; }
+.bf-billete-pie .seg-btn { font-size: 12px; }
+.bf-billete-riel { margin-top: 12px; height: 25px; position: relative; }
+.bf-billete-riel input[type=range] { width: 100%; margin: 0; accent-color: var(--up); }
+body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-color: var(--down); }
+.bf-billete-marcas { position: absolute; left: 0; right: 0; top: 16px; display: flex;
+  justify-content: space-between; font-size: 12px; font-weight: 400; line-height: 12px;
+  color: var(--tx-3); pointer-events: none; }
+
+@media (max-width: 640px) {
+  /* En el teléfono el billete no puede colgar del punto del dedo: se ancha de borde a borde del
+     área de carta y deja el riel de marcas en la misma tipografía medida. */
+  #chartWrap .bf-billete { left: 8px !important; right: 8px; width: auto; }
 }

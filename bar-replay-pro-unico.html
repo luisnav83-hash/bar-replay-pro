@@ -700,6 +700,7 @@ kbd{
 }
 /* ==== css/bitunix.css ==== */
 :root {
+  --font-panel: Geist, "PingFang SC", "noto sans", system-ui, sans-serif;
   --bg-0: #000000;
   --bg-1: #121212;
   --bg-2: #0f0f0f;
@@ -2055,6 +2056,47 @@ body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-sp
     border: 0; border-radius: 4px; background: transparent; color: var(--tx-3); }
   #topbar #tfQuick .tf-btn.active { background: #272829; color: #fff; }
 }
+#chartWrap .bf-billete {
+  position: absolute; z-index: 9; width: 298px; max-width: calc(100% - 16px);
+  max-height: calc(100% - 16px); overflow: auto; overscroll-behavior: contain;
+  box-sizing: border-box; padding: 12px;
+  background: #131414; border: 1px solid var(--line); border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  font-family: var(--font-panel); color: var(--tx-1);
+}
+#chartWrap .bf-billete[hidden] { display: none; }
+.bf-billete-cab { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-size: 12px; font-weight: 400; color: var(--tx-3); margin-bottom: 12px; }
+.bf-billete-x { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 0;
+  background: none; color: var(--tx-3); font: 14px/1 var(--font-panel); cursor: pointer; }
+.bf-billete-x:hover { color: #fff; }
+.bf-billete-campos { display: flex; flex-direction: column; gap: 8px; }
+.bf-billete-campo { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.bf-billete-campo > span { font-size: 12px; font-weight: 400; line-height: 14px; color: var(--tx-3);
+  white-space: nowrap; }
+.bf-billete-campo input { height: 40px; box-sizing: border-box; padding: 0 12px;
+  background: var(--bg-3); border: 1px solid transparent; border-radius: 4px;
+  color: var(--tx-1); font: 400 14px/20px var(--font-panel); }
+.bf-billete-campo input:focus { border-color: var(--line); outline: none; background: #1c1d1e; }
+.bf-billete-campo input[readonly] { color: var(--tx-3); }
+.bf-billete-ok { flex: 0 0 40px; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 4px;
+  background: var(--up); color: #06231a; font: 700 16px/1 var(--font-panel); cursor: pointer; }
+.bf-billete-ok:hover { filter: brightness(1.08); }
+body[data-billete-lado="short"] .bf-billete-ok { background: var(--down); color: #2b0b09; }
+.bf-billete-pie { display: flex; gap: 8px; margin-top: 12px; align-items: stretch; }
+.bf-billete-pie .seg { flex: 1 1 0; min-width: 0; }
+.bf-billete-pie .bf-billete-ok { flex: 0 0 40px; }
+.bf-billete-pie .seg-btn { height: 40px; }
+.bf-billete-pie .seg-btn { font-size: 12px; }
+.bf-billete-riel { margin-top: 12px; height: 25px; position: relative; }
+.bf-billete-riel input[type=range] { width: 100%; margin: 0; accent-color: var(--up); }
+body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-color: var(--down); }
+.bf-billete-marcas { position: absolute; left: 0; right: 0; top: 16px; display: flex;
+  justify-content: space-between; font-size: 12px; font-weight: 400; line-height: 12px;
+  color: var(--tx-3); pointer-events: none; }
+@media (max-width: 640px) {
+  #chartWrap .bf-billete { left: 8px !important; right: 8px; width: auto; }
+}
 </style>
 </head>
 <body>
@@ -2284,6 +2326,7 @@ body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-sp
         <button class="tool" data-tool="measure" title="Medición: distancia en precio y velas entre dos puntos" title2="">↔</button>
         <button class="tool" data-tool="arrow" title="Flecha: marca un movimiento o una proyección (2 clics) · atajo A">➤</button>
         <button class="tool" data-tool="path" title="Camino: polilínea libre, une varios puntos (clics y doble clic o Enter para cerrar) · atajo P">✎</button>
+        <button class="tool" data-tool="orden" title="Orden visual: arrastra sobre la carta y suelta en el precio que quieras -abre el billete, escribe en el formulario y coloca la orden- · atajo O">⇅</button>
       </div>
 
       <div class="tool-cluster">
@@ -2331,6 +2374,43 @@ body .field-label, body #orderCard .bf-tpl-lab { text-transform: none; letter-sp
     <div id="chartWrap">
       <div id="mainChart"></div>
       <canvas id="overlayCanvas"></canvas>
+    <!-- Billete de orden visual (§5.8). Su ESTRUCTURA sale del vídeo oficial de órdenes visuales
+         (cabecera con el coste y una x para cerrar, campo de importe, botón de acción y ✓ de confirmar,
+         y debajo el riel de %); sus MEDIDAS salen del DOM real de la página de futuros -cajas de 40 px
+         con radio 4 sobre #222324, rótulo de campo 12/400 #919499, riel de 272x25 con cinco marcas-,
+         porque el .mp4 es un mock con tipografía sobredimensionada y no vale como CSS. El billete NO
+         tiene aritmética propia: escribe en #sizeInput / #limitInput y pulsa el botón de lado del
+         formulario, así que validaciones, modo de riesgo, TP/SL y registro siguen siendo un solo camino.
+         El tipo y el lado llevan data-btipo / data-blado a propósito: los cuatro data-otype del panel
+         siguen siendo los únicos dueños de #segOrderType. -->
+    <div class="bf-billete" id="bfBillete" hidden>
+      <div class="bf-billete-cab">
+        <span id="bfBilleteCoste">Coste —</span>
+        <button type="button" class="bf-billete-x" id="bfBilleteX" title="Cerrar sin colocar (Esc)">×</button>
+      </div>
+      <!-- Un campo por fila, como en su panel de 6rdenes: asi los dos heredan los 272 px medidos y el
+           rotulo cabe entero (con los dos en la misma fila «Tamaño (% del equity)» se truncaba). El ✓
+           baja a la fila de los segmentados. -->
+      <div class="bf-billete-campos">
+        <label class="bf-billete-campo"><span>Precio (USDT)</span><input type="number" id="bfBilletePrecio" step="0.01" inputmode="decimal"></label>
+        <label class="bf-billete-campo"><span id="bfBilleteQtyLab">Importe (USDT)</span><input type="number" id="bfBilleteQty" min="0" step="1" inputmode="decimal"></label>
+      </div>
+      <div class="bf-billete-pie">
+        <button type="button" class="bf-billete-ok" id="bfBilleteOk" title="Colocar la orden en el precio marcado">✓</button>
+        <div class="seg" id="bfBilleteTipo" role="group" aria-label="Tipo de orden del billete">
+          <button type="button" class="seg-btn active" data-btipo="limite">Límite</button>
+          <button type="button" class="seg-btn" data-btipo="market">Mercado</button>
+        </div>
+        <div class="seg" id="bfBilleteLado" role="group" aria-label="Lado del billete">
+          <button type="button" class="seg-btn active" data-blado="long">Comprar</button>
+          <button type="button" class="seg-btn" data-blado="short">Vender</button>
+        </div>
+      </div>
+      <div class="bf-billete-riel">
+        <input type="range" id="bfBilletePct" min="0" max="100" step="25" value="0" aria-label="Porcentaje del saldo comprometido">
+        <div class="bf-billete-marcas"><span>0 %</span><span>25 %</span><span>50 %</span><span>75 %</span><span>100 %</span></div>
+      </div>
+    </div>
 
       <!-- Leyenda OHLC flotante -->
       <div id="ohlcLegend">
@@ -9235,6 +9315,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
   DT.onTradeClear = null;   // callback(id) → la × de la etiqueta quita el nivel (lo conecta uiController)
+  DT.onTicket = null;       // callback({x, y, price}) → la herramienta «orden» abre el billete flotante
   DT.onChange = null;       // callback al cambiar la lista de dibujos
 
   /* ============================== INICIALIZACIÓN ============================== */
@@ -9481,6 +9562,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   DT._onDown = function (e) {
     if (e.button !== 0) return;
     const p = DT._localPos(e);
+
+    /* --- 0b) Herramienta «orden visual»: el arrastre NO dibuja, coloca. Se abre el billete en el
+           punto con el precio del cursor ya ajustado al paso del símbolo, y la carta pinta la línea de
+           previsualización mientras el billete esté abierto. --- */
+    if (DT.tool === 'orden') {
+      const precio = DT._snapPrice(CM.yToPrice(p.y));
+      if (DT.onTicket) DT.onTicket({ x: p.x, y: p.y, price: Number.isFinite(precio) ? precio : null });
+      return;
+    }
 
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
     const cruce = DT._hitTradeX(p.x, p.y);
@@ -10248,6 +10338,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }
 
     // Handles de posición (SL/TP)
+    DT._drawTicketPreview(ctx);
     DT._drawTradeHandles(ctx);
 
     // Aviso de herramienta activa: en la esquina superior izquierda, con
@@ -10499,6 +10590,25 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     ctx.fillText(text, x + 4, y);
     ctx.restore();
   };
+
+  /** La línea que acompaña al billete abierto: discontinua en el color del lado, con su chincheta. */
+  DT._drawTicketPreview = function (ctx) {
+    const t = DT._ticketPreview;
+    if (!t || t.y === null || t.y === undefined) return;
+    const w = DT.width || 800;
+    ctx.save();
+    ctx.strokeStyle = t.color || '#919499';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(0, t.y + 0.5); ctx.lineTo(w, t.y + 0.5); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = t.color || '#919499';
+    ctx.beginPath(); ctx.arc(t.x || 0, t.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  };
+
+  /** El billete avisa de su precio/lado para que la carta lo pinte; null lo apaga. */
+  DT.ensenaTicket = function (o) { DT._ticketPreview = o || null; DT.render(); };
 
   /* Anatomía de las etiquetas de nivel de su modo «focused trading», MEDIDA sobre el vídeo oficial de
      órdenes visuales fotograma a fotograma (nativo 4800×2700 = 1600×900 CSS a dpr 3 → ÷3): el grupo
@@ -12775,6 +12885,134 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     /* La × de la etiqueta dibujada sobre la carta QUITA el nivel, como en su modo concentrado. Se
        limpia con el setter del motor a null (el único camino que avisa si el modo de riesgo exige SL),
        se refleja en los campos del formulario -si no, la carta diría una cosa y la caja otra- y se
+       cuenta en el registro. */
+    /* ── EL BILLETE DE ORDEN VISUAL (§5.8) ─────────────────────────────────────────────
+       El vídeo de Bitunix coloca la orden arrastrando sobre la carta: el billete flota en el punto,
+       trae importe, tipo, lado y el riel de %, y un ✓. Aquí el billete no tiene aritmética propia:
+       escribe en #sizeInput / #limitInput, presta el rótulo del campo de SIZE_LABELS (la misma fuente
+       que el formulario), deja que el riel de % dispare los botones `#quickSize [data-pct]` que ya
+       hacen la cuenta contra el saldo, y para colocar PULSA el botón de lado del panel -así que las
+       validaciones, el modo de riesgo, los TP/SL y el registro siguen siendo un único camino-. */
+    const BIL = document.getElementById('bfBillete');
+    if (BIL) {
+      const B = {
+        abierto: false, ladoActivo: 'long', tipoActivo: 'limite', precio: null,
+        el: (id) => document.getElementById(id),
+        abre(d) {
+          const env = document.getElementById('chartWrap'), r = env.getBoundingClientRect();
+          B.precio = Number.isFinite(d.price) ? d.price : (App.currentPrice() || null);
+          B.abierto = true;
+          BIL.hidden = false;
+          const ancho = Math.min(298, r.width - 16);
+          const x = Math.max(8, Math.min(d.x + 14, r.width - ancho - 8));
+          BIL.style.left = x + 'px'; BIL.style.top = Math.max(8, d.y - 40) + 'px'; BIL.style.right = 'auto';
+          const pre = B.el('bfBilletePrecio');
+          pre.value = B.precio === null ? '' : U.round(B.precio, CM.decimales || 2);
+          pre.readOnly = B.tipoActivo === 'market';
+          const modo = (App.sizeMode === 'riesgo' ? 'notional' : App.sizeMode);
+          if (UI.SIZE_LABELS && UI.SIZE_LABELS[modo]) B.el('bfBilleteQtyLab').textContent = UI.SIZE_LABELS[modo][0];
+          B.el('bfBilleteQty').value = B.el('sizeInput').value || '';
+          document.body.dataset.billeteLado = B.ladoActivo;
+          B.cuesta();
+          /* Reclocado AL FINAL, con el billete ya completo: medir la altura justo despues de quitar el
+             `hidden` da 269 por 279 reales (la cabecera y el rotulo del tamano crecen despues) y el
+             billete se salia 2 px por debajo del area de carta. Si aun asi no cabe, se sube y el
+             `max-height` de la hoja le mete barra de desplazamiento en vez de desbordar la carta. */
+          const real = BIL.getBoundingClientRect();
+          if (real.y - r.y + real.height > r.height - 8) {
+            BIL.style.top = Math.max(8, Math.round(r.height - real.height - 8)) + 'px';
+          }
+          DT.ensenaTicket({ x: d.x, y: DT._yOf(B.precio), price: B.precio, color: B.ladoActivo === 'long' ? '#24c18d' : '#f14b3f' });
+          B.el('bfBilleteQty').focus();
+        },
+        cierra() {
+          B.abierto = false; BIL.hidden = true;
+          DT.ensenaTicket(null);
+        },
+        /* La cabecera del bilete dice lo que dice el formulario, con sus palabras: el campo de tamano
+           del sitio cambia de unidad segun el modo (porcentaje / por costo / contratos), asi que aqui se
+           presta el rotulo y el sufijo de SIZE_LABELS -la misma fuente- y el porcentaje del saldo solo se
+           calcula cuando el numero es dinero (en modo `pct` el numero YA es un porcentaje). */
+        cuesta() {
+          const modo = App.sizeMode;
+          const lab = (UI.SIZE_LABELS && UI.SIZE_LABELS[modo]) || ['Importe (USDT)', ''];
+          const v = parseFloat(B.el('bfBilleteQty').value) || 0;
+          let txt = lab[0] + ' ' + (B.el('bfBilleteQty').value || '0') + (lab[1] ? ' ' + lab[1] : '');
+          if (modo === 'notional') {
+            const eq = TE.state.equity || 0;
+            if (eq > 0) txt += ' · ' + U.num((v / eq) * 100, 2) + ' % del saldo';
+          }
+          B.el('bfBilleteCoste').textContent = txt;
+        },
+        escribeCampo() {
+          const t = B.el('bfBilleteQty'), s = B.el('sizeInput');
+          if (s && t.value !== s.value) { s.value = t.value; s.dispatchEvent(new Event('input', { bubbles: true })); }
+          if (B.tipoActivo === 'limite') {
+            const p = B.el('bfBilletePrecio'), l = B.el('limitInput');
+            const v = parseFloat(p.value);
+            if (l && Number.isFinite(v) && String(l.value) !== String(v)) { l.value = v; l.dispatchEvent(new Event('input', { bubbles: true })); }
+          }
+          B.cuesta();
+        },
+        /* Se coloca POR el boton del formulario, no a traves de una ruta propia: asi las validaciones,
+           el modo de riesgo, los TP/SL marcados y el registro son exactamente los mismos. Y se cierra
+           solo si la cuenta cambio de verdad -si el formulario la rechaza, el billete se queda abierto
+           con su motivo encima-, por eso se compara antes y despues en vez de fiarse del click. */
+        coloca() {
+          B.escribeCampo();
+          if (UI.setOrderType) UI.setOrderType(B.tipoActivo);
+          const cuenta = () => (TE.state.position ? 1 : 0) + (TE.state.pending || []).length;
+          const antes = cuenta();
+          const boton = B.el(B.ladoActivo === 'long' ? 'btnLong' : 'btnShort');
+          if (boton) boton.click();
+          if (cuenta() > antes) B.cierra();
+        },
+        marcaLado(v) {
+          B.ladoActivo = v;
+          document.querySelectorAll('#bfBilleteLado .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.blado === v));
+          document.body.dataset.billeteLado = v;
+          DT.ensenaTicket(B.abierto ? { x: (DT._ticketPreview && DT._ticketPreview.x) || 0, y: DT._yOf(B.precio), price: B.precio, color: v === 'long' ? '#24c18d' : '#f14b3f' } : null);
+        },
+        marcaTipo(v) {
+          B.tipoActivo = v;
+          document.querySelectorAll('#bfBilleteTipo .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.btipo === v));
+          B.el('bfBilletePrecio').readOnly = v === 'market';
+          B.el('bfBilletePrecio').title = v === 'market' ? 'A mercado no hay precio: se ejecuta con la vela actual' : '';
+        },
+      };
+      UI.billete = B;
+      DT.onTicket = (d) => B.abre(d);
+      BIL.addEventListener('mousedown', (e) => e.stopPropagation());   // que el billete no mueva la carta
+      BIL.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+      B.el('bfBilleteX').addEventListener('click', () => B.cierra());
+      B.el('bfBilleteOk').addEventListener('click', () => B.coloca());
+      B.el('bfBilleteQty').addEventListener('input', () => B.escribeCampo());
+      B.el('bfBilletePrecio').addEventListener('input', () => {
+        const v = parseFloat(B.el('bfBilletePrecio').value);
+        if (Number.isFinite(v)) { B.precio = v; DT.ensenaTicket({ x: (DT._ticketPreview && DT._ticketPreview.x) || 0, y: DT._yOf(v), price: v, color: B.ladoActivo === 'long' ? '#24c18d' : '#f14b3f' }); }
+      });
+      document.querySelectorAll('#bfBilleteLado .seg-btn').forEach((b) => b.addEventListener('click', () => B.marcaLado(b.dataset.blado)));
+      /* El tipo del billete es el del formulario: cambiarlo aqui cambia `#segOrderType` (y su activado),
+         no hay dos estados que se separan. */
+      document.querySelectorAll('#bfBilleteTipo .seg-btn').forEach((b) => b.addEventListener('click', () => { B.marcaTipo(b.dataset.btipo); if (UI.setOrderType) UI.setOrderType(b.dataset.btipo); }));
+      /* El riel no calcula nada: dispara el boton de porcentaje del formulario, que es donde vive la
+         cuenta contra el saldo (y si el tramo no esta, se pone 0). */
+      B.el('bfBilletePct').addEventListener('input', (e) => {
+        const p = +e.target.value;
+        const boton = document.querySelector('#quickSize [data-pct="' + p + '"]');
+        if (boton) boton.click(); else { const s = B.el('sizeInput'); s.value = p ? s.value : '0'; s.dispatchEvent(new Event('input', { bubbles: true })); }
+        B.el('bfBilleteQty').value = B.el('sizeInput').value || '';
+        B.cuesta();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && B.abierto) { B.cierra(); e.stopPropagation(); }
+      });
+      B.marcaTipo('limite');
+    }
+
+    /* La × de la etiqueta dibujada sobre la carta QUITA el nivel, como en su modo concentrado. Se
+       limpia con el setter del motor a null (el unico camino que avisa si el modo de riesgo exige SL),
+       se refleja en los campos del formulario -si no, la carta diria una cosa y la caja otra- y se
        cuenta en el registro. */
     DT.onTradeClear = (id) => {
       const pos = TE.state.position;

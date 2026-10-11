@@ -530,8 +530,9 @@ de la implementación son los tokens del §1-.
 Lo que **no** se copia todavía, que el vídeo también enseña (apuntado para no perderlo):
 
 1. **El billete al arrastrar sobre la carta vacía**: panel flotante con `Posición 63942,1/63827,1`,
-   campo de cantidad, `Market Buy` y ✓, con el riel `0 % 25 % 50 % 75 % 100 %` debajo (t=17-20). Aquí
-   la orden se sigue poniendo en el formulario; sería un modo nuevo de colocar, no un cambio de piel.
+   campo de cantidad, `Market Buy` y ✓, con el riel `0 % 25 % 50 % 75 % 100 %` debajo (t=17-20).
+   **HECHO en §5.8**, con sus números sacados del DOM (no del mock) y su aritmética delegada en el
+   formulario.
 2. **El `⊕` del extremo de la línea y su menú** (t=2-3 y 13-16): `add alert`, `Set order`,
    `Limit/Market`, `Trigger order (Market)`, `Cancel order`, `To price`. Es un popover con acciones de
    motor; las órdenes límite pendientes siguen con su pestaña ámbar en el borde derecho hasta que eso
@@ -547,6 +548,68 @@ comprueban además los golpes (`×` clickeable y fuera del arrastre, el resto de
 y la aritmética (`20 / 20 / null`). El montaje del test invierte las coordenadas (`CM.yToPrice`) para
 elegir precios que caigan dentro del lienzo: a ±3 % de la entrada el TP se salía por arriba y el
 muestreo daba negro -error de medición nuestro, no de la piel-.
+
+### 5.8 · el billete de orden visual (arrastrar en la carta para colocar)
+
+Segunda pieza del mismo vídeo. Antes de tocar nada **se intentó medir en el sitio real** con una sonda
+nueva (`tools/medir-concentrado-bitunix.js`, salida en `/tmp/concentrado.json`) y de ahí salen tres
+datos que cambian el método de esta sección:
+
+1. **La carta de Bitunix es un `iframe`** (`Financial Chart`, 984×530 en la ventana de 1600×900): el
+   `getComputedStyle` de la página padre no ve lo que hay dentro, así que el billete y el menú de la
+   línea **no son medibles en el DOM sin sesión** aunque se entre en `Pantalla completa` (el botón está
+   en la cabecera, título medido, y al pulsar la carta sube de `y=215` a `y=167`). Para esa capa, el
+   vídeo oficial es la única fuente de **estructura**; las **cifras** se van a buscar a los controles
+   análogos del panel de órdenes, que sí es DOM propio.
+2. **La pila tipográfica de los controles ya no es Noto Sans**: el `body` sigue en `"noto sans" 14 px`,
+   pero inputs y botones del panel resuelven `Geist, "PingFang SC", OSPunctuation, …` y
+   `document.fonts` trae Geist 400/500/600/700. Adoptado solo en lo nuevo (`--font-panel`), con
+   `"noto sans"` de fallback: cambiar la pila en el formulario entero mueve métricas de texto y las 200
+   anclas de `test:layout` miden justo eso -queda como criterio aparte, no colado de rebote.
+3. **El riel de % real es un slider de Arco de 272×25** (caja en `x=1311 y=490`) con sus cinco marcas
+   `0 % 25 % 50 % 75 % 100 %` en `12/400 #919499` a **16 px** del borde superior de la caja (rótulos en
+   `y=506`). La pista en sí no se midió (los selectores `.arco-slider-line`/`-thumb` no casan con su
+   marca de clase), así que se deja la pista del navegador con `accent-color`: mejor eso que un grosor
+   adivinado.
+
+Enseñanza de herramienta, apuntada porque costó: **`page.evaluate('(x) => …')` pasando la función en
+CADENA no falla en esta versión de Puppeteer -devuelve `{}` en silencio**, porque la cadena se evalúa
+como expresión y el objeto función no serializa**. Toda sonda escrita en cadena hay que lanzarla con
+`run(page, FUENTE)` (`eval('(' + src + ')')` dentro de la página); si no, el informe sale en blanco y
+parece que el sitio no tiene la UI cuando lo que no tiene es la prueba.
+
+**Lo que se implementa.** Herramienta nueva en el riel (`data-tool="orden"`, atajo visible en su
+`title`): al pulsar sobre la carta **no se dibuja, se coloca** - se abre el billete en el punto con el
+precio del cursor ya ajustado al paso del símbolo, y la carta pinta su línea discontinua en el color del
+lado con un punto en el ancla. El billete (`.bf-billete`, dentro de `#chartWrap`):
+
+| pieza | de dónde sale | qué es |
+| --- | --- | --- |
+| panel 298 px, `#131414`, pelo `#292a2b`, radio 4 | §1 (widget flotante medido) | 298 = 272 del campo + 12+12 de padding + 1+1 de pelo |
+| un campo por fila de **272×40**, `#222324`, radio 4, `padding 0 12px` | §2 y §5.5b (los campos reales del panel) | `Precio (USDT)` y el del tamaño; con los dos en la misma fila el rótulo se truncaba |
+| rótulo encima, 12/400 `#919499`, línea de 14 | las etiquetas reales `Precio (USDT)` 86×14, `Cantidad (USDT)` 83×14, `Total (USDT)` 104×14 | el del tamaño se presta de `UI.SIZE_LABELS`, así que dice lo mismo que el formulario |
+| ✓ **40×40** en `#24c18d` (rojo `#f14b3f` con Vender) | altura de botón medida en el sitio; color del lado del §1 | confirmar |
+| riel `272×25` con cinco marcas a 16 px | el Arco medido hoy | `input[type=range]` con `step=25` |
+| dos segmentados: `Límite \| Mercado` y `Comprar \| Vender` | nuestra piel de `.seg` | `data-btipo`/`data-blado` a propósito: **los cuatro `data-otype` siguen siendo los únicos dueños de `#segOrderType`** (hay un ancla que lo vigila) |
+
+**Y sobre todo: el billete no tiene aritmética ni validación propia.** Escribe en `#sizeInput` y
+`#limitInput`, el riel de % **dispara el botón `#quickSize [data-pct]`** que ya hace la cuenta contra el
+saldo, y para colocar **pulsa el botón de lado del panel** (`#btnLong`/`#btnShort`), así que el modo de
+riesgo, los TP/SL marcados, las comisiones y el registro son el mismo camino de siempre. Si el
+formulario la rechaza, el billete se queda abierto con su motivo encima (se compara el estado antes y
+después, no el `click`). `Escape` lo cierra y borra su línea.
+
+Dos bugs de montaje que solo se ven midiendo, y quedaron anclados: recolocar la ventana con la altura
+medida **después del reflujo** (`offsetHeight` nada más quitar el `hidden` daba 269 por 279 reales y el
+billete se salía 2 px del área de carta) y el `max-height: calc(100% - 16px)` con desplazamiento
+interno, para que en la franja móvil o con los paneles de indicadores abiertos nunca desborde.
+
+**Lo que NO se copia** (siguen abierto, es interacción nueva): el **menú del `⊕`** en el extremo de la
+línea -`add alert`, `Set order`, `Limit/Market`, `Trigger order (Market)`, `Cancel order`, `To price`,
+que en el fotograma de t=17 se ve además como una pastilla `[Trigger | 64 175,1 | ×]` sentada sobre la
+línea con su pelo verde- y el **editor de las órdenes límite pendientes** (conservan su pestaña ámbar en
+el borde derecho). También quedan del riel ajeno: imán, lápiz+candado, candado y ojo, y la hora actual
+en negrita en el eje de tiempo.
 
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 

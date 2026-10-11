@@ -65,6 +65,7 @@
   };
   DT.onTradeHandle = null;  // callback(id, price, phase) → lo conecta app.js
   DT.onTradeClear = null;   // callback(id) → la × de la etiqueta quita el nivel (lo conecta uiController)
+  DT.onTicket = null;       // callback({x, y, price}) → la herramienta «orden» abre el billete flotante
   DT.onChange = null;       // callback al cambiar la lista de dibujos
 
   /* ============================== INICIALIZACIÓN ============================== */
@@ -311,6 +312,15 @@
   DT._onDown = function (e) {
     if (e.button !== 0) return;
     const p = DT._localPos(e);
+
+    /* --- 0b) Herramienta «orden visual»: el arrastre NO dibuja, coloca. Se abre el billete en el
+           punto con el precio del cursor ya ajustado al paso del símbolo, y la carta pinta la línea de
+           previsualización mientras el billete esté abierto. --- */
+    if (DT.tool === 'orden') {
+      const precio = DT._snapPrice(CM.yToPrice(p.y));
+      if (DT.onTicket) DT.onTicket({ x: p.x, y: p.y, price: Number.isFinite(precio) ? precio : null });
+      return;
+    }
 
     /* --- 1) Handles de la posición (SL/TP) siempre tienen prioridad --- */
     const cruce = DT._hitTradeX(p.x, p.y);
@@ -1078,6 +1088,7 @@
     }
 
     // Handles de posición (SL/TP)
+    DT._drawTicketPreview(ctx);
     DT._drawTradeHandles(ctx);
 
     // Aviso de herramienta activa: en la esquina superior izquierda, con
@@ -1329,6 +1340,25 @@
     ctx.fillText(text, x + 4, y);
     ctx.restore();
   };
+
+  /** La línea que acompaña al billete abierto: discontinua en el color del lado, con su chincheta. */
+  DT._drawTicketPreview = function (ctx) {
+    const t = DT._ticketPreview;
+    if (!t || t.y === null || t.y === undefined) return;
+    const w = DT.width || 800;
+    ctx.save();
+    ctx.strokeStyle = t.color || '#919499';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(0, t.y + 0.5); ctx.lineTo(w, t.y + 0.5); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = t.color || '#919499';
+    ctx.beginPath(); ctx.arc(t.x || 0, t.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  };
+
+  /** El billete avisa de su precio/lado para que la carta lo pinte; null lo apaga. */
+  DT.ensenaTicket = function (o) { DT._ticketPreview = o || null; DT.render(); };
 
   /* Anatomía de las etiquetas de nivel de su modo «focused trading», MEDIDA sobre el vídeo oficial de
      órdenes visuales fotograma a fotograma (nativo 4800×2700 = 1600×900 CSS a dpr 3 → ÷3): el grupo

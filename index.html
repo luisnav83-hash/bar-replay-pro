@@ -239,6 +239,7 @@
         <button class="tool" data-tool="measure" title="Medición: distancia en precio y velas entre dos puntos" title2="">↔</button>
         <button class="tool" data-tool="arrow" title="Flecha: marca un movimiento o una proyección (2 clics) · atajo A">➤</button>
         <button class="tool" data-tool="path" title="Camino: polilínea libre, une varios puntos (clics y doble clic o Enter para cerrar) · atajo P">✎</button>
+        <button class="tool" data-tool="orden" title="Orden visual: arrastra sobre la carta y suelta en el precio que quieras -abre el billete, escribe en el formulario y coloca la orden- · atajo O">⇅</button>
       </div>
 
       <div class="tool-cluster">
@@ -286,6 +287,43 @@
     <div id="chartWrap">
       <div id="mainChart"></div>
       <canvas id="overlayCanvas"></canvas>
+    <!-- Billete de orden visual (§5.8). Su ESTRUCTURA sale del vídeo oficial de órdenes visuales
+         (cabecera con el coste y una x para cerrar, campo de importe, botón de acción y ✓ de confirmar,
+         y debajo el riel de %); sus MEDIDAS salen del DOM real de la página de futuros -cajas de 40 px
+         con radio 4 sobre #222324, rótulo de campo 12/400 #919499, riel de 272x25 con cinco marcas-,
+         porque el .mp4 es un mock con tipografía sobredimensionada y no vale como CSS. El billete NO
+         tiene aritmética propia: escribe en #sizeInput / #limitInput y pulsa el botón de lado del
+         formulario, así que validaciones, modo de riesgo, TP/SL y registro siguen siendo un solo camino.
+         El tipo y el lado llevan data-btipo / data-blado a propósito: los cuatro data-otype del panel
+         siguen siendo los únicos dueños de #segOrderType. -->
+    <div class="bf-billete" id="bfBillete" hidden>
+      <div class="bf-billete-cab">
+        <span id="bfBilleteCoste">Coste —</span>
+        <button type="button" class="bf-billete-x" id="bfBilleteX" title="Cerrar sin colocar (Esc)">×</button>
+      </div>
+      <!-- Un campo por fila, como en su panel de 6rdenes: asi los dos heredan los 272 px medidos y el
+           rotulo cabe entero (con los dos en la misma fila «Tamaño (% del equity)» se truncaba). El ✓
+           baja a la fila de los segmentados. -->
+      <div class="bf-billete-campos">
+        <label class="bf-billete-campo"><span>Precio (USDT)</span><input type="number" id="bfBilletePrecio" step="0.01" inputmode="decimal"></label>
+        <label class="bf-billete-campo"><span id="bfBilleteQtyLab">Importe (USDT)</span><input type="number" id="bfBilleteQty" min="0" step="1" inputmode="decimal"></label>
+      </div>
+      <div class="bf-billete-pie">
+        <button type="button" class="bf-billete-ok" id="bfBilleteOk" title="Colocar la orden en el precio marcado">✓</button>
+        <div class="seg" id="bfBilleteTipo" role="group" aria-label="Tipo de orden del billete">
+          <button type="button" class="seg-btn active" data-btipo="limite">Límite</button>
+          <button type="button" class="seg-btn" data-btipo="market">Mercado</button>
+        </div>
+        <div class="seg" id="bfBilleteLado" role="group" aria-label="Lado del billete">
+          <button type="button" class="seg-btn active" data-blado="long">Comprar</button>
+          <button type="button" class="seg-btn" data-blado="short">Vender</button>
+        </div>
+      </div>
+      <div class="bf-billete-riel">
+        <input type="range" id="bfBilletePct" min="0" max="100" step="25" value="0" aria-label="Porcentaje del saldo comprometido">
+        <div class="bf-billete-marcas"><span>0 %</span><span>25 %</span><span>50 %</span><span>75 %</span><span>100 %</span></div>
+      </div>
+    </div>
 
       <!-- Leyenda OHLC flotante -->
       <div id="ohlcLegend">

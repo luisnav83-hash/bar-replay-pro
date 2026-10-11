@@ -1812,6 +1812,168 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   ok(vis.pnl.largo === 20 && vis.pnl.corto === 20 && vis.pnl.sinDatos === null,
     `el PnL del chip sale de la fórmula del cierre y null si faltan datos: ${vis.pnl.largo}/${vis.pnl.corto}/${vis.pnl.sinDatos}`);
 
+  /* ══════ J) EL BILLETE DE ORDEN VISUAL (§5.8) ══════
+     Su ESTRUCTURA sale del vídeo oficial de órdenes visuales (cabecera con el coste y su ×, campo de
+     importe, tipo y lado, ✓ de confirmar y debajo el riel de %). Sus MEDIDAS salen del DOM real de la
+     página de futuros -no del .mp4, que es un mock con tipografia sobredimensionada-: widget flotante
+     #131414 con pelo #292a2b (§1), campos 272x40 sobre #222324 con radio 4 y padding 0 12 px (§2 y
+     §5.5b), rotulo de campo en una linea de 14 con tipografia 12/400 #919499 (las etiquetas reales
+     `Precio (USDT)`/`Cantidad (USDT)`/`Total (USDT)` miden 86x14, 83x14 y 104x14) y el riel de % con
+     caja de 272x25 y sus cinco marcas a 16 px del borde superior (el slider de Arco medido hoy: caja en
+     y=490, rótulos en y=506). La PISTA del riel no se midió -los selectores de Arco no casan con su
+     marca de clase-, asi que es la del navegador: mejor eso que un grosor adivinado.
+     El billete se abre con el gesto real (ratón sobre el lienzo con la herramienta «Orden»): llamar a
+     `DT.onTicket` a mano dejaria un billete sin ancla en la carta y la ancla no probaria nada. */
+  console.log('\n▸ J) El billete de orden visual (estructura del vídeo, medidas del DOM)');
+  const bilAntes = await page.evaluate(() => {
+    const a = document.querySelector('#quickSize [data-pct].active');
+    return { size: document.getElementById('sizeInput').value,
+      limit: (document.getElementById('limitInput') || {}).value || '',
+      pct: a ? a.dataset.pct : null, pending: (TE.state.pending || []).length,
+      modo: App.sizeMode, otype: App.orderType };
+  });
+  await page.click('[data-tool="orden"]');
+  const punto = await page.evaluate(() => {
+    const r = document.getElementById('overlayCanvas').getBoundingClientRect();
+    return { x: Math.round(r.x + r.width * 0.52), y: Math.round(r.y + r.height * 0.40) };
+  });
+  await page.mouse.click(punto.x, punto.y);
+  await new Promise((r) => setTimeout(r, 320));
+  const bil = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const cs = (e) => getComputedStyle(e);
+    const caja = (e) => { const r = e.getBoundingClientRect();
+      return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; };
+    const wrap = caja(B('chartWrap')), b = caja(B('bfBillete'));
+    const riel = document.querySelector('.bf-billete-riel'), marca = document.querySelector('.bf-billete-marcas');
+    const lab = document.querySelector('.bf-billete-campo > span'), campo = B('bfBilleteQty'), ok = B('bfBilleteOk');
+    return {
+      abierto: !B('bfBillete').hidden,
+      dentro: b.x >= wrap.x - 1 && b.y >= wrap.y - 1 && b.x + b.w <= wrap.x + wrap.w + 1 && b.y + b.h <= wrap.y + wrap.h + 1,
+      y: b.y, h: b.h, wrapY: wrap.y, wrapH: wrap.h, wrapX: wrap.x, wrapW: wrap.w, estilo: { top: B('bfBillete').style.top, left: B('bfBillete').style.left },
+      cercaDelClic: Math.abs(b.x - (punto => punto)(0)) >= 0 && b.x >= wrap.x,
+      ancho: b.w, alto: b.h, fondo: cs(B('bfBillete')).backgroundColor, pelo: cs(B('bfBillete')).borderColor,
+      radio: cs(B('bfBillete')).borderRadius, padre: B('bfBillete').parentElement.id,
+      campo: caja(campo).h, campoAncho: caja(campo).w, campoFondo: cs(campo).backgroundColor, campoRadio: cs(campo).borderRadius,
+      campoPad: cs(campo).paddingLeft, rotulo: { t: lab.textContent, h: Math.round(lab.getBoundingClientRect().height),
+        f: cs(lab).fontSize + '/' + cs(lab).fontWeight, c: cs(lab).color,
+        cabe: [...document.querySelectorAll('.bf-billete-campo > span')].every((e) => e.scrollWidth <= e.clientWidth + 1) },
+      ok: caja(ok).w + 'x' + caja(ok).h, okFondo: cs(ok).backgroundColor, okRadio: cs(ok).borderRadius,
+      riel: caja(riel).h, marcas: [...marca.children].map((m) => m.textContent).join(' '),
+      marcaF: cs(marca.children[0]).fontSize, marcaC: cs(marca.children[0]).color,
+      desfase: Math.round(caja(marca).y - caja(riel).y),
+      pila: cs(campo).fontFamily.split(',')[0].replace(/"/g, ''),
+      precio: B('bfBilletePrecio').value, readOnly: B('bfBilletePrecio').readOnly,
+      preview: !!DT._ticketPreview, lado: document.body.dataset.billeteLado,
+      otype: document.querySelectorAll('#segOrderType [data-otype]').length,
+      tieneOtype: !!document.querySelector('#bfBilleteTipo [data-otype]'),
+      coste: B('bfBilleteCoste').textContent,
+    };
+  });
+  const riel = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const f = document.querySelector('#quickSize [data-pct="50"]');
+    if (!f) return { sinBoton: true };
+    f.click();
+    const porFormulario = B('sizeInput').value;
+    f.classList.remove('active');
+    B('sizeInput').value = ''; B('sizeInput').dispatchEvent(new Event('input', { bubbles: true }));
+    const r = B('bfBilletePct'); r.value = '50'; r.dispatchEvent(new Event('input', { bubbles: true }));
+    return { porFormulario, porRiel: B('sizeInput').value, espejo: B('bfBilleteQty').value,
+      activo: !!(document.querySelector('#quickSize [data-pct="50"].active')) };
+  });
+  const coloca = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    const antes = (TE.state.pending || []).length;
+    B('bfBilleteOk').click();
+    const vivas = TE.state.pending || [];
+    return { antes, despues: vivas.length, precioOrden: vivas.length ? vivas[vivas.length - 1].limitPrice : null,
+      precioBillete: parseFloat(B('bfBilletePrecio').value) || null, cerrado: B('bfBillete').hidden,
+      preview: !!DT._ticketPreview, lado: vivas.length ? vivas[vivas.length - 1].side : null };
+  });
+  const tipo = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    DT.onTicket({ x: 300, y: 200, price: 1234.5 });
+    document.querySelector('#bfBilleteTipo [data-btipo="market"]').click();
+    const out = { abierto: !B('bfBillete').hidden, readOnly: B('bfBilletePrecio').readOnly,
+      activo: (document.querySelector('#segOrderType .seg-btn.active') || { dataset: {} }).dataset.otype,
+      orderType: App.orderType };
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    out.cerradoPorEsc = B('bfBillete').hidden;
+    out.preview = !!DT._ticketPreview;
+    return out;
+  });
+  /* Y en el telefono, donde la carta entra y sale por `body[data-vista]`: el billete no puede
+     desbordar el area -en el tier <=640 se ancha de borde a borde con !important-. */
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3 });
+  await new Promise((r) => setTimeout(r, 500));
+  const movil = await page.evaluate(() => {
+    const B = (id) => document.getElementById(id);
+    DT.onTicket({ x: 40, y: 120, price: 1000 });
+    const w = B('chartWrap').getBoundingClientRect(), b = B('bfBillete').getBoundingClientRect();
+    const out = { vista: document.body.dataset.vista, cabe: b.right <= w.right + 1 && b.left >= w.left - 1,
+      hueco: Math.round(w.width - b.width), ancho: Math.round(b.width), wrap: Math.round(w.width),
+      ocultoEnOperar: (() => { document.body.dataset.vista = 'operar';
+        const o = getComputedStyle(B('bfBillete')).display; const vis = B('bfBillete').getBoundingClientRect().height;
+        document.body.dataset.vista = 'carta'; return vis < 1 || o === 'none'; })() };
+    B('bfBillete').hidden = true; DT.ensenaTicket(null);
+    document.querySelector('[data-tool="cursor"]').click();
+    return out;
+  });
+  await page.setViewport({ width: 1440, height: 900 });
+  await new Promise((r) => setTimeout(r, 400));
+  /* REPOSO: se deshace lo que hizo el bloque (la orden colocada, el tamano, el modo, el tipo) para que
+     las capturas y las suites que siguen vean la app como si nada hubiera pasado. */
+  await page.evaluate((prev) => {
+    const B = (id) => document.getElementById(id);
+    (TE.state.pending || []).slice(prev.pending).forEach((o) => { try { TE.cancelOrder(o.id); } catch (e) {} });
+    B('sizeInput').value = prev.size;
+    if (B('limitInput')) B('limitInput').value = prev.limit;
+    if (prev.pct) { const b = document.querySelector('#quickSize [data-pct="' + prev.pct + '"]'); if (b) b.click(); }
+    if (UI.setSizeMode && prev.modo) UI.setSizeMode(prev.modo);
+    if (UI.setOrderType) UI.setOrderType(prev.otype || 'market');
+    document.body.hidden1 = 0;
+    delete document.body.dataset.billeteLado;
+    if (UI.billete) { UI.billete.abierto = false; B('bfBillete').hidden = true; }
+    DT.ensenaTicket(null);
+    document.getElementById('overlayCanvas').dispatchEvent(new Event('resize'));
+    window.dispatchEvent(new Event('resize'));
+    if (UI.refreshAll) UI.refreshAll();
+    return true;
+  }, bilAntes);
+
+  ok(bil.abierto && bil.padre === 'chartWrap' && bil.dentro,
+    `la herramienta «Orden» abre el billete anclado al punto dentro de la carta (${bil.ancho}x${bil.alto} en ${bil.padre}; b.y=${bil.y} b.h=${bil.h} wrap.y=${bil.wrapY} wrap.h=${bil.wrapH})`);
+  ok(bil.fondo === 'rgb(19, 20, 20)' && bil.pelo === 'rgb(41, 42, 43)' && bil.radio === '4px',
+    `chasis de widget flotante medido en el sitio: ${bil.fondo} con pelo ${bil.pelo} y radio ${bil.radio}`);
+  ok(bil.campo === 40 && bil.campoFondo === 'rgb(34, 35, 36)' && bil.campoRadio === '4px' && bil.campoPad === '12px',
+    `el campo del billete es como los del panel de 6rdenes: 40 px de alto sobre #222324, radio 4 y 12 px de lado (${bil.campo}px, ${bil.campoFondo})`);
+  ok(bil.ancho === 298 && bil.campoAncho === 272 && bil.rotulo.cabe,
+    `un campo por fila: los dos heredan los 272 px medidos del panel y ningun rotulo se trunca (${bil.campoAncho}px, «${bil.rotulo.t}»)`);
+  ok(bil.rotulo.f === '12px/400' && bil.rotulo.c === 'rgb(145, 148, 153)' && bil.rotulo.h <= 15,
+    `y su rotulo encima, en linea de ${bil.rotulo.h}px, 12/400 ${bil.rotulo.c}: «${bil.rotulo.t}»`);
+  ok(bil.ok === '40x40' && bil.okFondo === 'rgb(36, 193, 141)' && bil.okRadio === '4px',
+    `el ✓ de confirmar es un cuadrado de 40 en el verde medido (${bil.ok} ${bil.okFondo})`);
+  ok(bil.marcas === '0 % 25 % 50 % 75 % 100 %' && bil.riel === 25 && bil.desfase === 16
+    && bil.marcaF === '12px' && bil.marcaC === 'rgb(145, 148, 153)',
+    `riel de % como el slider de Arco del sitio: caja de 25 px, cinco marcas a 16 px, 12/400 ${bil.marcaC} (${bil.marcas})`);
+  ok(bil.pila === 'Geist', `la pila de los controles del panel es la que resuelven ellos: ${bil.pila} (con fallback "noto sans")`);
+  ok(!riel.sinBoton && String(riel.porFormulario) === String(riel.porRiel) && riel.espejo === riel.porRiel,
+    `el riel no calcula: delega en el boton de % del formulario (${riel.porFormulario} por el boton, ${riel.porRiel} por el riel)`);
+  ok(coloca.despues === coloca.antes + 1 && coloca.precioOrden !== null
+    && Math.abs(coloca.precioOrden - coloca.precioBillete) < 0.51 && coloca.lado === 'long',
+    `el ✓ coloca de verdad en el precio arrastrado: ${coloca.precioOrden} (billete ${coloca.precioBillete}, lado ${coloca.lado})`);
+  ok(coloca.cerrado === true && coloca.preview === false,
+    'y al colocar se cierra el billete y se apaga su línea de previsualización');
+  ok(bil.lado === 'long' && bil.preview === true, `mientras esta abierto, el billete pinta su linea y su lado (${bil.lado})`);
+  ok(bil.otype === 4 && !bil.tieneOtype,
+    `el billete no secuestra el tipo de orden: los cuatro data-otype siguen siendo de #segOrderType (${bil.otype}) y el suyo usa data-btipo`);
+  ok(tipo.readOnly === true && tipo.activo === 'market' && tipo.orderType === 'market',
+    `pasar el billete a Mercado deja el precio fuera de juego y mueve el formulario a la vez (activo ${tipo.activo})`);
+  ok(tipo.cerradoPorEsc && !tipo.preview, 'Escape cierra el billete y borra su línea');
+  ok(movil.cabe && movil.hueco <= 17 && movil.ocultoEnOperar,
+    `en el telefono el billete cabe en la carta (${movil.ancho}px de ${movil.wrap}px, hueco ${movil.hueco}) y en la vista de operar no se ve`);
+
   console.log('\n' + '─'.repeat(62));
   console.log(`Piel Bitunix: ${pasan} superadas, ${fallan} fallidas`);
   if (fallan === 0) console.log('✅ El terminal replica la estructura y la piel del panel de futuros sin perder función.');
