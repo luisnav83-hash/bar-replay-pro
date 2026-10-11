@@ -807,6 +807,17 @@ argumento para dejarlo.
   del Trigger es gris discontinua, pero eso es un estado de creación, no una orden colocada; cambiar el color de
   marca sin medirlo en el sitio sería inventar.
 
+#### 5.10 · cuarta pasada (séptimo enlace al mismo vídeo; fotogramas t=15,5 y t=17 a 4800×2700)
+
+- **El `⊕` va PEGADO POR FUERA del eje de precio.** En t=15,5 el menú de la línea termina justo a la izquierda de la
+  columna de etiquetas; el nuestro iba en `w−26`, encima de la etiqueta del precio (`68,007.40`) y la tapaba. Ahora
+  `x = w − ancho_del_eje − 24 − 2`, con el ancho del eje medido por la librería (`CM.main.priceScale('right').width()`,
+  74 px en 1440). El margen derecho del cartel usa el mismo ancho. Anclado: el disco termina donde empieza el eje.
+- **Lo que no se ve en el vídeo y no se inventa**: el disco en el trigger de creación (t=17): ahí no hay `⊕`, sólo el
+  cartel en modo borrador. Sale únicamente en las órdenes ya colocadas, y así lo tenemos.
+- `test:bitunix` 295 ✓ / 0 ✗; vecinos verdes (`limite-arrastrar` 26, `dibujos` 18, `gesto` 12, `responsive` 200,
+  `formulario` 33, `limites` 14, `hedge` 74, `dom.smoke` 51, `browser.capture` 47).
+
 ## 6 · Lo que quedó ATERRIZADO en esta pasada (y lo que no)
 
 **Aplicado y medido después de aplicar:**

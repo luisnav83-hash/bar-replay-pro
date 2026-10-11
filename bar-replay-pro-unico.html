@@ -9994,6 +9994,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /** La palabra del compartmento de la izquierda: la del propio formulario para ese tipo de orden,
       no una cadena nueva del pintor (`Limite`, `Activador`, `Trailing`). */
+  /* Ancho de la columna de etiquetas del eje de precio, medido por la librería (no a ojo). */
+  DT._anchoEje = function () {
+    try { const a = CM.main && CM.main.priceScale('right').width(); return Number.isFinite(a) && a > 0 ? Math.round(a) : 0; }
+    catch (e) { return 0; }
+  };
+
   DT._palabraTipo = function (tipo) {
     const b = document.querySelector('#segOrderType [data-otype="' + (tipo || 'limite') + '"]');
     const t = b ? (b.textContent || '').trim() : '';
@@ -10751,7 +10757,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
          (#222324 sobre #4a4d55, el + en #919499). Vale para los dos tipos de línea: en el vídeo el menú
          es justamente el de la orden pendiente. */
       const disco = (c2, dcy) => {
-        const D = 24, dcx = w - D - 2;
+        /* El disco va PEGADO POR FUERA del eje de precio, como en el vídeo (t=15,5: el menú de la línea
+           termina justo a la izquierda de la columna de las etiquetas). Antes iba en w-26, encima de la
+           etiqueta del precio de la orden. El ancho del eje lo da la librería; si no lo da, cero. */
+        const D = 24, dcx = w - DT._anchoEje() - D - 2;
         c2.beginPath(); c2.arc(dcx + D / 2, dcy + D / 2, D / 2 - 1, 0, Math.PI * 2);
         c2.fillStyle = '#222324'; c2.fill();
         c2.strokeStyle = '#4a4d55'; c2.lineWidth = 1; c2.stroke();
@@ -10786,7 +10795,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
            cuando la barra de creacion cae en el tercio derecho la pastilla se anclaba a 10 px del borde y
            su propio compartimento de la x quedaba TAPADO por el disco -que se comprueba antes-: el golpe
            abria el billete en lugar de cancelar la orden. */
-        const margenDcha = 24 + 2 + 6;
+        const margenDcha = DT._anchoEje() + 24 + 2 + 6;
         const gx = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - anchoGrupo - margenDcha)));
         const cy = Math.round(y - ALTO / 2);
         ctx.beginPath();

@@ -2017,7 +2017,7 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   await new Promise((r) => setTimeout(r, 500));
   const discos = await page.evaluate(() => {
     const w = Math.round(document.getElementById('overlayCanvas').getBoundingClientRect().width);
-    return { w, lienzo: w, cajas: (DT._cajasPlus || []).map((k) => ({ id: k.id, x: Math.round(k.x), y: Math.round(k.y), w: k.w, h: k.h })),
+    return { w, lienzo: w, eje: DT._anchoEje(), cajas: (DT._cajasPlus || []).map((k) => ({ id: k.id, x: Math.round(k.x), y: Math.round(k.y), w: k.w, h: k.h })),
       ids: (DT.tradeHandles || []).map((h) => h.id).join(','),
       precio: (TE.state.pending[TE.state.pending.length - 1] || {}).limitPrice,
       id: (TE.state.pending[TE.state.pending.length - 1] || {}).id };
@@ -2181,8 +2181,8 @@ const ORDEN_CSS = cssLinks.join(' → ') + (cssLinks[cssLinks.length - 1] === 'b
   }, kAntes);
 
   ok(discos.cajas.length >= 1 && discos.cajas.every((k) => k.w === 24 && k.h === 24)
-    && disco.x === discos.lienzo - 24 - 2 && disco.y > 0,
-    `el disco con + mide 24x24 (los iconos de cabecera medidos en el sitio) y esta pegado al eje: x=${disco.x} de un lienzo de ${discos.lienzo}`);
+    && disco.x === discos.lienzo - discos.eje - 24 - 2 && discos.eje > 40 && disco.y > 0,
+    `el disco con + mide 24x24 (los iconos de cabecera medidos en el sitio) y va PEGADO POR FUERA del eje de precio (eje ${discos.eje} px, medido por la librería): x=${disco.x} de un lienzo de ${discos.lienzo}`);
   ok(editK.abierto && editK.editar.tipo === 'limit' && String(editK.editar.id) === String(discos.id)
     && Math.abs(parseFloat(editK.precio) - discos.precio) < 0.51,
     `el clic en el disco abre el billete EN MODO EDICION de esa orden (${editK.editar.tipo} #${editK.editar.id}, precio ${editK.precio})`);
