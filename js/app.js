@@ -919,7 +919,36 @@
     return { on, sl: nivel('slInput'), tp: nivel('tpInput') };
   };
 
+  /* ⇅ del chip de la posición: cierra a mercado y abre la CONTRARIA a mercado con la MISMA cantidad que
+     tenía. El tamaño sale de la posición y no del formulario (el formulario puede llevar otro). En modo
+     cobertura no se invierte: hay dos posiciones y no está claro cuál. */
+  App.invertPosition = function () {
+    const p = TE.state.position;
+    if (!p) { U.toast('No hay posición que invertir', 'warn', 1800); return; }
+    if (TE.state.modoPosicion === 'HEDGE') {
+      U.toast('⇅ no invierte en modo cobertura: hay dos posiciones', 'warn', 3200);
+      return;
+    }
+    const price = App.currentPrice();
+    const lado = p.side === 'long' ? 'short' : 'long';
+    const qty = p.qty;
+    const leverage = p.leverage || TE.leverageDe(lado);
+    App.flatten('inversion');
+    const nueva = TE.openPosition(lado, {
+      tradeSide: 'open', mode: 'qty', size: qty, entryPrice: price,
+      leverage, feePct: TE.state.feePct, time: App.currentTime(),
+    });
+    if (nueva) {
+      App.refreshOrderLines();
+      DT.setTradeHandles(nueva);
+      UI.refreshAll();
+      UI.refreshStats(true);
+      U.toast(`🔄 Invertida a ${lado === 'long' ? 'LONG' : 'SHORT'} · ${U.num(nueva.qty, 6)} uds a ${U.fmtPrice(price)}`, lado === 'long' ? 'ok' : 'err', 2600);
+    }
+  };
+
   App.placeOrder = function (side) {
+
     if (!App.candles.length) { U.toast('Carga datos antes de operar', 'warn'); return; }
     if (App.orderType === 'limite') return App.placeLimitOrder(side);
     if (App.orderType === 'trigger') return App.placeTriggerOrder(side);
