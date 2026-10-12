@@ -43,7 +43,17 @@
   DT.canvas = null;
   DT.ctx = null;
   DT.dpr = 1;
-  DT.TV_AZUL = '#2962FF';    // color por defecto de la línea de tendencia (TradingView)
+  DT.TV_AZUL = '#2962FF';    // color por defecto de los dibujos nuevos (TradingView)
+  /* Herramientas que se pueden dibujar apretando, arrastrando y soltando (como en TradingView).
+     El canal necesita además un 3er clic para el ancho; la carta de puntos (camino) sigue a clics. */
+  DT.LINEAS_TV = ['trend', 'ray', 'arrow', 'channel', 'measure'];   // asas circulares; el resto, cuadradas
+  DT.ARRASTRE = ['trend', 'ray', 'rect', 'fib', 'measure', 'arrow', 'ellipse', 'channel'];
+  /* Estilo de un dibujo nuevo: azul TradingView, salvo que el usuario haya cambiado el color por defecto. */
+  DT._estiloNuevo = function () {
+    const base = DT.defaultStyle;
+    const color = base.color === '#00e5ff' ? DT.TV_AZUL : base.color;
+    return Object.assign({}, base, { color });
+  };
   DT.draft = null;          // dibujo en curso {type, points:[...], style}
   DT.drag = null;           // {drawing, handle, startPoint...}
   DT.tradeHandles = [];     // handles arrastrables visibles (posición + límites)
@@ -443,11 +453,10 @@
       return;
     }
 
-    /* Línea de tendencia al estilo TradingView: se puede APRETAR en A, arrastrar y soltar en B.
+    /* Herramientas de línea/caja: se puede APRETAR en A, arrastrar y soltar en B.
        Si no hay arrastre (solo clic), queda el borrador y el segundo clic termina, como antes. */
-    if (DT.tool === 'trend' && !DT.draft) {
-      DT.draft = { type: 'trend', points: [pt], fixed: 1,
-                   style: Object.assign({}, DT.defaultStyle, { color: DT.TV_AZUL }) };
+    if (DT.ARRASTRE.includes(DT.tool) && !DT.draft) {
+      DT.draft = { type: DT.tool, points: [pt], fixed: 1, style: DT._estiloNuevo() };
       DT.drag = { creando: true, x0: p.x, y0: p.y, movido: false };
       DT.render();
       return;
@@ -541,9 +550,13 @@
       DT.drag = null;
       const a = DT.draft && DT.draft.points[0], b = DT.draft && DT.draft.points[1];
       if (creando.movido && a && b && (a.dtime !== b.dtime || a.price !== b.price)) {
-        DT._addDrawing({ type: 'trend', points: [a, b], style: DT.draft.style });
-        DT.draft = null;
-        DT.setTool('cursor');
+        if (DT.draft.type === 'channel') {
+          DT.draft.fixed = 2;                 // el canal ya tiene su línea; falta el ancho (3er clic)
+        } else {
+          DT._addDrawing({ type: DT.draft.type, points: [a, b], style: DT.draft.style });
+          DT.draft = null;
+          DT.setTool('cursor');
+        }
       }
       DT.canvas.style.cursor = DT.tool === 'cursor' ? 'default' : 'crosshair';
       DT.render();
@@ -1488,8 +1501,8 @@
       d.points.forEach((p) => {
         const s = DT._screenPoint(p);
         if (!s) return;
-        if (d.type === 'trend') {       // asa circular blanca con borde azul, como TradingView
-          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = DT.TV_AZUL; ctx.lineWidth = 2;
+        if (DT.LINEAS_TV.includes(d.type)) {   // asa circular blanca con borde del color, como TradingView
+          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = d.color || DT.TV_AZUL; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           return;
         }
