@@ -41,7 +41,7 @@ function ok(cond, msg) { if (cond) { pass++; console.log('  ✓ ' + msg); } else
     return out;
   });
   ok(niveles.length >= 7, `se dibujan los 7 niveles (${niveles.length})`);
-  ok(niveles.every((t) => /%\s+[\d.,]+/.test(t) && !/undefined|NaN/.test(t)), `cada nivel lleva su precio («${niveles[0]}»)`);
+  ok(niveles.every((t) => /\(\s*[\d.,]+\)/.test(t) && !/undefined|NaN/.test(t)), `cada nivel lleva su precio («${niveles[0]}»)`);
   console.log(`\nHerramienta medir: ${pass} superadas, ${fail} fallidas`);
   await b.close();
   process.exit(fail ? 1 : 0);

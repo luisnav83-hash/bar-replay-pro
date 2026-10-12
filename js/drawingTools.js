@@ -24,9 +24,10 @@
   const DT = {};
 
   const FIB_LEVELS = [
-    { r: 0, color: '#8d93b5' }, { r: 0.236, color: '#40c4ff' }, { r: 0.382, color: '#00e5ff' },
-    { r: 0.5, color: '#ffd54f' }, { r: 0.618, color: '#ffab40' }, { r: 0.786, color: '#ff7043' },
-    { r: 1, color: '#8d93b5' },
+    // Colores por defecto de TradingView (gris, rojo, naranja, verde, verde azulado, cian, gris)
+    { r: 0, color: '#787b86' }, { r: 0.236, color: '#f23645' }, { r: 0.382, color: '#ff9800' },
+    { r: 0.5, color: '#4caf50' }, { r: 0.618, color: '#089981' }, { r: 0.786, color: '#00bcd4' },
+    { r: 1, color: '#787b86' },
   ];
 
   const TYPE_NAMES = {
@@ -43,6 +44,7 @@
   DT.canvas = null;
   DT.ctx = null;
   DT.dpr = 1;
+  DT.TV_FUENTE = "12px -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif";
   DT.TV_AZUL = '#2962FF';    // color por defecto de los dibujos nuevos (TradingView)
   /* Herramientas que se pueden dibujar apretando, arrastrando y soltando (como en TradingView).
      El canal necesita además un 3er clic para el ancho; la carta de puntos (camino) sigue a clics. */
@@ -1343,7 +1345,6 @@
         if (a && b) {
           // Como TradingView: segmento entre los dos puntos, sin proyección por defecto.
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-          DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
         }
         break;
       }
@@ -1354,7 +1355,6 @@
           const L = Math.hypot(dx, dy) || 1;
           const k = (w * 2) / L;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x + dx * k, a.y + dy * k); ctx.stroke();
-          DT._label(ctx, DT._deltaLabel(d), a.x, a.y - 6, d.color);
         }
         break;
       }
@@ -1367,7 +1367,6 @@
           ctx.fillRect(x1, y1, rw, rh);
           ctx.globalAlpha = 1;
           ctx.strokeRect(x1, y1, rw, rh);
-          DT._label(ctx, DT._deltaLabel(d), x1 + 4, y1 + 14, d.color);
         }
         break;
       }
@@ -1383,7 +1382,6 @@
           ctx.globalAlpha = 1;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(a.x, a.y + dy); ctx.lineTo(b.x, b.y + dy); ctx.stroke();
-          DT._label(ctx, 'Canal', Math.min(a.x, b.x), Math.min(a.y, b.y + dy) - 7, d.color);
         }
         break;
       }
@@ -1420,7 +1418,7 @@
             ctx.setLineDash(l.r === 0 || l.r === 1 ? [] : [5, 4]);
             ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
             ctx.restore();
-            DT._label(ctx, `${(l.r * 100).toFixed(1)}%  ${price ? U.fmtPrice(price) : ''}`,
+            DT._label(ctx, `${String(l.r)}${price ? ` (${U.fmtPrice(price)})` : ''}`,   // formato de TradingView: 0.618 (precio)
                       x1 + 10, etiquetaY[i], l.color);
           });
         }
@@ -1445,7 +1443,7 @@
           const pct = pa.price ? (dp / pa.price) * 100 : 0;
           const bars = Math.round((pb.dtime - pa.dtime) / DT._tfSeconds());
           const txt = `${dp > 0 ? '+' : ''}${U.fmtPrice(dp)}  (${pct > 0 ? '+' : ''}${U.num(pct, 2)}%)  ·  ${bars} velas  ·  ${U.fmtDuration(Math.min(pa.dtime, pb.dtime), Math.max(pa.dtime, pb.dtime))}`;
-          DT._label(ctx, txt, Math.min(a.x, b.x), Math.min(a.y, b.y) - 10, col);
+          DT._label(ctx, txt, Math.min(a.x, b.x), Math.min(a.y, b.y) - 10, col, true);
         }
         break;
       }
@@ -1458,7 +1456,6 @@
           ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
           ctx.globalAlpha = 1;
           ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
-          DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
         }
         break;
       }
@@ -1476,7 +1473,6 @@
           ctx.lineTo(b.x - L * Math.cos(ang + abanico), b.y - L * Math.sin(ang + abanico));
           ctx.closePath();
           ctx.fillStyle = d.color; ctx.fill();
-          DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
         }
         break;
       }
@@ -1512,13 +1508,8 @@
       d.points.forEach((p) => {
         const s = DT._screenPoint(p);
         if (!s) return;
-        if (DT.LINEAS_TV.includes(d.type)) {   // asa circular blanca con borde del color, como TradingView
-          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = d.color || DT.TV_AZUL; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-          return;
-        }
-        ctx.fillStyle = '#0a0a0b'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.rect(s.x - 4, s.y - 4, 8, 8); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = d.color || DT.TV_AZUL; ctx.lineWidth = 2;   // asa como TradingView
+        ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       });
       ctx.restore();
     }
@@ -1554,15 +1545,17 @@
     ctx.restore();
   };
 
-  DT._label = function (ctx, text, x, y, color) {
+  DT._label = function (ctx, text, x, y, color, conFondo) {
     if (!text) return;
     ctx.save();
-    ctx.font = '10.5px ui-monospace, monospace';
-    const w = ctx.measureText(text).width + 8;
-    ctx.fillStyle = 'rgba(11,12,22,.82)';
-    ctx.fillRect(x, y - 11, w, 15);
+    ctx.font = DT.TV_FUENTE;
+    if (conFondo) {
+      const w = ctx.measureText(text).width + 8;
+      ctx.fillStyle = 'rgba(11,12,22,.82)';
+      ctx.fillRect(x, y - 11, w, 15);
+    }
     ctx.fillStyle = color || '#e8eaf6';
-    ctx.fillText(text, x + 4, y);
+    ctx.fillText(text, x + (conFondo ? 4 : 0), y);
     ctx.restore();
   };
 
