@@ -433,7 +433,7 @@
     if (!pt) return;
 
     if (DT.tool === 'hline' || DT.tool === 'vline') {
-      DT._addDrawing({ type: DT.tool, points: [pt] });
+      DT._addDrawing({ type: DT.tool, points: [pt], style: DT._estiloNuevo() });
       return;
     }
 

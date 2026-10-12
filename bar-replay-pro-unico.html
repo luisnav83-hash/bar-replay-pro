@@ -9764,7 +9764,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!pt) return;
 
     if (DT.tool === 'hline' || DT.tool === 'vline') {
-      DT._addDrawing({ type: DT.tool, points: [pt] });
+      DT._addDrawing({ type: DT.tool, points: [pt], style: DT._estiloNuevo() });
       return;
     }
 
