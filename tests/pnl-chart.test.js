@@ -998,14 +998,17 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   // gráfico ganó 79 px y a 1440×900 ya no hace falta apretar nada —que es lo deseable, no una
   // regresión—, así que la comprobación se hace donde de verdad aprieta: en una ventana baja,
   // provocando el caso en vez de depender del alto que salga de la ronda anterior.
-  await page.setViewport({ width: 1440, height: 600, deviceScaleFactor: 1 });
+  // 564 px: con la barra de replay FLOTANTE (css/replay-flotante.css) la columna ya no resta su
+  // alto, así que el apretado aparece más abajo que antes (600 px). Medido: aprieta a 564 y 568 px;
+  // a 600 px ya no hace falta.
+  await page.setViewport({ width: 1440, height: 564, deviceScaleFactor: 1 });
   await espera(500);
   const J2b = await page.evaluate((src) => {
     const g = new Function(src)();
     return { g, min: PC.MIN_PANE };
   }, mideEscalera());
   ok(J2b.g.apretados.length > 0 && J2b.g.apretados.every((x) => Number(x.split(':')[1]) >= J2b.min) && J2b.g.solape === 0,
-     `con la ventana baja los indicadores se APRIETAN en vez de ocultarse (${J2b.g.apretados.join(' ')} · suelo del panel ${J2b.min} px · solape ${J2b.g.solape} px) y a 1440×900 no hacía falta apretar ninguno (${J2.una.apretados.length})`);
+     `con la ventana baja (564 px) los indicadores se APRIETAN en vez de ocultarse (${J2b.g.apretados.join(' ')} · suelo del panel ${J2b.min} px · solape ${J2b.g.solape} px) y a 1440×900 no hacía falta apretar ninguno (${J2.una.apretados.length})`);
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await espera(500);
   ok(J2.una.pnlInline === '', `el panel de PnL no se toca sin arrastre (su style.height está vacío: «${J2.una.pnlInline}») —ese es el que la persona estira`);

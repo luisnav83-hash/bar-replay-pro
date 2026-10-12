@@ -173,6 +173,8 @@
     document.getElementById('btnPlay').addEventListener('click', () => App.togglePlay());
     document.getElementById('btnStepFwd').addEventListener('click', () => App.stepForward());
     document.getElementById('btnStepBack').addEventListener('click', () => App.stepBack());
+    document.getElementById('btnMinBack').addEventListener('click', () => App.moveMinute(-1));
+    document.getElementById('btnMinFwd').addEventListener('click', () => App.moveMinute(1));
     document.getElementById('btnReset').addEventListener('click', () => App.resetReplay());
     document.getElementById('btnJumpEnd').addEventListener('click', () => App.goToEnd());
 
@@ -846,7 +848,7 @@
     if (!cont || !CM || !CM.indData) return;
     const cfg = App.indicators || {};
     const i = CM._lastIndex;
-    const d = CM.indData;
+    const d = CM._ind();
     const val = (arr) => (i >= 0 && arr && arr[i] != null && Number.isFinite(arr[i])) ? arr[i] : null;
     const ultima = App.candles && App.candles[CM._lastIndex];
     const filas = [];
@@ -1325,7 +1327,7 @@
    * @param {{force?: boolean}} [opts] force = viene del desplegable, que ya
    *        cambió su valor: hay que recargar aunque coincida con la activa.
    */
-  UI.setTimeframe = function (tf, opts = {}) {
+  UI.setTimeframe = async function (tf, opts = {}) {
     if (!DS.TIMEFRAMES[tf]) { U.toast('Temporalidad no válida', 'err'); return; }
     const sel = document.getElementById('tfSelect');
     if (!opts.force && sel.value === tf && App.interval === tf) { UI.syncTfButtons(); return; }
@@ -1335,6 +1337,14 @@
     // La posición abierta y las órdenes pendientes pertenecen a la serie
     // anterior: se cierran/cancelan antes de traer las velas nuevas.
     App.guardSeriesChange('cambiar de temporalidad', { conservarPosicion: true });
+
+    // Instante exacto: el del replay (si ya había uno, se conserva). El precio sale de las velas de 1m de ese instante.
+    const actual = BR.currentCandle();
+    const momento = (App.momentTs !== null && App.momentTs !== undefined) ? App.momentTs : (actual ? actual.time : null);
+    App.momentTs = momento;
+    const spanViejo = DS.TIMEFRAMES[App.interval] ? DS.TIMEFRAMES[App.interval].ms / 1000 : 3600;
+    await App.loadMinuteFor(momento, spanViejo);
+    App.focusTs = momento;     // loadDataFromForm (keepFocus) coloca el replay en la vela que contiene este instante
 
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
     // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.
@@ -1910,7 +1920,13 @@
   };
 
   /** Refresco completo. */
+  UI.syncMinuteButtons = function () {
+    const el = document.getElementById('minBtns');
+    if (el) el.style.display = App.minutosVisibles && App.minutosVisibles() ? 'inline-flex' : 'none';
+  };
+
   UI.refreshAll = function () {
+    UI.syncMinuteButtons();
     UI.refreshAccount();
     UI.refreshStats();
     UI.refreshReplayBar();

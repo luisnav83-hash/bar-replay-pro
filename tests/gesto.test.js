@@ -112,7 +112,8 @@ const borrarTodo = (page) => page.evaluate(() => { DT.clearAll(true); App.refres
      toca, no lo que exige la barra de herramientas) un 0.70→0.35 se quedaba a
      caballo de ese umbral. Se pide una diagonal CLARA (0.88 → 0.16), que es lo que
      se quiere comprobar, no un caso límite del reconocimiento. */
-  await gesto(page, [{ x: X(0.22), y: Y(0.88) }, { x: X(0.45), y: Y(0.52) }, { x: X(0.68), y: Y(0.16) }]);
+  // Y(0.7) y no Y(0.88): la barra de replay flotante (por defecto sobre la franja baja del gráfico) tapa ese punto.
+  await gesto(page, [{ x: X(0.22), y: Y(0.7) }, { x: X(0.45), y: Y(0.5) }, { x: X(0.68), y: Y(0.16) }]);
   d = await ultimoDibujo(page);
   ok(d && d.tipo === 'trend', `se reconoce como línea de tendencia (${d && d.tipo})`);
 

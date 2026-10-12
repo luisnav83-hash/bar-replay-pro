@@ -350,6 +350,7 @@
       document.getElementById('startDate').value = U.tsToInput(startTs);
     } else {
       App.focusTs = null;      // carga pedida a mano: manda la fecha del formulario
+      App.momentTs = null;
     }
 
     startTs = Math.min(startTs, now - 3 * tfSec);   // debe quedar histórico por delante
@@ -539,14 +540,21 @@
     // 4) Replay y cuenta
     BR.setData(candles, startIndex, App.interval);
     App.resetCheckpoints(startIndex);
-    TE.state.lastPrice = candles[startIndex].close;
+    TE.state.lastPrice = App.currentPrice() ?? candles[startIndex].open;
+    TE.state.markPrice = candles[startIndex].close;
     TE.state.lastTime = candles[startIndex].time;
     TE.state.equitySeries = [{ t: candles[startIndex].time, value: TE.state.equity, time: candles[startIndex].time }];
+    App._cpT = new Map(); App._minCache = new Map(); App._minPedidos = new Set(); App._minOff = false; CM._minFallidos = new Set(); App._sinMinHits = 0; App._tPendiente = null; App._avisoSinMin = false;
+    if (App.momentTs === null || App.momentTs === undefined) App._momentoDeVela(startIndex);
+    App._frontera = App._tCursor();
+    App._cpT.set(App._frontera, App.snapshot(startIndex));
 
     // 5) Render y UI
+    if (App.momentTs === null || App.momentTs === undefined) App._momentoDeVela(startIndex);
     CM.render(startIndex);
     DT.resize(); DT.render();
     CM.scrollToLast(160);
+    App._pideMinutosSiFalta();
     UI.setPairLabels(App.pair, App.interval);
     UI.refreshAll();
     UI.refreshStats(true);
@@ -562,11 +570,12 @@
   /* ============================== INDICADORES ============================== */
 
   /** Recalcula los arrays de indicadores para TODA la serie cargada. */
-  App.rebuildIndicatorData = function () {
-    const c = App.candles;
+  /** Indicadores (según App.indicators) sobre un array de velas. Son causales: el último valor solo usa
+   *  las velas que se le pasan. Con la vela en curso, se le pasa [cerradas…, vivaParcial]. */
+  App.indicatorsFor = function (c) {
     const cfg = App.indicators;
     const data = {};
-    if (!c.length) { CM.setIndicatorData({}, cfg); return; }
+    if (!c || !c.length) return data;
     if (cfg.sma.on) data.sma = IND.sma(c, cfg.sma.p);
     if (cfg.ema.on) data.ema = IND.ema(c, cfg.ema.p);
     if (cfg.ema2.on) data.ema2 = IND.ema(c, cfg.ema2.p);
@@ -574,6 +583,15 @@
     if (cfg.rsi.on) data.rsi = IND.rsi(c, cfg.rsi.p);
     if (cfg.macd.on) data.macd = IND.macd(c, cfg.macd.f, cfg.macd.s, cfg.macd.sig);
     if (cfg.atr.on) data.atr = IND.atr(c, cfg.atr.p);
+    return data;
+  };
+
+  App.rebuildIndicatorData = function () {
+    const c = App.candles;
+    const cfg = App.indicators;
+    if (!c.length) { CM.setIndicatorData({}, cfg); return; }
+    const data = App.indicatorsFor(c);
+    CM._indVivo = null; CM._indVivoKey = null;     // la vela en curso se recalcula con la configuración nueva
     CM.setIndicatorData(data, cfg);
     CM.applyPaneVisibility(cfg);
   };
@@ -652,19 +670,193 @@
     }
   };
 
+  /* ============== PASO 2: MOTOR POR MINUTOS ==============
+   * Regla: una unidad del motor (un minuto o una vela) se procesa cuando el cursor la ha DEJADO.
+   * El motor nunca ve un minuto antes de que el cursor lo haya pasado.
+   *  · Vela de 1 h o más con sus 1m cargados: el motor recorre minuto a minuto (TE.onMinuto).
+   *  · Sin 1m cargados: la vela entera, al salir de ella (TE.onCandle), y se avisa en el registro.
+   * App._frontera: instante (s) hasta el que ya está procesado.
+   * App._cpT: estado guardado por posición del cursor (clave: instante en s), para retroceder exacto.
+   */
+  App._cpT = new Map();
+  App._frontera = null;
+  App._minCache = new Map();     // inicio de vela (s) -> velas 1m COMPLETAS de esa vela
+  App._tPendiente = null;        // instante pedido para el próximo avance (lo fija moveMinute)
+  App._sinMinHits = 0;           // velas procesadas enteras por falta de 1m en la última operación
+  App._minPedidos = new Set();   // velas cuyos 1m ya se han pedido en segundo plano (una vez por carga)
+  App._minOff = false;           // la carga en segundo plano se detiene tras un fallo (sin red)
+
+  App._tfSec = function () { const tf = DS.TIMEFRAMES[App.interval]; return tf ? tf.ms / 1000 : 0; };
+
+  /** Instante del cursor: el minuto revelado, o el inicio de la vela. */
+  App._tCursor = function () {
+    if (App.momentTs !== null && App.momentTs !== undefined) return App.momentTs;
+    const c = BR.currentCandle();
+    return c ? c.time : null;
+  };
+
+  /** Índice de la última vela cuyo inicio es <= t (o -1). */
+  App._indiceDeTiempo = function (t) {
+    let lo = 0, hi = BR.total() - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (BR.getCandle(mid).time <= t) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best;
+  };
+
+  /** Velas 1m COMPLETAS de la vela que empieza en `inicio`, o null si no están todas. */
+  App._minutosDeVela = function (inicio) {
+    const span = App._tfSec();
+    const arr = App._minCache.get(inicio);
+    return arr && span > 0 && arr.length === span / 60 ? arr : null;
+  };
+
+  /** Fija el instante del cursor: en 1h o más, el minuto indicado o el inicio de la vela. */
+  App._fijaMomento = function (idx, t) {
+    if (!App.minutosVisibles()) { App.momentTs = null; return; }
+    if (t !== null && t !== undefined) { App.momentTs = t; return; }
+    const c = BR.getCandle(idx);
+    App.momentTs = c ? c.time : null;
+  };
+
   /**
-   * AVANCE del replay: procesa las velas nuevas una a una (SL/TP, liquidación,
-   * equity) y deja un checkpoint por vela para poder retroceder.
+   * Procesa el motor hasta el instante T (s). Cada unidad se procesa cuando T ya la ha dejado atrás:
+   * minutos si la vela los tiene completos, si no la vela entera.
+   */
+  App._procesaHasta = function (T) {
+    if (!BR.total() || !Number.isFinite(T)) return;
+    const span = App._tfSec();
+    const conMin = App.minutosVisibles();
+    let F = Number.isFinite(App._frontera) ? App._frontera : BR.getCandle(BR.getStartIndex()).time;
+    let vueltas = 0;
+    while (F < T && vueltas++ < 1e7) {
+      const idx = App._indiceDeTiempo(F);
+      if (idx < 0) break;
+      const vela = BR.getCandle(idx);
+      const fin = vela.time + span;
+      if (fin <= F) {                            // F cae en un hueco entre velas: saltar a la siguiente
+        if (idx + 1 >= BR.total()) break;
+        F = BR.getCandle(idx + 1).time;
+        continue;
+      }
+      const mins = conMin ? App._minutosDeVela(vela.time) : null;
+      if (mins) {
+        for (let k = 0; k < mins.length; k++) {
+          const m = mins[k];
+          if (m.time < F) continue;
+          if (m.time + 60 > T) break;
+          TE.onMinuto(m);
+          F = m.time + 60;
+        }
+        if (F >= fin) { TE.cierraBarra(vela, mins[mins.length - 1]); F = fin; continue; }
+        break;                                   // la vela sigue abierta hasta T
+      }
+      if (fin > T) break;                        // la vela aún no la ha dejado el cursor
+      if (conMin) App._sinMinHits++;
+      TE.onCandle(vela);
+      F = fin;
+    }
+    App._frontera = F;
+  };
+
+  /** Guarda el estado del cursor actual (al llegar a una posición o tras una acción del usuario). */
+  App._guardaCursor = function () {
+    if (!BR.total()) return;
+    const idx = BR.getIndex(), vela = BR.getCandle(idx), T = App._tCursor();
+    const snap = App.snapshot(idx);
+    App._cpT.set(T, snap);
+    if (T === vela.time) App.checkpoints[idx] = snap;
+  };
+
+  /** Precio y hora de referencia del motor en el cursor (sin anotar la curva de capital). */
+  App._sincronizaPrecio = function () {
+    const vela = BR.currentCandle();
+    if (!vela) return;
+    if (App.minutosVisibles()) {
+      const px = App.currentPrice();
+      TE.state.lastPrice = Number.isFinite(px) ? px : vela.open;
+      TE.state.markPrice = TE.state.lastPrice;
+    } else {
+      TE.state.lastPrice = vela.open;
+      TE.state.markPrice = vela.close;
+    }
+    TE.state.lastTime = App._tCursor();
+    TE.state.equity = TE.state.balance + TE.unrealized(TE.state.lastPrice);
+  };
+
+  /** Restaura el estado al punto guardado más cercano a T dentro de la vela idx. Devuelve su clave. */
+  App._restauraEn = function (idx, T) {
+    const vela = BR.getCandle(idx);
+    let clave = null;
+    if (App._cpT.has(T)) clave = T;
+    else for (const k of App._cpT.keys()) if (k <= T && k >= vela.time && (clave === null || k > clave)) clave = k;
+    let cp = clave !== null ? App._cpT.get(clave) : null;
+    if (!cp && App.checkpoints[idx]) { cp = App.checkpoints[idx]; clave = vela.time; }
+    if (cp) {
+      TE.restoreFromCheckpoint(cp);
+      App._frontera = Number.isFinite(cp.F) ? cp.F : (clave !== null ? clave : vela.time);
+    } else {
+      // Sin checkpoint (antes del inicio del replay): estado inicial
+      App.resetCheckpoints(idx);
+      App._cpT = new Map();
+      TE.state.lastPrice = vela.open; TE.state.markPrice = vela.close; TE.state.lastTime = vela.time;
+      App._frontera = vela.time;
+      clave = null;
+    }
+    return clave;
+  };
+
+  App._refrescaTodo = function (idx) {
+    CM.render(idx);
+    DT.render();
+    App.refreshOrderLines();
+    UI.refreshAll();
+    UI.refreshStats(true);
+    UI.renderTrades();
+  };
+
+  /** Pide en segundo plano los 1m de la vela del cursor si faltan (para poder procesarla minuto a minuto). */
+  App._pideMinutosSiFalta = function () {
+    if (!App.minutosVisibles() || !BR.total()) return;
+    const vela = BR.currentCandle();
+    if (!vela || App._minutosDeVela(vela.time) || App._minPedidos.has(vela.time) || App._minOff) return;
+    App._minPedidos.add(vela.time);          // una petición por vela
+    App.loadMinuteFor(vela.time, App._tfSec(), true).then((ok) => {
+      // Si falla (sin red), la carga en segundo plano se detiene: solo la acción del usuario reintenta.
+      if (!ok) App._minOff = true;
+      const ahora = BR.currentCandle();
+      if (ahora && ahora.time === vela.time) CM.render(BR.getIndex());
+    }).catch(() => {});
+  };
+
+  /**
+   * AVANCE del replay. Procesa lo que el cursor deja atrás (vela a vela o minuto a minuto) y guarda
+   * el estado de cada vela que se pisa, para poder retroceder.
    */
   App.onAdvance = function (from, to, isSeek) {
     App.focusTs = null;        // el usuario movió el replay: el ancla es la vela actual
-    const candles = App.candles;
+    const tMin = App._tPendiente;
+    App._tPendiente = null;
+    App._fijaMomento(to, tMin);
+    App._sinMinHits = 0;
     TE.beginBatch();
     for (let i = from + 1; i <= to; i++) {
-      TE.onCandle(candles[i]);
-      App.checkpoints[i] = App.snapshot(i);
+      const ti = BR.getCandle(i).time;
+      App._procesaHasta(ti);                   // todo lo anterior a la vela i ya está procesado
+      const snap = App.snapshot(i);
+      App.checkpoints[i] = snap;               // estado al llegar a la vela i
+      App._cpT.set(ti, snap);
     }
+    App._procesaHasta(App._tCursor());         // hasta el cursor: sus minutos ya revelados
+    App._guardaCursor();
+    App._sincronizaPrecio();
     TE.endBatch();
+    if (App._sinMinHits && !App._avisoSinMin) {          // un solo aviso por carga de datos (no inunda el registro)
+      App._avisoSinMin = true;
+      U.log('⚠️ Hay velas sin 1m cargados: se procesan enteras al salir de ellas (los minutos se piden al entrar en cada vela)', 'warn');
+    }
+    App._pideMinutosSiFalta();
 
     CM.render(to);
     App.refreshOrderLines();
@@ -677,26 +869,12 @@
   App.onSeek = function (index) { App.restoreTo(index); };
 
   App.restoreTo = function (index) {
-    const cp = App.checkpoints[index];
     BR.pause();
     BR.state.index = index;
-
-    if (cp) {
-      TE.restoreFromCheckpoint(cp);
-    } else {
-      // Sin checkpoint (índice anterior al inicio del replay): estado inicial
-      App.resetCheckpoints(index);
-      const c = App.candles[index];
-      TE.state.lastPrice = c ? c.close : null;
-      TE.state.lastTime = c ? c.time : null;
-    }
-
-    CM.render(index);
-    DT.render();
-    App.refreshOrderLines();
-    UI.refreshAll();
-    UI.refreshStats(true);
-    UI.renderTrades();
+    App._fijaMomento(index, null);           // la vela se muestra desde su inicio
+    App._restauraEn(index, App._tCursor());
+    App._sincronizaPrecio();
+    App._refrescaTodo(index);
     U.log(`⏪ Replay en ${U.fmtDate(App.candles[index].time)} UTC (vela ${index + 1})`, 'sys');
   };
 
@@ -731,6 +909,7 @@
       pending: JSON.parse(JSON.stringify(s.pending || [])),
       lastPrice: s.lastPrice,
       lastTime: s.lastTime,
+      F: App._frontera,             // hasta qué instante está procesado el motor
     };
   };
 
@@ -743,9 +922,190 @@
 
   /* ============================== TRADING ============================== */
 
+  /* Precio de referencia del replay. Normalmente es el CIERRE de la vela del cursor.
+     Solo tras cambiar de temporalidad con el cursor a mitad de vela se conserva el instante
+     exacto (App.momentTs) y el precio es la APERTURA de la vela de 1m que empieza en ese
+     instante: así es igual en 5m, 1h o 1m. Avanzar o retroceder borra el instante. */
   App.currentPrice = function () {
     const c = BR.currentCandle();
-    return c ? c.close : null;
+    if (!c) return null;
+    if (App.momentTs !== null && App.momentTs !== undefined) {
+      const m = App.minuteAt(App.momentTs);
+      if (m !== null) return m;
+    }
+    return c.open;
+  };
+
+  App.momentTs = null;          // instante exacto del replay (solo tras cambiar de temporalidad)
+  // Etiqueta del eje (ver CM._pintaEtiquetaEje): el mismo precio que el chip, sea cual sea la temporalidad
+  CM.precioEtiqueta = function () {
+    const c = BR.currentCandle();
+    const px = App.currentPrice();
+    return c && Number.isFinite(px) ? { precio: px, subida: c.close >= c.open } : null;
+  };
+  App.minuteCandles = [];       // velas de 1m del tramo del instante
+  App.minutePair = null; App.minuteFrom = 0; App.minuteTo = -1;
+
+  /**
+   * PASO 1 (solo vista): velas HTF para pintar, con la vela en curso construida desde 1m hasta el cursor.
+   * Reglas (para no anticipar nada):
+   *  · Las velas HTF cerradas son las que empiezan ANTES del bloque del cursor. Nunca se devuelve una posterior.
+   *  · Minutos del bloque con time < cursor: aportan máximo, mínimo, volumen y cierre.
+   *  · El minuto del cursor solo aporta su apertura: es el precio «ahora» (el mismo de App.currentPrice).
+   *  · Sin minutos del bloque: la vela se marca noDetail con su apertura, sin mechas.
+   * No lo usa el motor de trading; solo cambia lo que se dibuja.
+   * @param {Array} htfCandles   velas HTF ordenadas por time (segundos)
+   * @param {Array} minuteCandles velas 1m ordenadas (App.minuteCandles)
+   * @param {number} currentTime  instante del cursor (segundos)
+   * @param {number} tfSeconds    duración de la HTF en segundos
+   */
+  App.buildDisplayCandles = function (htfCandles, minuteCandles, currentTime, tfSeconds) {
+    if (!Array.isArray(htfCandles) || !htfCandles.length) return [];
+    if (!(tfSeconds > 0) || !Number.isFinite(currentTime)) return [];
+    const bucketStart = Math.floor(currentTime / tfSeconds) * tfSeconds;
+
+    const rendered = [];
+    for (let i = 0; i < htfCandles.length; i++) {
+      if (htfCandles[i].time < bucketStart) rendered.push(htfCandles[i]);
+      else break;                               // ni la vela del bloque ni las posteriores
+    }
+    let raw = null;
+    for (let i = htfCandles.length - 1; i >= 0; i--) {
+      if (htfCandles[i].time === bucketStart) { raw = htfCandles[i]; break; }
+      if (htfCandles[i].time < bucketStart) break;
+    }
+
+    let open = null, high = -Infinity, low = Infinity, volume = 0, close = null, hay = false;
+    const mins = Array.isArray(minuteCandles) ? minuteCandles : [];
+    for (let i = 0; i < mins.length; i++) {
+      const m = mins[i];
+      if (m.time < bucketStart || m.time > currentTime) continue;
+      if (m.time === currentTime) {               // el minuto del cursor: solo su apertura
+        if (!hay) { open = m.open; }
+        close = m.open; hay = true;
+        if (high < m.open) high = m.open;
+        if (low > m.open) low = m.open;
+        continue;
+      }
+      if (open === null) open = m.open;
+      if (m.high > high) high = m.high;
+      if (m.low < low) low = m.low;
+      volume += (m.volume || 0);
+      close = m.close; hay = true;
+    }
+
+    if (hay && open !== null && close !== null) {
+      rendered.push({ time: bucketStart, open, high, low, close, volume, isPartial: true });
+    } else if (raw) {
+      rendered.push({ time: bucketStart, open: raw.open, high: raw.open, low: raw.open, close: raw.open, volume: 0, noDetail: true });
+    }
+    return rendered;
+  };
+
+  /** Los botones de minuto solo tienen sentido en temporalidades de 1h o superior. */
+  App.minutosVisibles = function () {
+    const tf = DS.TIMEFRAMES[App.interval];
+    return !!tf && tf.ms >= 3600000;
+  };
+
+  /** En 1h o superior, la vela del cursor se revela por minutos: el cursor va al inicio de esa vela. */
+  App._momentoDeVela = function (index) {
+    const c = App.minutosVisibles() && BR.total() ? BR.getCandle(index) : null;
+    App.momentTs = c ? c.time : null;
+  };
+
+  /**
+   * Mueve el cursor `delta` minutos (solo 1h o superior). Avanzar procesa lo que el cursor deja atrás;
+   * retroceder restaura el estado guardado en ese minuto. Carga las velas de 1m que haga falta.
+   */
+  App.moveMinute = async function (delta) {
+    if (!App.minutosVisibles() || !BR.total()) return;
+    BR.pause();
+    const tfSec = App._tfSec();
+    const cur = BR.currentCandle();
+    const base = App._tCursor();
+    const t = base + delta * 60;
+    const primera = BR.getCandle(BR.getStartIndex()).time;
+    const ultima = BR.getCandle(BR.total() - 1).time + tfSec - 60;
+    if (t < primera || t > ultima) { U.toast('No hay más minutos en el tramo cargado', 'warn'); return; }
+    const idx = App._indiceDeTiempo(t);
+    if (idx < 0 || BR.getCandle(idx).time !== Math.floor(t / tfSec) * tfSec) { U.toast('No hay vela para ese minuto', 'warn'); return; }
+    const idxAntes = BR.getIndex();
+    // Al avanzar de vela hacen falta también los 1m de la vela que se deja.
+    if (idx > idxAntes) await App.loadMinuteFor(cur.time, tfSec);
+    const ok = await App.loadMinuteFor(t, tfSec);
+    if (BR.getIndex() !== idxAntes || App._tCursor() !== base) return;   // el usuario se movió mientras cargaba
+    if (!ok) U.toast('Sin datos de 1m para ese minuto: se muestra la vela sin detalle', 'warn', 3200);
+
+    if (idx > idxAntes) {
+      App._tPendiente = t;
+      BR._advance(idx - idxAntes);           // onAdvance procesa lo dejado y deja el cursor en t
+    } else if (idx === idxAntes && t > base) {
+      App._fijaMomento(idx, t);
+      App._procesaHasta(t);
+      App._guardaCursor();
+      App._sincronizaPrecio();
+      App._refrescaTodo(idx);
+    } else {
+      BR.state.index = idx;
+      App._fijaMomento(idx, t);
+      App._restauraEn(idx, t);
+      App._procesaHasta(t);                  // rehace solo lo que falta hasta t
+      App._guardaCursor();
+      App._sincronizaPrecio();
+      App._refrescaTodo(idx);
+    }
+  };
+
+  /** Apertura de la vela de 1m que empieza EXACTAMENTE en t (o null si no está cargada). */
+  App.minuteAt = function (t) {
+    const span = App._tfSec();
+    const ini = span > 0 ? Math.floor(t / span) * span : t;
+    const arr = App._minutosDeVela(ini);
+    if (arr) {
+      const m = arr[Math.round((t - ini) / 60)];
+      if (m && m.time === t) return m.open;
+    }
+    const blk = App.minuteCandles;
+    if (!blk || !blk.length) return null;
+    let lo = 0, hi = blk.length - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (blk[mid].time <= t) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best >= 0 && blk[best].time === t ? blk[best].open : null;
+  };
+
+  /**
+   * Carga las velas de 1m de la vela que contiene t (desde su inicio, con un minuto previo) y las
+   * guarda por vela completa, para que el motor las recorra. Solo Binance: CoinGecko no tiene 1m.
+   */
+  App.loadMinuteFor = async function (t, spanSec, silencioso) {
+    if (t === null || t === undefined) return false;
+    const pair = App.pair;
+    const ini = spanSec > 0 ? Math.floor(t / spanSec) * spanSec : t;
+    if (spanSec > 0 && App._minutosDeVela(ini)) return true;
+    try {
+      const hasta = Math.min(Math.floor(Date.now() / 1000), ini + spanSec + 60);   // nunca pedir el futuro
+      const velas = await DS.fetchBinanceKlines(pair, '1m', ini - 60, hasta, null, { deadlineMs: performance.now() + 12000 });
+      if (App.pair !== pair) return false;     // cambió el par mientras cargaba
+      const arr = (velas || []).slice().sort((a, b) => a.time - b.time);
+      App.minuteCandles = arr; App.minutePair = pair; App.minuteFrom = ini - 60; App.minuteTo = hasta;
+      if (spanSec > 0) {
+        const grupos = new Map();
+        for (const m of arr) {
+          const b = Math.floor(m.time / spanSec) * spanSec;
+          if (!grupos.has(b)) grupos.set(b, []);
+          grupos.get(b).push(m);
+        }
+        for (const [b, ms] of grupos) if (ms.length === spanSec / 60) App._minCache.set(b, ms);
+      }
+      return spanSec <= 0 || App._minutosDeVela(ini) !== null;
+    } catch (err) {
+      App.minuteCandles = []; App.minutePair = null;
+      if (!silencioso) U.toast('No se pudieron cargar las velas de 1m: el precio sale de la vela', 'warn', 4000);
+      return false;
+    }
   };
 
   App.currentTime = function () {
@@ -938,7 +1298,7 @@
     App.flatten('inversion');
     const nueva = TE.openPosition(lado, {
       tradeSide: 'open', mode: 'qty', size: qty, entryPrice: price,
-      leverage, feePct: TE.state.feePct, time: App.currentTime(),
+      leverage, feePct: TE.state.feePct, time: App._tCursor(),
     });
     if (nueva) {
       App.refreshOrderLines();
@@ -999,7 +1359,7 @@
       sl, tp,
       leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
 
     if (pos) {
@@ -1052,10 +1412,10 @@
       mode: sp.mode, size: sp.size,
       leverage: TE.leverageDe(side), feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
     if (orden) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       App.refreshOrderLines();
       UI.refreshAll();
       U.toast(`🌀 Trailing colocado: retrocede ${U.num(pct, 2)} % desde el pico`
@@ -1107,10 +1467,10 @@
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       efecto: (ef && ef.value) || 'GTC',
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
     if (orden) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       App.refreshOrderLines();
       UI.refreshAll();
       const posAb = TE.state.position;
@@ -1158,10 +1518,10 @@
       refPrice: ref,
       efecto: (document.getElementById('ordEffect') || {}).value || undefined,
       reduceOnly: !!(document.getElementById('ordReduceOnly') || {}).checked,
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
 
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     if (orden) {
@@ -1215,7 +1575,7 @@
     if (phase !== 'end') return true;
 
     // Al soltar: checkpoint (para que retroceder conserve el nivel), panel al día
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.refreshAll();
     U.playSound('click');
 
@@ -1240,7 +1600,7 @@
   /** Cancela una orden límite concreta. */
   App.cancelOrder = function (id) {
     if (!TE.cancelOrder(id)) return;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
   };
@@ -1249,7 +1609,7 @@
   App.cancelAllOrders = function () {
     const n = TE.cancelAllOrders();
     if (!n) return;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
   };
@@ -1267,8 +1627,8 @@
     // «Cerrar todo» cierra TODO: en modo hedge son dos posiciones, cada una con su PnL, su
     // comisión y su fila en el historial. Cerrar solo la principal dejaría una SHORT olvidada en
     // el libro, que es justo lo que este botón promete que no pasa.
-    for (const p of vivas) TE.closePosition(price, reason, App.currentTime(), p);
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    for (const p of vivas) TE.closePosition(price, reason, App._tCursor(), p);
+    App._guardaCursor();
     App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
@@ -1314,11 +1674,11 @@
       // cuenta si el usuario los separó en hedge): si no, promediar cambiaría la liquidación.
       leverage: TE.leverageDe(p.side),
       feePct: TE.state.feePct,
-      time: App.currentTime(),
+      time: App._tCursor(),
       reaim: o.reaim ? 'medio' : null,
     });
     if (!nuevo) return null;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
@@ -1335,9 +1695,9 @@
     const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
     const f = U.clamp(+pct || 0, 1, 100) / 100;
-    const row = TE.reducePosition(f, App.currentPrice(), App.currentTime(), 'parcial');
+    const row = TE.reducePosition(f, App.currentPrice(), App._tCursor(), 'parcial');
     if (!row) return null;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
@@ -1363,7 +1723,7 @@
     if (!TE.setSL(be, { force: true })) return false;
     U.log(`🛡 SL movido al break-even ${U.fmtPrice(be)} (precio medio ${U.fmtPrice(p.entryPrice)} + ` +
           `comisiones ${(p.openFee || 0).toFixed(2)} USD) · protegido si el precio vuelve ahí`, 'sys');
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     U.toast(`🛡 SL protegido en el break-even (${U.fmtPrice(be)})`, 'ok', 2800);
@@ -1378,7 +1738,7 @@
     const pct = parseFloat(((document.getElementById('tpLvlPct') || {}).value) || '50');
     const nivel = TE.addTpLevel(precio, pct);
     if (nivel) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       UI.syncPositionGraphics(p);          // fuerza a redibujar las líneas
       UI.refreshAll();
       const inp = document.getElementById('tpLvlPrice');
@@ -1403,7 +1763,7 @@
     if (!t) return null;
     // El checkpoint de la vela guarda la posición entera (trail incluido), así que
     // retroceder/reavanzar devuelve también el trailing tal como estaba.
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(p);
     UI.refreshAll();
     return t;
@@ -1414,7 +1774,7 @@
     const p = App.posicionActiva();
     if (!p || !p.trail) { U.toast('No hay ningún trailing activo que quitar', 'info', 1800); return false; }
     if (!TE.removeTrailing()) return false;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(p);
     UI.refreshAll();
     U.toast('🌀 Trailing quitado: la posición vuelve a su SL fijo', 'info', 2400);
@@ -1440,7 +1800,7 @@
   /** Quita un nivel de TP escalonado. */
   App.removeTpLevel = function (i) {
     if (!TE.removeTpLevel(i)) return false;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(App.posicionActiva());
     UI.refreshAll();
     return true;

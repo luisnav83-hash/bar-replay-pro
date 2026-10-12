@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="css/modals.css">
 <link rel="stylesheet" href="css/responsive.css">
 <link rel="stylesheet" href="css/bitunix.css">
+<link rel="stylesheet" href="css/replay-flotante.css">
 
 <!-- ============ LIBRERÍA DE GRÁFICOS (TradingView Lightweight Charts v4) ============ -->
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
@@ -432,12 +433,17 @@
 
     <!-- Controles de Bar Replay -->
     <div id="replayBar">
+      <span class="rb-grip" title="Arrastra para mover la barra de replay" aria-hidden="true">⠿</span>
       <div class="rb-buttons">
         <button class="rb-btn" id="btnReset" title="Reset: volver al inicio del replay (R)">⏮</button>
         <button class="rb-btn" id="btnStepBack" title="Retroceder una vela (←)">◀◀</button>
         <button class="rb-btn rb-play" id="btnPlay" title="Play / Pause (Espacio)">▶</button>
         <button class="rb-btn" id="btnStepFwd" title="Avanzar una vela (→)">▶▶</button>
         <button class="rb-btn" id="btnJumpEnd" title="Ir al final del histórico cargado (salta al último punto)">⏭</button>
+        <span id="minBtns" style="display:none;gap:4px;margin-left:6px">
+          <button class="rb-btn" id="btnMinBack" title="Retroceder 1 minuto dentro de la vela (solo en 1h o superior)">◀ 1m</button>
+          <button class="rb-btn" id="btnMinFwd" title="Avanzar 1 minuto dentro de la vela (solo en 1h o superior)">1m ▶</button>
+        </span>
       </div>
 
       <div class="rb-speed" role="group" aria-label="Velocidad del replay">
@@ -1494,5 +1500,6 @@
 <script src="js/app.js"></script>
 <script src="js/posTpSl.js"></script>
 <script src="js/liveFeed.js"></script>
+<script src="js/replayBarDrag.js"></script>
 </body>
 </html>

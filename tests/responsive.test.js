@@ -78,6 +78,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         solape: paneBottom > rp.top + 2 ? Math.round(paneBottom - rp.top) : 0,
         // La caja de la escalera, en cambio, SÍ tiene que quedar por encima del replay.
         areaFuera: pa0 ? Math.max(0, Math.round(pa0.bottom - rp.top)) : 0,
+        // Barra FLOTANTE (escritorio, position:absolute, css/replay-flotante.css): ya no va
+        // debajo de los paneles, va encima del gráfico y se puede arrastrar. El contrato
+        // equivalente es: por defecto no tapa la franja de paneles (solapeFlotante = 0)
+        // y la barra queda dentro de #chartArea.
+        flotante: getComputedStyle(document.getElementById('replayBar')).position === 'absolute',
+        solapeFlotante: pa0 ? Math.max(0, Math.round(Math.min(rp.bottom, pa0.bottom) - Math.max(rp.top, pa0.top))) : 0,
+        dentroArea: ca ? (rp.top >= ca.top - 0.5 && rp.bottom <= ca.bottom + 0.5) : true,
         scrolleaArea: pa0 ? pa0.scrollHeight > pa0.clientHeight + 2 : false,
         // Lo que de verdad pinta cada panel de indicador (su canvas).
         huecoMin: ind.length ? Math.min(...ind.map((e) => {
@@ -147,7 +154,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
        (390×844 con el andamio compactado: 190 px medidos de gráfico). */
     const etiqueta = `${w}×${h}`;
     ok(m.chart >= 120 && m.chart === m.fila, `${etiqueta}: el gráfico conserva ${m.chart}px en el PEOR caso de escalera (fila ${m.fila}px, suelo 120px)`);
-    ok(m.solape === 0 && m.areaFuera === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay (${m.scrolleaArea ? 'el último desborda su caja y se desplaza —recortado, no pintado—' : 'sin desbordar'})`);
+    if (m.flotante) {
+      ok(m.solapeFlotante === 0 && m.dentroArea, `${etiqueta}: la barra flotante por defecto no tapa los paneles de indicadores y queda dentro del área del gráfico (solape ${m.solapeFlotante}px)`);
+    } else {
+      ok(m.solape === 0 && m.areaFuera === 0, `${etiqueta}: los paneles de indicadores no tapan la barra de replay (${m.scrolleaArea ? 'el último desborda su caja y se desplaza —recortado, no pintado—' : 'sin desbordar'})`);
+    }
     ok(m.huecoMin >= 12, `${etiqueta}: ningún panel de indicadores pinta en menos de ${m.huecoMin} px de gráfico (el hueco mínimo exigido es 12; el defecto arreglado era 2 px)`);
     ok(m.eje.visibles === 1 && m.eje.conEje[0] === m.eje.en
        && (m.eje.en === 'principal' ? m.eje.hueco < 48 : m.eje.hueco >= 48),

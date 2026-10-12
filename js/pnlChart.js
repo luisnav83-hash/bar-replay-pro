@@ -174,7 +174,8 @@
     const h = Math.round(area.getBoundingClientRect().height);
     if (!h) return ALTO_MAX;
     if (!esEstrecho()) return Math.max(ALTO_MIN + 40, Math.round(h * 0.45));
-    const fila = (id) => { const e = el(id); return e ? Math.round(e.getBoundingClientRect().height) : 0; };
+    // Una barra flotante (position:absolute, p. ej. #replayBar en escritorio) no ocupa fila: no se descuenta.
+    const fila = (id) => { const e = el(id); return e && getComputedStyle(e).position !== 'absolute' ? Math.round(e.getBoundingClientRect().height) : 0; };
     const pa = el('paneArea'), p = el('panePnl');
     // Lo que la escalera tiene pagado FUERA del panel de PnL (el RSI a 52 px en el
     // teléfono probado): mientras se ve, ese dinero no está disponible para estirar.
@@ -301,7 +302,8 @@
       return 0;
     }
     const alto = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
-    const fila = (id) => alto(el(id));
+    // Una barra flotante (position:absolute) no ocupa fila: no se descuenta del gráfico.
+    const fila = (id) => { const e = el(id); return e && getComputedStyle(e).position !== 'absolute' ? alto(e) : 0; };
     const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetParent !== null);
     const otros = visibles.filter((e) => e !== p);
 

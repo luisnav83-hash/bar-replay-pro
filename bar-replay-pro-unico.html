@@ -2112,6 +2112,39 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
 .pd-bloque:first-of-type { border-top: 0; }
 .pd-cab { display: flex; align-items: center; justify-content: space-between; }
 .pd-bloque input[type=range] { width: 100%; }
+/* ==== css/replay-flotante.css ==== */
+.rb-grip { display: none; }
+@media (min-width: 821px) {
+  #chartArea { position: relative; }
+  #replayBar {
+    position: absolute;
+    left: 12px;
+    bottom: 10px;
+    z-index: 20;
+    width: min(940px, calc(100% - 24px));
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+    background: rgba(18, 18, 31, .94);
+  }
+  .rb-grip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 26px;
+    flex: 0 0 14px;
+    color: var(--tx-4);
+    font-size: 14px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+  .rb-grip:hover { color: var(--tx-2); }
+  #replayBar.arrastrando { cursor: grabbing; }
+  #replayBar.arrastrando .rb-grip { cursor: grabbing; color: var(--accent-2); }
+}
 </style>
 </head>
 <body>
@@ -2534,12 +2567,17 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
 
     <!-- Controles de Bar Replay -->
     <div id="replayBar">
+      <span class="rb-grip" title="Arrastra para mover la barra de replay" aria-hidden="true">⠿</span>
       <div class="rb-buttons">
         <button class="rb-btn" id="btnReset" title="Reset: volver al inicio del replay (R)">⏮</button>
         <button class="rb-btn" id="btnStepBack" title="Retroceder una vela (←)">◀◀</button>
         <button class="rb-btn rb-play" id="btnPlay" title="Play / Pause (Espacio)">▶</button>
         <button class="rb-btn" id="btnStepFwd" title="Avanzar una vela (→)">▶▶</button>
         <button class="rb-btn" id="btnJumpEnd" title="Ir al final del histórico cargado (salta al último punto)">⏭</button>
+        <span id="minBtns" style="display:none;gap:4px;margin-left:6px">
+          <button class="rb-btn" id="btnMinBack" title="Retroceder 1 minuto dentro de la vela (solo en 1h o superior)">◀ 1m</button>
+          <button class="rb-btn" id="btnMinFwd" title="Avanzar 1 minuto dentro de la vela (solo en 1h o superior)">1m ▶</button>
+        </span>
       </div>
 
       <div class="rb-speed" role="group" aria-label="Velocidad del replay">
@@ -3580,6 +3618,7 @@ body[data-billete-lado="short"] .bf-billete-riel input[type=range] { accent-colo
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-ghost" id="pdVolver" hidden>Volver</button><button class="btn btn-primary" id="pdConfirmar">Confirmar</button><button class="btn btn-ghost" id="pdCerrarPar" hidden data-close>Cerrar</button></div>
   </div>
 </div>
+
 
 
 
@@ -5218,6 +5257,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
     lastPrice: null,
+    markPrice: null,            // cierre de la vela del cursor = el precio que muestra la gráfica (validación del SL)
     lastTime: null,
     seq: 0,
   };
@@ -5929,15 +5969,27 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const p = TE.state.position;
     if (!p) return false;
     const o = opts || {};
-    const forzar = !!o.force, sil = !!o.silent;
+    const sil = !!o.silent;
+    // Límite del SL: no puede quedar al otro lado del precio que muestra la gráfica (markPrice),
+    // porque se dispararía al momento. El break-even (force) queda fuera de esta comprobación.
+    if (!o.force && price !== null && price !== undefined && Number.isFinite(+price)) {
+      const ref = Number.isFinite(+TE.state.markPrice) && +TE.state.markPrice > 0 ? +TE.state.markPrice
+        : (Number.isFinite(+TE.state.lastPrice) && +TE.state.lastPrice > 0 ? +TE.state.lastPrice : null);
+      if (ref !== null) {
+        if (p.side === 'long' && +price >= ref) {
+          if (!sil) U.toast('SL inválido: en un LONG debe estar por debajo del precio actual');
+          return false;
+        }
+        if (p.side === 'short' && +price <= ref) {
+          if (!sil) U.toast('SL inválido: en un SHORT debe estar por encima del precio actual');
+          return false;
+        }
+      }
+    }
     if (price === null || price === undefined || !Number.isFinite(+price)) { p.sl = null; }
     else {
       // El break-even de un LONG queda POR ENCIMA de la entrada (es un stop que
       // solo protege ganancias), así que esa validación se omite con {force:true}
-      if (!forzar) {
-        if (p.side === 'long' && price >= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
-        if (p.side === 'short' && price <= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
-      }
       p.sl = +price;
     }
     // F7: un nivel de SL no es solo un precio. Lleva CONTRA QUÉ se mide el disparo
@@ -7017,16 +7069,17 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * null si en esta vela no le ha pasado nada. `p` entra por parámetro porque en modo hedge hay
    * dos y cada una se juzga por sus propios niveles.
    */
-  TE._revisaPosicion = function (candle, p) {
+  TE._revisaPosicion = function (candle, p, esBarra) {
     const s = TE.state;
     if (!p) return null;
-      p.bars++;
+    // Las barras (velas) cuentan; un minuto dentro de una vela no (ver TE.onMinuto).
+    const cuenta = esBarra !== false;
+    if (cuenta) p.bars++;
 
     // Una posición recién ejecutada por un límite no se evalúa en su misma
     // vela: ignoramos el orden real de los precios dentro de ella.
     if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
-      TE.updateEquity(candle.close, candle.time);
-      TE._emit();
+      if (cuenta) { TE.updateEquity(candle.open, candle.time); TE._emit(); }
       return null;
     }
 
@@ -7117,9 +7170,26 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     return null;
   };
 
-  TE.onCandle = function (candle) {
+  TE.onCandle = function (candle) { return TE._procesaBarra(candle, true); };
+
+  /**
+   * Un MINUTO dentro de una vela de 1 h o más (Paso 2). Mismas reglas que una vela (órdenes,
+   * SL/TP, liquidación, trailing, funding) pero sin contar la barra ni anotar la curva de
+   * capital: eso se hace una vez al cerrar la vela (TE.cierraBarra).
+   */
+  TE.onMinuto = function (m) { return TE._procesaBarra(m, false); };
+
+  /** Cierra una vela ya recorrida minuto a minuto: cuenta las barras abiertas y anota la equity. */
+  TE.cierraBarra = function (barra, ultimo) {
+    for (const p of TE.posiciones()) p.bars = (p.bars || 0) + 1;
+    TE.updateEquity((ultimo || barra).close, barra.time);
+    TE._emit();
+  };
+
+  TE._procesaBarra = function (candle, esBarra) {
     const s = TE.state;
-    s.lastPrice = candle.close;
+    s.lastPrice = candle.open;      // precio de referencia = apertura (ver App.currentPrice)
+    s.markPrice = candle.close;     // lo que muestra la gráfica: el SL puede llegar hasta aquí
     s.lastTime = candle.time;
 
     // --- 0) ÓRDENES LÍMITE: se comprueban antes que la posición, porque si el
@@ -7134,7 +7204,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // evaluar hasta la vela siguiente.
     let accion = null;
     for (const p of TE.posiciones()) {
-      const r = TE._revisaPosicion(candle, p);
+      const r = TE._revisaPosicion(candle, p, esBarra);
       if (r !== null && r !== undefined && accion === null) accion = r;
     }
     // El umbral de cuenta se comprueba DESPUÉS de los niveles por posición: si una pata ya cerró
@@ -7146,8 +7216,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // capital y descolocaría las pruebas que la cuentan vela a vela).
     if (accion !== null) return accion;
 
-    TE.updateEquity(candle.close, candle.time);
-    TE._emit();
+    if (esBarra) { TE.updateEquity(candle.open, candle.time); TE._emit(); }
     return null;
   };
 
@@ -7791,7 +7860,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       upColor: COLORS.up, downColor: COLORS.down,
       borderUpColor: COLORS.up, borderDownColor: COLORS.down,
       wickUpColor: COLORS.up, wickDownColor: COLORS.down,
-      priceLineVisible: false, lastValueVisible: true,
+      priceLineVisible: false, lastValueVisible: false,   // la etiqueta del eje la pone CM._pintaEtiquetaEje (precio del instante)
     });
 
     CM.series.volume = CM.main.addHistogramSeries({
@@ -7993,10 +8062,73 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * Dibuja el estado del replay hasta el índice `index` (inclusive).
    * Optimización: si index === _lastIndex + 1 se usa update() incremental.
    */
+  /* Etiqueta del eje: el precio del instante del replay (App.currentPrice), igual en todas las
+     temporalidades, en vez del cierre de la vela actual (que cambia con la temporalidad). */
+  CM._etiquetaEje = null;
+  CM._pintaEtiquetaEje = function () {
+    const v = CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    if (!v || !Number.isFinite(v.precio)) return;
+    const opts = { price: v.precio, color: v.subida ? COLORS.up : COLORS.down };
+    if (!CM._etiquetaEje) {
+      CM._etiquetaEje = CM.series.candles.createPriceLine(Object.assign({
+        lineWidth: 1, lineVisible: false, axisLabelVisible: true, title: '',
+      }, opts));
+    } else {
+      CM._etiquetaEje.applyOptions(opts);
+    }
+  };
+
+  /* PASO 1: la vela que se dibuja en `index`. Con el cursor a un minuto de una vela de 1h o
+     superior, la vela del cursor se sustituye por la construida desde 1m hasta ese minuto
+     (App.buildDisplayCandles). El resto de velas no cambia. Sin minutos, se usa la vela tal cual. */
+  CM._vistaVela = function (index) {
+    const raw = CM.candles[index];
+    if (!raw || !App.momentTs || !App.minutosVisibles || !App.minutosVisibles()) return raw;
+    const tfSec = DS.TIMEFRAMES[App.interval].ms / 1000;
+    const ini = Math.floor(App.momentTs / tfSec) * tfSec;
+    if (ini !== raw.time) return raw;
+    // Minutos de ESTA vela (caché por vela, ver App._minutosDeVela) o el bloque cargado que la cubra.
+    const barra = App._minutosDeVela ? App._minutosDeVela(ini) : null;
+    const cubre = !!barra || (App.minutePair === App.pair && App.minuteFrom <= ini && App.minuteTo >= App.momentTs);
+    if (!cubre) {
+      // Faltan los minutos de esta vela: se muestra sin detalle (nunca la vela completa) y se piden,
+      // una vez por vela y carga: si fallan (sin red), no se reintenta en cada repintado.
+      CM._minFallidos = CM._minFallidos || new Set();
+      if (!CM._pidiendoMinuto && !App._minOff && !CM._minFallidos.has(ini)) {
+        CM._pidiendoMinuto = true;
+        App.loadMinuteFor(App.momentTs, tfSec, true).then((ok) => {
+          CM._pidiendoMinuto = false;
+          if (ok) CM.render(BR.getIndex());
+          else { CM._minFallidos.add(ini); App._minOff = true; }   // sin red: se deja de pedir en segundo plano
+        });
+      }
+      return { time: raw.time, open: raw.open, high: raw.open, low: raw.open, close: raw.open, volume: 0, noDetail: true };
+    }
+    const arr = App.buildDisplayCandles(CM.candles.slice(0, index + 1), barra || App.minuteCandles, App.momentTs, tfSec);
+    const last = arr[arr.length - 1];
+    return last && last.time === raw.time ? last : raw;
+  };
+
+  /* Indicadores que se pintan: los de la vela en curso (PASO 1) o los precalculados. */
+  CM._indVivo = null;
+  CM._indVivoKey = null;
+  CM._ind = function () { return CM._indVivo || CM.indData; };
+
+  /** Indicadores calculados con la vela en curso como última vela: el último valor no usa el cierre futuro. */
+  CM._indicadoresVivo = function (index, candle) {
+    const key = [index, candle.time, candle.open, candle.high, candle.low, candle.close].join('|');
+    if (CM._indVivoKey === key) return CM._indVivo;
+    CM._indVivo = App.indicatorsFor(CM.candles.slice(0, index).concat([candle]));
+    CM._indVivoKey = key;
+    return CM._indVivo;
+  };
+
   CM.render = function (index) {
     if (!CM.candles.length) return;
     index = U.clamp(index, 0, CM.candles.length - 1);
-    const candle = CM.candles[index];
+    const candle = CM._vistaVela(index);
+    if (candle !== CM.candles[index]) CM._indicadoresVivo(index, candle);
+    else { CM._indVivo = null; CM._indVivoKey = null; }
 
     if (index === CM._lastIndex + 1 && CM._lastIndex >= 0) {
       CM._appendCandle(index, candle);
@@ -8005,7 +8137,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }
     CM._lastIndex = index;
     CM._index = index;
-    CM.updateLegend(candle);
+    CM._pintaEtiquetaEje();   // también en la ruta incremental (al avanzar)
+    CM.updateLegend(candle, { precioInstante: true });
     CM.updatePaneValues(index);
   };
 
@@ -8018,7 +8151,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const upd = (key, value) => {
       if (CM.series[key] && value !== null && value !== undefined) CM.series[key].update({ time: t, value });
     };
-    const d = CM.indData;
+    const d = CM._ind();
     upd('sma', d.sma ? d.sma[index] : null);
     upd('ema', d.ema ? d.ema[index] : null);
     upd('ema2', d.ema2 ? d.ema2[index] : null);
@@ -8045,20 +8178,22 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // --- Velas y volumen ---
     const cd = new Array(end + 1);
     const vd = new Array(end + 1);
+    const vivo = CM._vistaVela(end);
     for (let i = 0; i <= end; i++) {
-      const c = candles[i];
+      const c = i === end ? vivo : candles[i];
       cd[i] = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close };
       vd[i] = { time: c.time, value: c.volume || 0, color: c.close >= c.open ? 'rgba(0,200,83,.42)' : 'rgba(255,23,68,.42)' };
     }
     CM.series.candles.setData(cd);
     CM.series.volume.setData(vd);
+    CM._pintaEtiquetaEje();
 
     // --- Indicadores del panel principal ---
     const setLine = (key, values) => {
       if (!CM.series[key]) return;
       CM.series[key].setData(values ? CM._lineData(candles, values, end) : []);
     };
-    const d = CM.indData;
+    const d = CM._ind();
     setLine('sma', d.sma);
     setLine('ema', d.ema);
     setLine('ema2', d.ema2);
@@ -8106,16 +8241,23 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ============================== LEYENDA ============================== */
 
-  CM.updateLegend = function (candle) {
+  CM.updateLegend = function (candle, opts) {
     if (!candle) return;
     const prev = CM.candles[CM.candles.indexOf(candle) - 1];
     const chg = prev ? ((candle.close - prev.close) / prev.close) * 100 : 0;
-    const cls = candle.close >= candle.open ? 'up' : 'down';
+    // En el cursor, la C es el precio del instante del replay (el mismo en todas las temporalidades);
+    // al señalar otras velas, es su cierre real.
+    // Tanto al repintar como al señalar la vela del cursor, la C es el precio del instante.
+    const cur = (typeof BR !== 'undefined' && BR.currentCandle) ? BR.currentCandle() : null;
+    const esCursor = !!cur && candle.time === cur.time;
+    const inst = (esCursor || (opts && opts.precioInstante)) && CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    const cierre = inst && Number.isFinite(inst.precio) ? inst.precio : candle.close;
+    const cls = cierre >= candle.open ? 'up' : 'down';
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set('lgO', U.fmtPrice(candle.open));
     set('lgH', U.fmtPrice(candle.high));
     set('lgL', U.fmtPrice(candle.low));
-    set('lgC', U.fmtPrice(candle.close));
+    set('lgC', U.fmtPrice(cierre));
     set('lgV', U.fmtVol(candle.volume));
     const c = document.getElementById('lgC'); if (c) c.className = cls;
     const chgEl = document.getElementById('lgChg');
@@ -8124,7 +8266,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       chgEl.className = 'lg-item ' + (chg >= 0 ? 'up' : 'down');
     }
     // Resumen de indicadores activos
-    const i = CM._lastIndex, d = CM.indData, parts = [];
+    const i = CM._lastIndex, d = CM._ind(), parts = [];
     if (CM.cfg.sma && CM.cfg.sma.on && d.sma && d.sma[i] != null) parts.push(`SMA${CM.cfg.sma.p}: ${U.fmtPrice(d.sma[i])}`);
     if (CM.cfg.ema && CM.cfg.ema.on && d.ema && d.ema[i] != null) parts.push(`EMA${CM.cfg.ema.p}: ${U.fmtPrice(d.ema[i])}`);
     if (CM.cfg.ema2 && CM.cfg.ema2.on && d.ema2 && d.ema2[i] != null) parts.push(`EMA${CM.cfg.ema2.p}: ${U.fmtPrice(d.ema2[i])}`);
@@ -8136,7 +8278,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /** Valores numéricos de los paneles inferiores en el cursor. */
   CM.updatePaneValues = function (index) {
-    const d = CM.indData;
+    const d = CM._ind();
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set('rsiValue', d.rsi && d.rsi[index] != null ? U.num(d.rsi[index], 1) : '—');
     if (d.macd) {
@@ -8572,7 +8714,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const h = Math.round(area.getBoundingClientRect().height);
     if (!h) return ALTO_MAX;
     if (!esEstrecho()) return Math.max(ALTO_MIN + 40, Math.round(h * 0.45));
-    const fila = (id) => { const e = el(id); return e ? Math.round(e.getBoundingClientRect().height) : 0; };
+    // Una barra flotante (position:absolute, p. ej. #replayBar en escritorio) no ocupa fila: no se descuenta.
+    const fila = (id) => { const e = el(id); return e && getComputedStyle(e).position !== 'absolute' ? Math.round(e.getBoundingClientRect().height) : 0; };
     const pa = el('paneArea'), p = el('panePnl');
     // Lo que la escalera tiene pagado FUERA del panel de PnL (el RSI a 52 px en el
     // teléfono probado): mientras se ve, ese dinero no está disponible para estirar.
@@ -8699,7 +8842,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       return 0;
     }
     const alto = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
-    const fila = (id) => alto(el(id));
+    // Una barra flotante (position:absolute) no ocupa fila: no se descuenta del gráfico.
+    const fila = (id) => { const e = el(id); return e && getComputedStyle(e).position !== 'absolute' ? alto(e) : 0; };
     const visibles = [...pa.querySelectorAll('.indPane')].filter((e) => !e.classList.contains('hidden') && e.offsetParent !== null);
     const otros = visibles.filter((e) => e !== p);
 
@@ -12120,6 +12264,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     document.getElementById('btnPlay').addEventListener('click', () => App.togglePlay());
     document.getElementById('btnStepFwd').addEventListener('click', () => App.stepForward());
     document.getElementById('btnStepBack').addEventListener('click', () => App.stepBack());
+    document.getElementById('btnMinBack').addEventListener('click', () => App.moveMinute(-1));
+    document.getElementById('btnMinFwd').addEventListener('click', () => App.moveMinute(1));
     document.getElementById('btnReset').addEventListener('click', () => App.resetReplay());
     document.getElementById('btnJumpEnd').addEventListener('click', () => App.goToEnd());
 
@@ -12793,7 +12939,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!cont || !CM || !CM.indData) return;
     const cfg = App.indicators || {};
     const i = CM._lastIndex;
-    const d = CM.indData;
+    const d = CM._ind();
     const val = (arr) => (i >= 0 && arr && arr[i] != null && Number.isFinite(arr[i])) ? arr[i] : null;
     const ultima = App.candles && App.candles[CM._lastIndex];
     const filas = [];
@@ -13272,7 +13418,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * @param {{force?: boolean}} [opts] force = viene del desplegable, que ya
    *        cambió su valor: hay que recargar aunque coincida con la activa.
    */
-  UI.setTimeframe = function (tf, opts = {}) {
+  UI.setTimeframe = async function (tf, opts = {}) {
     if (!DS.TIMEFRAMES[tf]) { U.toast('Temporalidad no válida', 'err'); return; }
     const sel = document.getElementById('tfSelect');
     if (!opts.force && sel.value === tf && App.interval === tf) { UI.syncTfButtons(); return; }
@@ -13282,6 +13428,14 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // La posición abierta y las órdenes pendientes pertenecen a la serie
     // anterior: se cierran/cancelan antes de traer las velas nuevas.
     App.guardSeriesChange('cambiar de temporalidad', { conservarPosicion: true });
+
+    // Instante exacto: el del replay (si ya había uno, se conserva). El precio sale de las velas de 1m de ese instante.
+    const actual = BR.currentCandle();
+    const momento = (App.momentTs !== null && App.momentTs !== undefined) ? App.momentTs : (actual ? actual.time : null);
+    App.momentTs = momento;
+    const spanViejo = DS.TIMEFRAMES[App.interval] ? DS.TIMEFRAMES[App.interval].ms / 1000 : 3600;
+    await App.loadMinuteFor(momento, spanViejo);
+    App.focusTs = momento;     // loadDataFromForm (keepFocus) coloca el replay en la vela que contiene este instante
 
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
     // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.
@@ -13857,7 +14011,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   };
 
   /** Refresco completo. */
+  UI.syncMinuteButtons = function () {
+    const el = document.getElementById('minBtns');
+    if (el) el.style.display = App.minutosVisibles && App.minutosVisibles() ? 'inline-flex' : 'none';
+  };
+
   UI.refreshAll = function () {
+    UI.syncMinuteButtons();
     UI.refreshAccount();
     UI.refreshStats();
     UI.refreshReplayBar();
@@ -15548,6 +15708,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       document.getElementById('startDate').value = U.tsToInput(startTs);
     } else {
       App.focusTs = null;      // carga pedida a mano: manda la fecha del formulario
+      App.momentTs = null;
     }
 
     startTs = Math.min(startTs, now - 3 * tfSec);   // debe quedar histórico por delante
@@ -15737,14 +15898,21 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // 4) Replay y cuenta
     BR.setData(candles, startIndex, App.interval);
     App.resetCheckpoints(startIndex);
-    TE.state.lastPrice = candles[startIndex].close;
+    TE.state.lastPrice = App.currentPrice() ?? candles[startIndex].open;
+    TE.state.markPrice = candles[startIndex].close;
     TE.state.lastTime = candles[startIndex].time;
     TE.state.equitySeries = [{ t: candles[startIndex].time, value: TE.state.equity, time: candles[startIndex].time }];
+    App._cpT = new Map(); App._minCache = new Map(); App._minPedidos = new Set(); App._minOff = false; CM._minFallidos = new Set(); App._sinMinHits = 0; App._tPendiente = null; App._avisoSinMin = false;
+    if (App.momentTs === null || App.momentTs === undefined) App._momentoDeVela(startIndex);
+    App._frontera = App._tCursor();
+    App._cpT.set(App._frontera, App.snapshot(startIndex));
 
     // 5) Render y UI
+    if (App.momentTs === null || App.momentTs === undefined) App._momentoDeVela(startIndex);
     CM.render(startIndex);
     DT.resize(); DT.render();
     CM.scrollToLast(160);
+    App._pideMinutosSiFalta();
     UI.setPairLabels(App.pair, App.interval);
     UI.refreshAll();
     UI.refreshStats(true);
@@ -15760,11 +15928,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   /* ============================== INDICADORES ============================== */
 
   /** Recalcula los arrays de indicadores para TODA la serie cargada. */
-  App.rebuildIndicatorData = function () {
-    const c = App.candles;
+  /** Indicadores (según App.indicators) sobre un array de velas. Son causales: el último valor solo usa
+   *  las velas que se le pasan. Con la vela en curso, se le pasa [cerradas…, vivaParcial]. */
+  App.indicatorsFor = function (c) {
     const cfg = App.indicators;
     const data = {};
-    if (!c.length) { CM.setIndicatorData({}, cfg); return; }
+    if (!c || !c.length) return data;
     if (cfg.sma.on) data.sma = IND.sma(c, cfg.sma.p);
     if (cfg.ema.on) data.ema = IND.ema(c, cfg.ema.p);
     if (cfg.ema2.on) data.ema2 = IND.ema(c, cfg.ema2.p);
@@ -15772,6 +15941,15 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (cfg.rsi.on) data.rsi = IND.rsi(c, cfg.rsi.p);
     if (cfg.macd.on) data.macd = IND.macd(c, cfg.macd.f, cfg.macd.s, cfg.macd.sig);
     if (cfg.atr.on) data.atr = IND.atr(c, cfg.atr.p);
+    return data;
+  };
+
+  App.rebuildIndicatorData = function () {
+    const c = App.candles;
+    const cfg = App.indicators;
+    if (!c.length) { CM.setIndicatorData({}, cfg); return; }
+    const data = App.indicatorsFor(c);
+    CM._indVivo = null; CM._indVivoKey = null;     // la vela en curso se recalcula con la configuración nueva
     CM.setIndicatorData(data, cfg);
     CM.applyPaneVisibility(cfg);
   };
@@ -15850,19 +16028,193 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     }
   };
 
+  /* ============== PASO 2: MOTOR POR MINUTOS ==============
+   * Regla: una unidad del motor (un minuto o una vela) se procesa cuando el cursor la ha DEJADO.
+   * El motor nunca ve un minuto antes de que el cursor lo haya pasado.
+   *  · Vela de 1 h o más con sus 1m cargados: el motor recorre minuto a minuto (TE.onMinuto).
+   *  · Sin 1m cargados: la vela entera, al salir de ella (TE.onCandle), y se avisa en el registro.
+   * App._frontera: instante (s) hasta el que ya está procesado.
+   * App._cpT: estado guardado por posición del cursor (clave: instante en s), para retroceder exacto.
+   */
+  App._cpT = new Map();
+  App._frontera = null;
+  App._minCache = new Map();     // inicio de vela (s) -> velas 1m COMPLETAS de esa vela
+  App._tPendiente = null;        // instante pedido para el próximo avance (lo fija moveMinute)
+  App._sinMinHits = 0;           // velas procesadas enteras por falta de 1m en la última operación
+  App._minPedidos = new Set();   // velas cuyos 1m ya se han pedido en segundo plano (una vez por carga)
+  App._minOff = false;           // la carga en segundo plano se detiene tras un fallo (sin red)
+
+  App._tfSec = function () { const tf = DS.TIMEFRAMES[App.interval]; return tf ? tf.ms / 1000 : 0; };
+
+  /** Instante del cursor: el minuto revelado, o el inicio de la vela. */
+  App._tCursor = function () {
+    if (App.momentTs !== null && App.momentTs !== undefined) return App.momentTs;
+    const c = BR.currentCandle();
+    return c ? c.time : null;
+  };
+
+  /** Índice de la última vela cuyo inicio es <= t (o -1). */
+  App._indiceDeTiempo = function (t) {
+    let lo = 0, hi = BR.total() - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (BR.getCandle(mid).time <= t) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best;
+  };
+
+  /** Velas 1m COMPLETAS de la vela que empieza en `inicio`, o null si no están todas. */
+  App._minutosDeVela = function (inicio) {
+    const span = App._tfSec();
+    const arr = App._minCache.get(inicio);
+    return arr && span > 0 && arr.length === span / 60 ? arr : null;
+  };
+
+  /** Fija el instante del cursor: en 1h o más, el minuto indicado o el inicio de la vela. */
+  App._fijaMomento = function (idx, t) {
+    if (!App.minutosVisibles()) { App.momentTs = null; return; }
+    if (t !== null && t !== undefined) { App.momentTs = t; return; }
+    const c = BR.getCandle(idx);
+    App.momentTs = c ? c.time : null;
+  };
+
   /**
-   * AVANCE del replay: procesa las velas nuevas una a una (SL/TP, liquidación,
-   * equity) y deja un checkpoint por vela para poder retroceder.
+   * Procesa el motor hasta el instante T (s). Cada unidad se procesa cuando T ya la ha dejado atrás:
+   * minutos si la vela los tiene completos, si no la vela entera.
+   */
+  App._procesaHasta = function (T) {
+    if (!BR.total() || !Number.isFinite(T)) return;
+    const span = App._tfSec();
+    const conMin = App.minutosVisibles();
+    let F = Number.isFinite(App._frontera) ? App._frontera : BR.getCandle(BR.getStartIndex()).time;
+    let vueltas = 0;
+    while (F < T && vueltas++ < 1e7) {
+      const idx = App._indiceDeTiempo(F);
+      if (idx < 0) break;
+      const vela = BR.getCandle(idx);
+      const fin = vela.time + span;
+      if (fin <= F) {                            // F cae en un hueco entre velas: saltar a la siguiente
+        if (idx + 1 >= BR.total()) break;
+        F = BR.getCandle(idx + 1).time;
+        continue;
+      }
+      const mins = conMin ? App._minutosDeVela(vela.time) : null;
+      if (mins) {
+        for (let k = 0; k < mins.length; k++) {
+          const m = mins[k];
+          if (m.time < F) continue;
+          if (m.time + 60 > T) break;
+          TE.onMinuto(m);
+          F = m.time + 60;
+        }
+        if (F >= fin) { TE.cierraBarra(vela, mins[mins.length - 1]); F = fin; continue; }
+        break;                                   // la vela sigue abierta hasta T
+      }
+      if (fin > T) break;                        // la vela aún no la ha dejado el cursor
+      if (conMin) App._sinMinHits++;
+      TE.onCandle(vela);
+      F = fin;
+    }
+    App._frontera = F;
+  };
+
+  /** Guarda el estado del cursor actual (al llegar a una posición o tras una acción del usuario). */
+  App._guardaCursor = function () {
+    if (!BR.total()) return;
+    const idx = BR.getIndex(), vela = BR.getCandle(idx), T = App._tCursor();
+    const snap = App.snapshot(idx);
+    App._cpT.set(T, snap);
+    if (T === vela.time) App.checkpoints[idx] = snap;
+  };
+
+  /** Precio y hora de referencia del motor en el cursor (sin anotar la curva de capital). */
+  App._sincronizaPrecio = function () {
+    const vela = BR.currentCandle();
+    if (!vela) return;
+    if (App.minutosVisibles()) {
+      const px = App.currentPrice();
+      TE.state.lastPrice = Number.isFinite(px) ? px : vela.open;
+      TE.state.markPrice = TE.state.lastPrice;
+    } else {
+      TE.state.lastPrice = vela.open;
+      TE.state.markPrice = vela.close;
+    }
+    TE.state.lastTime = App._tCursor();
+    TE.state.equity = TE.state.balance + TE.unrealized(TE.state.lastPrice);
+  };
+
+  /** Restaura el estado al punto guardado más cercano a T dentro de la vela idx. Devuelve su clave. */
+  App._restauraEn = function (idx, T) {
+    const vela = BR.getCandle(idx);
+    let clave = null;
+    if (App._cpT.has(T)) clave = T;
+    else for (const k of App._cpT.keys()) if (k <= T && k >= vela.time && (clave === null || k > clave)) clave = k;
+    let cp = clave !== null ? App._cpT.get(clave) : null;
+    if (!cp && App.checkpoints[idx]) { cp = App.checkpoints[idx]; clave = vela.time; }
+    if (cp) {
+      TE.restoreFromCheckpoint(cp);
+      App._frontera = Number.isFinite(cp.F) ? cp.F : (clave !== null ? clave : vela.time);
+    } else {
+      // Sin checkpoint (antes del inicio del replay): estado inicial
+      App.resetCheckpoints(idx);
+      App._cpT = new Map();
+      TE.state.lastPrice = vela.open; TE.state.markPrice = vela.close; TE.state.lastTime = vela.time;
+      App._frontera = vela.time;
+      clave = null;
+    }
+    return clave;
+  };
+
+  App._refrescaTodo = function (idx) {
+    CM.render(idx);
+    DT.render();
+    App.refreshOrderLines();
+    UI.refreshAll();
+    UI.refreshStats(true);
+    UI.renderTrades();
+  };
+
+  /** Pide en segundo plano los 1m de la vela del cursor si faltan (para poder procesarla minuto a minuto). */
+  App._pideMinutosSiFalta = function () {
+    if (!App.minutosVisibles() || !BR.total()) return;
+    const vela = BR.currentCandle();
+    if (!vela || App._minutosDeVela(vela.time) || App._minPedidos.has(vela.time) || App._minOff) return;
+    App._minPedidos.add(vela.time);          // una petición por vela
+    App.loadMinuteFor(vela.time, App._tfSec(), true).then((ok) => {
+      // Si falla (sin red), la carga en segundo plano se detiene: solo la acción del usuario reintenta.
+      if (!ok) App._minOff = true;
+      const ahora = BR.currentCandle();
+      if (ahora && ahora.time === vela.time) CM.render(BR.getIndex());
+    }).catch(() => {});
+  };
+
+  /**
+   * AVANCE del replay. Procesa lo que el cursor deja atrás (vela a vela o minuto a minuto) y guarda
+   * el estado de cada vela que se pisa, para poder retroceder.
    */
   App.onAdvance = function (from, to, isSeek) {
     App.focusTs = null;        // el usuario movió el replay: el ancla es la vela actual
-    const candles = App.candles;
+    const tMin = App._tPendiente;
+    App._tPendiente = null;
+    App._fijaMomento(to, tMin);
+    App._sinMinHits = 0;
     TE.beginBatch();
     for (let i = from + 1; i <= to; i++) {
-      TE.onCandle(candles[i]);
-      App.checkpoints[i] = App.snapshot(i);
+      const ti = BR.getCandle(i).time;
+      App._procesaHasta(ti);                   // todo lo anterior a la vela i ya está procesado
+      const snap = App.snapshot(i);
+      App.checkpoints[i] = snap;               // estado al llegar a la vela i
+      App._cpT.set(ti, snap);
     }
+    App._procesaHasta(App._tCursor());         // hasta el cursor: sus minutos ya revelados
+    App._guardaCursor();
+    App._sincronizaPrecio();
     TE.endBatch();
+    if (App._sinMinHits && !App._avisoSinMin) {          // un solo aviso por carga de datos (no inunda el registro)
+      App._avisoSinMin = true;
+      U.log('⚠️ Hay velas sin 1m cargados: se procesan enteras al salir de ellas (los minutos se piden al entrar en cada vela)', 'warn');
+    }
+    App._pideMinutosSiFalta();
 
     CM.render(to);
     App.refreshOrderLines();
@@ -15875,26 +16227,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   App.onSeek = function (index) { App.restoreTo(index); };
 
   App.restoreTo = function (index) {
-    const cp = App.checkpoints[index];
     BR.pause();
     BR.state.index = index;
-
-    if (cp) {
-      TE.restoreFromCheckpoint(cp);
-    } else {
-      // Sin checkpoint (índice anterior al inicio del replay): estado inicial
-      App.resetCheckpoints(index);
-      const c = App.candles[index];
-      TE.state.lastPrice = c ? c.close : null;
-      TE.state.lastTime = c ? c.time : null;
-    }
-
-    CM.render(index);
-    DT.render();
-    App.refreshOrderLines();
-    UI.refreshAll();
-    UI.refreshStats(true);
-    UI.renderTrades();
+    App._fijaMomento(index, null);           // la vela se muestra desde su inicio
+    App._restauraEn(index, App._tCursor());
+    App._sincronizaPrecio();
+    App._refrescaTodo(index);
     U.log(`⏪ Replay en ${U.fmtDate(App.candles[index].time)} UTC (vela ${index + 1})`, 'sys');
   };
 
@@ -15929,6 +16267,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       pending: JSON.parse(JSON.stringify(s.pending || [])),
       lastPrice: s.lastPrice,
       lastTime: s.lastTime,
+      F: App._frontera,             // hasta qué instante está procesado el motor
     };
   };
 
@@ -15941,9 +16280,190 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
   /* ============================== TRADING ============================== */
 
+  /* Precio de referencia del replay. Normalmente es el CIERRE de la vela del cursor.
+     Solo tras cambiar de temporalidad con el cursor a mitad de vela se conserva el instante
+     exacto (App.momentTs) y el precio es la APERTURA de la vela de 1m que empieza en ese
+     instante: así es igual en 5m, 1h o 1m. Avanzar o retroceder borra el instante. */
   App.currentPrice = function () {
     const c = BR.currentCandle();
-    return c ? c.close : null;
+    if (!c) return null;
+    if (App.momentTs !== null && App.momentTs !== undefined) {
+      const m = App.minuteAt(App.momentTs);
+      if (m !== null) return m;
+    }
+    return c.open;
+  };
+
+  App.momentTs = null;          // instante exacto del replay (solo tras cambiar de temporalidad)
+  // Etiqueta del eje (ver CM._pintaEtiquetaEje): el mismo precio que el chip, sea cual sea la temporalidad
+  CM.precioEtiqueta = function () {
+    const c = BR.currentCandle();
+    const px = App.currentPrice();
+    return c && Number.isFinite(px) ? { precio: px, subida: c.close >= c.open } : null;
+  };
+  App.minuteCandles = [];       // velas de 1m del tramo del instante
+  App.minutePair = null; App.minuteFrom = 0; App.minuteTo = -1;
+
+  /**
+   * PASO 1 (solo vista): velas HTF para pintar, con la vela en curso construida desde 1m hasta el cursor.
+   * Reglas (para no anticipar nada):
+   *  · Las velas HTF cerradas son las que empiezan ANTES del bloque del cursor. Nunca se devuelve una posterior.
+   *  · Minutos del bloque con time < cursor: aportan máximo, mínimo, volumen y cierre.
+   *  · El minuto del cursor solo aporta su apertura: es el precio «ahora» (el mismo de App.currentPrice).
+   *  · Sin minutos del bloque: la vela se marca noDetail con su apertura, sin mechas.
+   * No lo usa el motor de trading; solo cambia lo que se dibuja.
+   * @param {Array} htfCandles   velas HTF ordenadas por time (segundos)
+   * @param {Array} minuteCandles velas 1m ordenadas (App.minuteCandles)
+   * @param {number} currentTime  instante del cursor (segundos)
+   * @param {number} tfSeconds    duración de la HTF en segundos
+   */
+  App.buildDisplayCandles = function (htfCandles, minuteCandles, currentTime, tfSeconds) {
+    if (!Array.isArray(htfCandles) || !htfCandles.length) return [];
+    if (!(tfSeconds > 0) || !Number.isFinite(currentTime)) return [];
+    const bucketStart = Math.floor(currentTime / tfSeconds) * tfSeconds;
+
+    const rendered = [];
+    for (let i = 0; i < htfCandles.length; i++) {
+      if (htfCandles[i].time < bucketStart) rendered.push(htfCandles[i]);
+      else break;                               // ni la vela del bloque ni las posteriores
+    }
+    let raw = null;
+    for (let i = htfCandles.length - 1; i >= 0; i--) {
+      if (htfCandles[i].time === bucketStart) { raw = htfCandles[i]; break; }
+      if (htfCandles[i].time < bucketStart) break;
+    }
+
+    let open = null, high = -Infinity, low = Infinity, volume = 0, close = null, hay = false;
+    const mins = Array.isArray(minuteCandles) ? minuteCandles : [];
+    for (let i = 0; i < mins.length; i++) {
+      const m = mins[i];
+      if (m.time < bucketStart || m.time > currentTime) continue;
+      if (m.time === currentTime) {               // el minuto del cursor: solo su apertura
+        if (!hay) { open = m.open; }
+        close = m.open; hay = true;
+        if (high < m.open) high = m.open;
+        if (low > m.open) low = m.open;
+        continue;
+      }
+      if (open === null) open = m.open;
+      if (m.high > high) high = m.high;
+      if (m.low < low) low = m.low;
+      volume += (m.volume || 0);
+      close = m.close; hay = true;
+    }
+
+    if (hay && open !== null && close !== null) {
+      rendered.push({ time: bucketStart, open, high, low, close, volume, isPartial: true });
+    } else if (raw) {
+      rendered.push({ time: bucketStart, open: raw.open, high: raw.open, low: raw.open, close: raw.open, volume: 0, noDetail: true });
+    }
+    return rendered;
+  };
+
+  /** Los botones de minuto solo tienen sentido en temporalidades de 1h o superior. */
+  App.minutosVisibles = function () {
+    const tf = DS.TIMEFRAMES[App.interval];
+    return !!tf && tf.ms >= 3600000;
+  };
+
+  /** En 1h o superior, la vela del cursor se revela por minutos: el cursor va al inicio de esa vela. */
+  App._momentoDeVela = function (index) {
+    const c = App.minutosVisibles() && BR.total() ? BR.getCandle(index) : null;
+    App.momentTs = c ? c.time : null;
+  };
+
+  /**
+   * Mueve el cursor `delta` minutos (solo 1h o superior). Avanzar procesa lo que el cursor deja atrás;
+   * retroceder restaura el estado guardado en ese minuto. Carga las velas de 1m que haga falta.
+   */
+  App.moveMinute = async function (delta) {
+    if (!App.minutosVisibles() || !BR.total()) return;
+    BR.pause();
+    const tfSec = App._tfSec();
+    const cur = BR.currentCandle();
+    const base = App._tCursor();
+    const t = base + delta * 60;
+    const primera = BR.getCandle(BR.getStartIndex()).time;
+    const ultima = BR.getCandle(BR.total() - 1).time + tfSec - 60;
+    if (t < primera || t > ultima) { U.toast('No hay más minutos en el tramo cargado', 'warn'); return; }
+    const idx = App._indiceDeTiempo(t);
+    if (idx < 0 || BR.getCandle(idx).time !== Math.floor(t / tfSec) * tfSec) { U.toast('No hay vela para ese minuto', 'warn'); return; }
+    const idxAntes = BR.getIndex();
+    // Al avanzar de vela hacen falta también los 1m de la vela que se deja.
+    if (idx > idxAntes) await App.loadMinuteFor(cur.time, tfSec);
+    const ok = await App.loadMinuteFor(t, tfSec);
+    if (BR.getIndex() !== idxAntes || App._tCursor() !== base) return;   // el usuario se movió mientras cargaba
+    if (!ok) U.toast('Sin datos de 1m para ese minuto: se muestra la vela sin detalle', 'warn', 3200);
+
+    if (idx > idxAntes) {
+      App._tPendiente = t;
+      BR._advance(idx - idxAntes);           // onAdvance procesa lo dejado y deja el cursor en t
+    } else if (idx === idxAntes && t > base) {
+      App._fijaMomento(idx, t);
+      App._procesaHasta(t);
+      App._guardaCursor();
+      App._sincronizaPrecio();
+      App._refrescaTodo(idx);
+    } else {
+      BR.state.index = idx;
+      App._fijaMomento(idx, t);
+      App._restauraEn(idx, t);
+      App._procesaHasta(t);                  // rehace solo lo que falta hasta t
+      App._guardaCursor();
+      App._sincronizaPrecio();
+      App._refrescaTodo(idx);
+    }
+  };
+
+  /** Apertura de la vela de 1m que empieza EXACTAMENTE en t (o null si no está cargada). */
+  App.minuteAt = function (t) {
+    const span = App._tfSec();
+    const ini = span > 0 ? Math.floor(t / span) * span : t;
+    const arr = App._minutosDeVela(ini);
+    if (arr) {
+      const m = arr[Math.round((t - ini) / 60)];
+      if (m && m.time === t) return m.open;
+    }
+    const blk = App.minuteCandles;
+    if (!blk || !blk.length) return null;
+    let lo = 0, hi = blk.length - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (blk[mid].time <= t) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best >= 0 && blk[best].time === t ? blk[best].open : null;
+  };
+
+  /**
+   * Carga las velas de 1m de la vela que contiene t (desde su inicio, con un minuto previo) y las
+   * guarda por vela completa, para que el motor las recorra. Solo Binance: CoinGecko no tiene 1m.
+   */
+  App.loadMinuteFor = async function (t, spanSec, silencioso) {
+    if (t === null || t === undefined) return false;
+    const pair = App.pair;
+    const ini = spanSec > 0 ? Math.floor(t / spanSec) * spanSec : t;
+    if (spanSec > 0 && App._minutosDeVela(ini)) return true;
+    try {
+      const hasta = Math.min(Math.floor(Date.now() / 1000), ini + spanSec + 60);   // nunca pedir el futuro
+      const velas = await DS.fetchBinanceKlines(pair, '1m', ini - 60, hasta, null, { deadlineMs: performance.now() + 12000 });
+      if (App.pair !== pair) return false;     // cambió el par mientras cargaba
+      const arr = (velas || []).slice().sort((a, b) => a.time - b.time);
+      App.minuteCandles = arr; App.minutePair = pair; App.minuteFrom = ini - 60; App.minuteTo = hasta;
+      if (spanSec > 0) {
+        const grupos = new Map();
+        for (const m of arr) {
+          const b = Math.floor(m.time / spanSec) * spanSec;
+          if (!grupos.has(b)) grupos.set(b, []);
+          grupos.get(b).push(m);
+        }
+        for (const [b, ms] of grupos) if (ms.length === spanSec / 60) App._minCache.set(b, ms);
+      }
+      return spanSec <= 0 || App._minutosDeVela(ini) !== null;
+    } catch (err) {
+      App.minuteCandles = []; App.minutePair = null;
+      if (!silencioso) U.toast('No se pudieron cargar las velas de 1m: el precio sale de la vela', 'warn', 4000);
+      return false;
+    }
   };
 
   App.currentTime = function () {
@@ -16136,7 +16656,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     App.flatten('inversion');
     const nueva = TE.openPosition(lado, {
       tradeSide: 'open', mode: 'qty', size: qty, entryPrice: price,
-      leverage, feePct: TE.state.feePct, time: App.currentTime(),
+      leverage, feePct: TE.state.feePct, time: App._tCursor(),
     });
     if (nueva) {
       App.refreshOrderLines();
@@ -16197,7 +16717,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       sl, tp,
       leverage: TE.leverageDe(side),
       feePct: TE.state.feePct,
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
 
     if (pos) {
@@ -16250,10 +16770,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       mode: sp.mode, size: sp.size,
       leverage: TE.leverageDe(side), feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
     if (orden) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       App.refreshOrderLines();
       UI.refreshAll();
       U.toast(`🌀 Trailing colocado: retrocede ${U.num(pct, 2)} % desde el pico`
@@ -16305,10 +16825,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       feePct: TE.state.feePct,
       reduceOnly: !!(ro && ro.checked),
       efecto: (ef && ef.value) || 'GTC',
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
     if (orden) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       App.refreshOrderLines();
       UI.refreshAll();
       const posAb = TE.state.position;
@@ -16356,10 +16876,10 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       refPrice: ref,
       efecto: (document.getElementById('ordEffect') || {}).value || undefined,
       reduceOnly: !!(document.getElementById('ordReduceOnly') || {}).checked,
-      time: App.currentTime(),
+      time: App._tCursor(),
     });
 
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     if (orden) {
@@ -16413,7 +16933,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (phase !== 'end') return true;
 
     // Al soltar: checkpoint (para que retroceder conserve el nivel), panel al día
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.refreshAll();
     U.playSound('click');
 
@@ -16438,7 +16958,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   /** Cancela una orden límite concreta. */
   App.cancelOrder = function (id) {
     if (!TE.cancelOrder(id)) return;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
   };
@@ -16447,7 +16967,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   App.cancelAllOrders = function () {
     const n = TE.cancelAllOrders();
     if (!n) return;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
   };
@@ -16465,8 +16985,8 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     // «Cerrar todo» cierra TODO: en modo hedge son dos posiciones, cada una con su PnL, su
     // comisión y su fila en el historial. Cerrar solo la principal dejaría una SHORT olvidada en
     // el libro, que es justo lo que este botón promete que no pasa.
-    for (const p of vivas) TE.closePosition(price, reason, App.currentTime(), p);
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    for (const p of vivas) TE.closePosition(price, reason, App._tCursor(), p);
+    App._guardaCursor();
     App.refreshOrderLines();
     DT.setTradeHandles(null);
     UI.refreshAll();
@@ -16512,11 +17032,11 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
       // cuenta si el usuario los separó en hedge): si no, promediar cambiaría la liquidación.
       leverage: TE.leverageDe(p.side),
       feePct: TE.state.feePct,
-      time: App.currentTime(),
+      time: App._tCursor(),
       reaim: o.reaim ? 'medio' : null,
     });
     if (!nuevo) return null;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
@@ -16533,9 +17053,9 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const p = App.posicionActiva();
     if (!p) { U.toast('No hay posición abierta', 'warn', 1800); return null; }
     const f = U.clamp(+pct || 0, 1, 100) / 100;
-    const row = TE.reducePosition(f, App.currentPrice(), App.currentTime(), 'parcial');
+    const row = TE.reducePosition(f, App.currentPrice(), App._tCursor(), 'parcial');
     if (!row) return null;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     UI.refreshStats(true);
@@ -16561,7 +17081,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!TE.setSL(be, { force: true })) return false;
     U.log(`🛡 SL movido al break-even ${U.fmtPrice(be)} (precio medio ${U.fmtPrice(p.entryPrice)} + ` +
           `comisiones ${(p.openFee || 0).toFixed(2)} USD) · protegido si el precio vuelve ahí`, 'sys');
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     App.refreshOrderLines();
     UI.refreshAll();
     U.toast(`🛡 SL protegido en el break-even (${U.fmtPrice(be)})`, 'ok', 2800);
@@ -16576,7 +17096,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const pct = parseFloat(((document.getElementById('tpLvlPct') || {}).value) || '50');
     const nivel = TE.addTpLevel(precio, pct);
     if (nivel) {
-      App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+      App._guardaCursor();
       UI.syncPositionGraphics(p);          // fuerza a redibujar las líneas
       UI.refreshAll();
       const inp = document.getElementById('tpLvlPrice');
@@ -16601,7 +17121,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     if (!t) return null;
     // El checkpoint de la vela guarda la posición entera (trail incluido), así que
     // retroceder/reavanzar devuelve también el trailing tal como estaba.
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(p);
     UI.refreshAll();
     return t;
@@ -16612,7 +17132,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
     const p = App.posicionActiva();
     if (!p || !p.trail) { U.toast('No hay ningún trailing activo que quitar', 'info', 1800); return false; }
     if (!TE.removeTrailing()) return false;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(p);
     UI.refreshAll();
     U.toast('🌀 Trailing quitado: la posición vuelve a su SL fijo', 'info', 2400);
@@ -16638,7 +17158,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
   /** Quita un nivel de TP escalonado. */
   App.removeTpLevel = function (i) {
     if (!TE.removeTpLevel(i)) return false;
-    App.checkpoints[BR.getIndex()] = App.snapshot(BR.getIndex());
+    App._guardaCursor();
     UI.syncPositionGraphics(App.posicionActiva());
     UI.refreshAll();
     return true;
@@ -17424,6 +17944,94 @@ ${rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).joi
 
   global.LF = LF;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+
+/* ==================== js/replayBarDrag.js ==================== */
+/* Barra de replay flotante: arrastre por el asa ⠿ y posición recordada.
+   Solo actúa en escritorio (> 820 px); en móvil la barra vuelve a su sitio en la
+   columna y se borran las coordenadas en línea. Las coordenadas se guardan
+   relativas a #chartArea, así que sobreviven a recargas y a cambios de tamaño
+   (se vuelven a acotar dentro del área). */
+(function () {
+  const KEY = 'brp.replayBar.pos';
+  const bar = document.getElementById('replayBar');
+  const area = document.getElementById('chartArea');
+  const grip = bar && bar.querySelector('.rb-grip');
+  if (!bar || !area || !grip) return;
+
+  const esEscritorio = () => window.matchMedia('(min-width: 821px)').matches;
+  const acota = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function limitar(x, y) {
+    const maxX = Math.max(0, area.clientWidth - bar.offsetWidth);
+    const maxY = Math.max(0, area.clientHeight - bar.offsetHeight);
+    return { x: acota(Math.round(x), 0, maxX), y: acota(Math.round(y), 0, maxY) };
+  }
+
+  function aplicar(p) {
+    bar.style.left = p.x + 'px';
+    bar.style.top = p.y + 'px';
+    bar.style.bottom = 'auto';
+  }
+
+  function leer() {
+    try {
+      const p = JSON.parse(localStorage.getItem(KEY));
+      return p && isFinite(p.x) && isFinite(p.y) ? p : null;
+    } catch (e) { return null; }
+  }
+
+  /* Sin posición guardada: se apoya sobre el borde inferior del GRÁFICO (no de los
+     paneles de indicadores), para que al abrir la página no tape el RSI ni el PnL. */
+  function porDefecto() {
+    const pa = document.getElementById('paneArea');
+    const a = area.getBoundingClientRect();
+    // Borde superior de la franja de paneles (la escalera va justo debajo del gráfico).
+    const borde = pa ? pa.getBoundingClientRect().top - a.top : area.clientHeight;
+    return limitar(12, borde - bar.offsetHeight - 8);
+  }
+
+  function restaurar() {
+    if (!esEscritorio()) { bar.style.left = bar.style.top = bar.style.bottom = ''; return; }
+    const p = leer();
+    aplicar(p ? limitar(p.x, p.y) : porDefecto());
+  }
+
+  grip.addEventListener('pointerdown', (e) => {
+    if (!esEscritorio() || e.button !== 0) return;
+    e.preventDefault();
+    const r = bar.getBoundingClientRect();
+    const a = area.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    bar.classList.add('arrastrando');
+    grip.setPointerCapture(e.pointerId);
+
+    const mueve = (ev) => aplicar(limitar(ev.clientX - a.left - dx, ev.clientY - a.top - dy));
+    const suelta = () => {
+      grip.removeEventListener('pointermove', mueve);
+      grip.removeEventListener('pointerup', suelta);
+      grip.removeEventListener('pointercancel', suelta);
+      bar.classList.remove('arrastrando');
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ x: parseInt(bar.style.left, 10), y: parseInt(bar.style.top, 10) }));
+      } catch (e2) { /* almacenamiento lleno o bloqueado: la barra funciona igual */ }
+    };
+    grip.addEventListener('pointermove', mueve);
+    grip.addEventListener('pointerup', suelta);
+    grip.addEventListener('pointercancel', suelta);
+  });
+
+  window.addEventListener('resize', restaurar);
+  // Los paneles cambian de alto solos (escalera, indicadores que se muestran u ocultan):
+  // si el usuario no ha movido la barra, su posición por defecto sigue al borde de la franja.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => { if (!leer()) restaurar(); });
+    ro.observe(area);
+    const pa = document.getElementById('paneArea');
+    if (pa) ro.observe(pa);
+  }
+  restaurar();
+})();
 
 
 </script>

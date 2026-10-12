@@ -83,6 +83,7 @@
     equitySeries: [],        // [{t, value, time}] para la curva de capital
     feesPaid: 0,
     lastPrice: null,
+    markPrice: null,            // cierre de la vela del cursor = el precio que muestra la gráfica (validación del SL)
     lastTime: null,
     seq: 0,
   };
@@ -794,15 +795,27 @@
     const p = TE.state.position;
     if (!p) return false;
     const o = opts || {};
-    const forzar = !!o.force, sil = !!o.silent;
+    const sil = !!o.silent;
+    // Límite del SL: no puede quedar al otro lado del precio que muestra la gráfica (markPrice),
+    // porque se dispararía al momento. El break-even (force) queda fuera de esta comprobación.
+    if (!o.force && price !== null && price !== undefined && Number.isFinite(+price)) {
+      const ref = Number.isFinite(+TE.state.markPrice) && +TE.state.markPrice > 0 ? +TE.state.markPrice
+        : (Number.isFinite(+TE.state.lastPrice) && +TE.state.lastPrice > 0 ? +TE.state.lastPrice : null);
+      if (ref !== null) {
+        if (p.side === 'long' && +price >= ref) {
+          if (!sil) U.toast('SL inválido: en un LONG debe estar por debajo del precio actual');
+          return false;
+        }
+        if (p.side === 'short' && +price <= ref) {
+          if (!sil) U.toast('SL inválido: en un SHORT debe estar por encima del precio actual');
+          return false;
+        }
+      }
+    }
     if (price === null || price === undefined || !Number.isFinite(+price)) { p.sl = null; }
     else {
       // El break-even de un LONG queda POR ENCIMA de la entrada (es un stop que
       // solo protege ganancias), así que esa validación se omite con {force:true}
-      if (!forzar) {
-        if (p.side === 'long' && price >= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
-        if (p.side === 'short' && price <= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
-      }
       p.sl = +price;
     }
     // F7: un nivel de SL no es solo un precio. Lleva CONTRA QUÉ se mide el disparo
@@ -1882,16 +1895,17 @@
    * null si en esta vela no le ha pasado nada. `p` entra por parámetro porque en modo hedge hay
    * dos y cada una se juzga por sus propios niveles.
    */
-  TE._revisaPosicion = function (candle, p) {
+  TE._revisaPosicion = function (candle, p, esBarra) {
     const s = TE.state;
     if (!p) return null;
-      p.bars++;
+    // Las barras (velas) cuentan; un minuto dentro de una vela no (ver TE.onMinuto).
+    const cuenta = esBarra !== false;
+    if (cuenta) p.bars++;
 
     // Una posición recién ejecutada por un límite no se evalúa en su misma
     // vela: ignoramos el orden real de los precios dentro de ella.
     if (p.filledAtTime !== undefined && p.filledAtTime === candle.time) {
-      TE.updateEquity(candle.close, candle.time);
-      TE._emit();
+      if (cuenta) { TE.updateEquity(candle.open, candle.time); TE._emit(); }
       return null;
     }
 
@@ -1982,9 +1996,26 @@
     return null;
   };
 
-  TE.onCandle = function (candle) {
+  TE.onCandle = function (candle) { return TE._procesaBarra(candle, true); };
+
+  /**
+   * Un MINUTO dentro de una vela de 1 h o más (Paso 2). Mismas reglas que una vela (órdenes,
+   * SL/TP, liquidación, trailing, funding) pero sin contar la barra ni anotar la curva de
+   * capital: eso se hace una vez al cerrar la vela (TE.cierraBarra).
+   */
+  TE.onMinuto = function (m) { return TE._procesaBarra(m, false); };
+
+  /** Cierra una vela ya recorrida minuto a minuto: cuenta las barras abiertas y anota la equity. */
+  TE.cierraBarra = function (barra, ultimo) {
+    for (const p of TE.posiciones()) p.bars = (p.bars || 0) + 1;
+    TE.updateEquity((ultimo || barra).close, barra.time);
+    TE._emit();
+  };
+
+  TE._procesaBarra = function (candle, esBarra) {
     const s = TE.state;
-    s.lastPrice = candle.close;
+    s.lastPrice = candle.open;      // precio de referencia = apertura (ver App.currentPrice)
+    s.markPrice = candle.close;     // lo que muestra la gráfica: el SL puede llegar hasta aquí
     s.lastTime = candle.time;
 
     // --- 0) ÓRDENES LÍMITE: se comprueban antes que la posición, porque si el
@@ -1999,7 +2030,7 @@
     // evaluar hasta la vela siguiente.
     let accion = null;
     for (const p of TE.posiciones()) {
-      const r = TE._revisaPosicion(candle, p);
+      const r = TE._revisaPosicion(candle, p, esBarra);
       if (r !== null && r !== undefined && accion === null) accion = r;
     }
     // El umbral de cuenta se comprueba DESPUÉS de los niveles por posición: si una pata ya cerró
@@ -2011,8 +2042,7 @@
     // capital y descolocaría las pruebas que la cuentan vela a vela).
     if (accion !== null) return accion;
 
-    TE.updateEquity(candle.close, candle.time);
-    TE._emit();
+    if (esBarra) { TE.updateEquity(candle.open, candle.time); TE._emit(); }
     return null;
   };
 

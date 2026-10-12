@@ -133,7 +133,8 @@ async function detectBase() {
 
   /* ----------------------------- Uso normal dentro ----------------------------- */
   console.log('\n▸ Uso normal dentro de la sandbox');
-  await page.mouse.click(700, 430);
+  // Clic en el gráfico fuera de la barra de replay flotante (que por defecto tapa la zona baja).
+  await page.mouse.click(700, 250);
   await wait(200);
 
   const before = await frame.evaluate(() => BR.getIndex());

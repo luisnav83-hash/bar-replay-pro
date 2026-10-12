@@ -101,7 +101,7 @@
       upColor: COLORS.up, downColor: COLORS.down,
       borderUpColor: COLORS.up, borderDownColor: COLORS.down,
       wickUpColor: COLORS.up, wickDownColor: COLORS.down,
-      priceLineVisible: false, lastValueVisible: true,
+      priceLineVisible: false, lastValueVisible: false,   // la etiqueta del eje la pone CM._pintaEtiquetaEje (precio del instante)
     });
 
     CM.series.volume = CM.main.addHistogramSeries({
@@ -303,10 +303,73 @@
    * Dibuja el estado del replay hasta el índice `index` (inclusive).
    * Optimización: si index === _lastIndex + 1 se usa update() incremental.
    */
+  /* Etiqueta del eje: el precio del instante del replay (App.currentPrice), igual en todas las
+     temporalidades, en vez del cierre de la vela actual (que cambia con la temporalidad). */
+  CM._etiquetaEje = null;
+  CM._pintaEtiquetaEje = function () {
+    const v = CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    if (!v || !Number.isFinite(v.precio)) return;
+    const opts = { price: v.precio, color: v.subida ? COLORS.up : COLORS.down };
+    if (!CM._etiquetaEje) {
+      CM._etiquetaEje = CM.series.candles.createPriceLine(Object.assign({
+        lineWidth: 1, lineVisible: false, axisLabelVisible: true, title: '',
+      }, opts));
+    } else {
+      CM._etiquetaEje.applyOptions(opts);
+    }
+  };
+
+  /* PASO 1: la vela que se dibuja en `index`. Con el cursor a un minuto de una vela de 1h o
+     superior, la vela del cursor se sustituye por la construida desde 1m hasta ese minuto
+     (App.buildDisplayCandles). El resto de velas no cambia. Sin minutos, se usa la vela tal cual. */
+  CM._vistaVela = function (index) {
+    const raw = CM.candles[index];
+    if (!raw || !App.momentTs || !App.minutosVisibles || !App.minutosVisibles()) return raw;
+    const tfSec = DS.TIMEFRAMES[App.interval].ms / 1000;
+    const ini = Math.floor(App.momentTs / tfSec) * tfSec;
+    if (ini !== raw.time) return raw;
+    // Minutos de ESTA vela (caché por vela, ver App._minutosDeVela) o el bloque cargado que la cubra.
+    const barra = App._minutosDeVela ? App._minutosDeVela(ini) : null;
+    const cubre = !!barra || (App.minutePair === App.pair && App.minuteFrom <= ini && App.minuteTo >= App.momentTs);
+    if (!cubre) {
+      // Faltan los minutos de esta vela: se muestra sin detalle (nunca la vela completa) y se piden,
+      // una vez por vela y carga: si fallan (sin red), no se reintenta en cada repintado.
+      CM._minFallidos = CM._minFallidos || new Set();
+      if (!CM._pidiendoMinuto && !App._minOff && !CM._minFallidos.has(ini)) {
+        CM._pidiendoMinuto = true;
+        App.loadMinuteFor(App.momentTs, tfSec, true).then((ok) => {
+          CM._pidiendoMinuto = false;
+          if (ok) CM.render(BR.getIndex());
+          else { CM._minFallidos.add(ini); App._minOff = true; }   // sin red: se deja de pedir en segundo plano
+        });
+      }
+      return { time: raw.time, open: raw.open, high: raw.open, low: raw.open, close: raw.open, volume: 0, noDetail: true };
+    }
+    const arr = App.buildDisplayCandles(CM.candles.slice(0, index + 1), barra || App.minuteCandles, App.momentTs, tfSec);
+    const last = arr[arr.length - 1];
+    return last && last.time === raw.time ? last : raw;
+  };
+
+  /* Indicadores que se pintan: los de la vela en curso (PASO 1) o los precalculados. */
+  CM._indVivo = null;
+  CM._indVivoKey = null;
+  CM._ind = function () { return CM._indVivo || CM.indData; };
+
+  /** Indicadores calculados con la vela en curso como última vela: el último valor no usa el cierre futuro. */
+  CM._indicadoresVivo = function (index, candle) {
+    const key = [index, candle.time, candle.open, candle.high, candle.low, candle.close].join('|');
+    if (CM._indVivoKey === key) return CM._indVivo;
+    CM._indVivo = App.indicatorsFor(CM.candles.slice(0, index).concat([candle]));
+    CM._indVivoKey = key;
+    return CM._indVivo;
+  };
+
   CM.render = function (index) {
     if (!CM.candles.length) return;
     index = U.clamp(index, 0, CM.candles.length - 1);
-    const candle = CM.candles[index];
+    const candle = CM._vistaVela(index);
+    if (candle !== CM.candles[index]) CM._indicadoresVivo(index, candle);
+    else { CM._indVivo = null; CM._indVivoKey = null; }
 
     if (index === CM._lastIndex + 1 && CM._lastIndex >= 0) {
       CM._appendCandle(index, candle);
@@ -315,7 +378,8 @@
     }
     CM._lastIndex = index;
     CM._index = index;
-    CM.updateLegend(candle);
+    CM._pintaEtiquetaEje();   // también en la ruta incremental (al avanzar)
+    CM.updateLegend(candle, { precioInstante: true });
     CM.updatePaneValues(index);
   };
 
@@ -328,7 +392,7 @@
     const upd = (key, value) => {
       if (CM.series[key] && value !== null && value !== undefined) CM.series[key].update({ time: t, value });
     };
-    const d = CM.indData;
+    const d = CM._ind();
     upd('sma', d.sma ? d.sma[index] : null);
     upd('ema', d.ema ? d.ema[index] : null);
     upd('ema2', d.ema2 ? d.ema2[index] : null);
@@ -355,20 +419,22 @@
     // --- Velas y volumen ---
     const cd = new Array(end + 1);
     const vd = new Array(end + 1);
+    const vivo = CM._vistaVela(end);
     for (let i = 0; i <= end; i++) {
-      const c = candles[i];
+      const c = i === end ? vivo : candles[i];
       cd[i] = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close };
       vd[i] = { time: c.time, value: c.volume || 0, color: c.close >= c.open ? 'rgba(0,200,83,.42)' : 'rgba(255,23,68,.42)' };
     }
     CM.series.candles.setData(cd);
     CM.series.volume.setData(vd);
+    CM._pintaEtiquetaEje();
 
     // --- Indicadores del panel principal ---
     const setLine = (key, values) => {
       if (!CM.series[key]) return;
       CM.series[key].setData(values ? CM._lineData(candles, values, end) : []);
     };
-    const d = CM.indData;
+    const d = CM._ind();
     setLine('sma', d.sma);
     setLine('ema', d.ema);
     setLine('ema2', d.ema2);
@@ -416,16 +482,23 @@
 
   /* ============================== LEYENDA ============================== */
 
-  CM.updateLegend = function (candle) {
+  CM.updateLegend = function (candle, opts) {
     if (!candle) return;
     const prev = CM.candles[CM.candles.indexOf(candle) - 1];
     const chg = prev ? ((candle.close - prev.close) / prev.close) * 100 : 0;
-    const cls = candle.close >= candle.open ? 'up' : 'down';
+    // En el cursor, la C es el precio del instante del replay (el mismo en todas las temporalidades);
+    // al señalar otras velas, es su cierre real.
+    // Tanto al repintar como al señalar la vela del cursor, la C es el precio del instante.
+    const cur = (typeof BR !== 'undefined' && BR.currentCandle) ? BR.currentCandle() : null;
+    const esCursor = !!cur && candle.time === cur.time;
+    const inst = (esCursor || (opts && opts.precioInstante)) && CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    const cierre = inst && Number.isFinite(inst.precio) ? inst.precio : candle.close;
+    const cls = cierre >= candle.open ? 'up' : 'down';
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set('lgO', U.fmtPrice(candle.open));
     set('lgH', U.fmtPrice(candle.high));
     set('lgL', U.fmtPrice(candle.low));
-    set('lgC', U.fmtPrice(candle.close));
+    set('lgC', U.fmtPrice(cierre));
     set('lgV', U.fmtVol(candle.volume));
     const c = document.getElementById('lgC'); if (c) c.className = cls;
     const chgEl = document.getElementById('lgChg');
@@ -434,7 +507,7 @@
       chgEl.className = 'lg-item ' + (chg >= 0 ? 'up' : 'down');
     }
     // Resumen de indicadores activos
-    const i = CM._lastIndex, d = CM.indData, parts = [];
+    const i = CM._lastIndex, d = CM._ind(), parts = [];
     if (CM.cfg.sma && CM.cfg.sma.on && d.sma && d.sma[i] != null) parts.push(`SMA${CM.cfg.sma.p}: ${U.fmtPrice(d.sma[i])}`);
     if (CM.cfg.ema && CM.cfg.ema.on && d.ema && d.ema[i] != null) parts.push(`EMA${CM.cfg.ema.p}: ${U.fmtPrice(d.ema[i])}`);
     if (CM.cfg.ema2 && CM.cfg.ema2.on && d.ema2 && d.ema2[i] != null) parts.push(`EMA${CM.cfg.ema2.p}: ${U.fmtPrice(d.ema2[i])}`);
@@ -446,7 +519,7 @@
 
   /** Valores numéricos de los paneles inferiores en el cursor. */
   CM.updatePaneValues = function (index) {
-    const d = CM.indData;
+    const d = CM._ind();
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set('rsiValue', d.rsi && d.rsi[index] != null ? U.num(d.rsi[index], 1) : '—');
     if (d.macd) {
