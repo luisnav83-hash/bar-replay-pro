@@ -799,9 +799,18 @@
     else {
       // El break-even de un LONG queda POR ENCIMA de la entrada (es un stop que
       // solo protege ganancias), así que esa validación se omite con {force:true}
+      // El SL puede estar a cualquier lado de la entrada (p. ej. por encima en un LONG en ganancia, para
+      // asegurar beneficio), siempre que quede al lado correcto del PRECIO ACTUAL: si no, se ejecutaría al momento.
       if (!forzar) {
-        if (p.side === 'long' && price >= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por debajo de la entrada', 'warn'); return false; }
-        if (p.side === 'short' && price <= p.entryPrice) { if (!sil) U.toast('SL inválido: debe estar por encima de la entrada', 'warn'); return false; }
+        const mkt = Number.isFinite(+TE.state.lastPrice) && +TE.state.lastPrice > 0 ? +TE.state.lastPrice : null;
+        if (p.side === 'long' && (mkt !== null ? price >= mkt : price >= p.entryPrice)) {
+          if (!sil) U.toast(mkt !== null ? 'SL inválido: en un LONG debe estar por debajo del precio actual' : 'SL inválido: debe estar por debajo de la entrada', 'warn');
+          return false;
+        }
+        if (p.side === 'short' && (mkt !== null ? price <= mkt : price <= p.entryPrice)) {
+          if (!sil) U.toast(mkt !== null ? 'SL inválido: en un SHORT debe estar por encima del precio actual' : 'SL inválido: debe estar por encima de la entrada', 'warn');
+          return false;
+        }
       }
       p.sl = +price;
     }
