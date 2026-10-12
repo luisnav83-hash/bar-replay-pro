@@ -43,6 +43,7 @@
   DT.canvas = null;
   DT.ctx = null;
   DT.dpr = 1;
+  DT.TV_AZUL = '#2962FF';    // color por defecto de la línea de tendencia (TradingView)
   DT.draft = null;          // dibujo en curso {type, points:[...], style}
   DT.drag = null;           // {drawing, handle, startPoint...}
   DT.tradeHandles = [];     // handles arrastrables visibles (posición + límites)
@@ -442,6 +443,16 @@
       return;
     }
 
+    /* Línea de tendencia al estilo TradingView: se puede APRETAR en A, arrastrar y soltar en B.
+       Si no hay arrastre (solo clic), queda el borrador y el segundo clic termina, como antes. */
+    if (DT.tool === 'trend' && !DT.draft) {
+      DT.draft = { type: 'trend', points: [pt], fixed: 1,
+                   style: Object.assign({}, DT.defaultStyle, { color: DT.TV_AZUL }) };
+      DT.drag = { creando: true, x0: p.x, y0: p.y, movido: false };
+      DT.render();
+      return;
+    }
+
     /* El borrador lleva un punto ELÁSTICO al final (sigue al cursor, ver DT._onMove). Al hacer clic se
        FIJA el punto que ocupa su sitio y el elástico se descarta; si no, cada trazo nacía con un punto
        de más (una tendencia de 3 puntos, dos iguales). Puntos fijados = `fixed`. */
@@ -501,6 +512,7 @@
     if (DT.draft) {
       const pt = DT._snapPoint(DT._dataPoint(p.x, p.y));
       if (!pt) return;
+      if (DT.drag && DT.drag.creando && Math.hypot(p.x - DT.drag.x0, p.y - DT.drag.y0) > 6) DT.drag.movido = true;
       if (DT.draft.points.length === 1) DT.draft.points[1] = pt;
       else if (DT.draft.type === 'channel') DT.draft.points[2] = pt;
       else if (DT.draft.type === 'path') DT.draft.points[DT.draft.points.length - 1] = pt;
@@ -524,6 +536,19 @@
   };
 
   DT._onUp = function () {
+    if (DT.drag && DT.drag.creando) {
+      const creando = DT.drag;
+      DT.drag = null;
+      const a = DT.draft && DT.draft.points[0], b = DT.draft && DT.draft.points[1];
+      if (creando.movido && a && b && (a.dtime !== b.dtime || a.price !== b.price)) {
+        DT._addDrawing({ type: 'trend', points: [a, b], style: DT.draft.style });
+        DT.draft = null;
+        DT.setTool('cursor');
+      }
+      DT.canvas.style.cursor = DT.tool === 'cursor' ? 'default' : 'crosshair';
+      DT.render();
+      return;
+    }
     if (DT.drag && DT.drag.tradeHandle && DT.onTradeHandle) {
       const clic = DT._clicPastilla();
       const endPrice = clic ? null
@@ -1303,13 +1328,7 @@
       case 'trend': {
         const [a, b] = pts;
         if (a && b) {
-          // Extensión visual a la derecha (línea de tendencia proyectada)
-          const k = b.x - a.x > 1 ? (w - a.x) / (b.x - a.x) : 1;
-          const ex = Math.min(w, a.x + (b.x - a.x) * Math.max(1, k));
-          const ey = a.y + (b.y - a.y) * Math.max(1, k);
-          ctx.globalAlpha = 0.35;
-          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
-          ctx.globalAlpha = 1;
+          // Como TradingView: segmento entre los dos puntos, sin proyección por defecto.
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
         }
@@ -1469,6 +1488,11 @@
       d.points.forEach((p) => {
         const s = DT._screenPoint(p);
         if (!s) return;
+        if (d.type === 'trend') {       // asa circular blanca con borde azul, como TradingView
+          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = DT.TV_AZUL; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          return;
+        }
         ctx.fillStyle = '#0a0a0b'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.rect(s.x - 4, s.y - 4, 8, 8); ctx.fill(); ctx.stroke();
       });
