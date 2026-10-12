@@ -1334,7 +1334,7 @@
 
     // La posición abierta y las órdenes pendientes pertenecen a la serie
     // anterior: se cierran/cancelan antes de traer las velas nuevas.
-    App.guardSeriesChange('cambiar de temporalidad');
+    App.guardSeriesChange('cambiar de temporalidad', { conservarPosicion: true });
 
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
     // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.

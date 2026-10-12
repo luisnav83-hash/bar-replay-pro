@@ -13281,7 +13281,7 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
 
     // La posición abierta y las órdenes pendientes pertenecen a la serie
     // anterior: se cierran/cancelan antes de traer las velas nuevas.
-    App.guardSeriesChange('cambiar de temporalidad');
+    App.guardSeriesChange('cambiar de temporalidad', { conservarPosicion: true });
 
     U.toast('⏱️ Temporalidad ' + DS.TIMEFRAMES[tf].label + ': cargando velas…', 'info', 2200);
     // keepFocus: el replay se queda en la misma fecha, no vuelve al inicio.
@@ -15413,11 +15413,13 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
    * último precio conocido y se cancelan los niveles límite pendientes, con el
    * aviso correspondiente. Devuelve true si tuvo que cerrar/cancelar algo.
    */
-  App.guardSeriesChange = function (motivo) {
+  App.guardSeriesChange = function (motivo, opts = {}) {
     const st = TE.state;
     let algo = false;
 
-    if (st.position) {
+    // Al cambiar de TEMPORALIDAD la posición se conserva (sus SL/TP y su PnL siguen): el precio y
+    // el instante de entrada no cambian con el marco. Al cambiar de PAR sí se cierra.
+    if (st.position && !opts.conservarPosicion) {
       const precio = App.currentPrice() || st.lastPrice;
       if (precio) {
         TE.closePosition(precio, 'cambio', st.lastTime);

@@ -215,11 +215,13 @@
    * último precio conocido y se cancelan los niveles límite pendientes, con el
    * aviso correspondiente. Devuelve true si tuvo que cerrar/cancelar algo.
    */
-  App.guardSeriesChange = function (motivo) {
+  App.guardSeriesChange = function (motivo, opts = {}) {
     const st = TE.state;
     let algo = false;
 
-    if (st.position) {
+    // Al cambiar de TEMPORALIDAD la posición se conserva (sus SL/TP y su PnL siguen): el precio y
+    // el instante de entrada no cambian con el marco. Al cambiar de PAR sí se cierra.
+    if (st.position && !opts.conservarPosicion) {
       const precio = App.currentPrice() || st.lastPrice;
       if (precio) {
         TE.closePosition(precio, 'cambio', st.lastTime);

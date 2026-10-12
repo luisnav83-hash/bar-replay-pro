@@ -7,9 +7,9 @@
  *      A1 el desplegable recarga solo (motor, select, leyenda y velas
  *         coherentes; antes el select decía una TF y el gráfico otra)
  *      A2 el replay se queda en la MISMA fecha (no vuelve al inicio)
- *      A3 con posición abierta: se cierra a mercado, avisa y el trade queda
- *         registrado (antes la posición sobrevivía con precios de la serie
- *         anterior y su PnL se calculaba contra velas de otra temporalidad)
+ *      A3 con posición abierta: la posición SE CONSERVA (SL/TP y PnL siguen con
+ *         las velas de la nueva temporalidad; el precio y el instante de la
+ *         entrada no cambian). Decisión del usuario: antes se cerraba a mercado.
  *      A4 con orden límite pendiente: se cancela con aviso
  *
  *   B) «cuando toma una entrada no aparece como trade»
@@ -142,17 +142,18 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(coherente.celda.startsWith(String(coherente.bars)),
      `la columna «Velas» de la fila viva va al día (estado ${coherente.bars} · celda «${coherente.celda}»)`);
 
-  /* ---------------- A3) cambiar de TF cierra la posición y la registra ---------------- */
+  /* ---------------- A3) cambiar de TF CONSERVA la posición (SL/TP y PnL siguen) ---------------- */
   console.log('\n▸ A3) Cambiar de temporalidad con posición abierta');
+  const antesCambio = await estado();
   await page.select('#tfSelect', '5m');
   await wait(4500);
   const trasCambio = await estado();
-  ok(trasCambio.posicion === null, 'la posición se ha cerrado al cambiar de serie');
-  ok(trasCambio.cerradas === 1, `el trade queda registrado (cerradas: ${trasCambio.cerradas})`);
-  ok(trasCambio.contadorTab === '1', `el contador refleja el cierre (${trasCambio.contadorTab})`);
-  ok(!trasCambio.filaAbierta, 'la fila «ABIERTA» desaparece al cerrarse');
-  ok(/cambio de serie|cerrada/i.test(trasCambio.avisos) || /cambio de serie/i.test(await page.evaluate(() => document.getElementById('logList').innerText)),
-     'se avisa del cierre por cambio de temporalidad');
+  ok(trasCambio.posicion !== null, 'la posición sigue abierta al cambiar de temporalidad');
+  ok(trasCambio.cerradas === 0, `no se registra ningún cierre (cerradas: ${trasCambio.cerradas})`);
+  ok(trasCambio.filaAbierta, 'la fila «ABIERTA» sigue en el historial');
+  ok(!/cambio de serie|cerrada al cambiar/i.test(await page.evaluate(() => document.getElementById('logList').innerText)),
+     'no se avisa de cierre por cambio de temporalidad');
+  void antesCambio;
 
   /* ---------------- A4) los límites pendientes se cancelan ---------------- */
   console.log('\n▸ A4) Cambiar de temporalidad con orden límite pendiente');
