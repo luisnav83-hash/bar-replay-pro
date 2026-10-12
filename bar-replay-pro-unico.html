@@ -10730,10 +10730,12 @@ window.BRP_SNAPSHOT = {"savedAt":"2026-10-07 19:19 UTC","note":"Velas reales de 
           const col = up ? '#00c853' : '#ff1744';
           ctx.strokeStyle = col; ctx.beginPath();
           ctx.moveTo(b.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(a.x, b.y); ctx.stroke();
-          const dp = b.price - a.price;
-          const pct = a.price ? (dp / a.price) * 100 : 0;
-          const bars = Math.round((b.dtime - a.dtime) / DT._tfSeconds());
-          const txt = `${dp > 0 ? '+' : ''}${U.fmtPrice(dp)}  (${pct > 0 ? '+' : ''}${U.num(pct, 2)}%)  ·  ${bars} velas  ·  ${U.fmtDuration(Math.min(a.dtime, b.dtime), Math.max(a.dtime, b.dtime))}`;
+          /* Los valores salen de los PUNTOS del dibujo (precio y tiempo); `a`/`b` son solo píxeles. */
+          const pa = d.points[0], pb = d.points[1];
+          const dp = pb.price - pa.price;
+          const pct = pa.price ? (dp / pa.price) * 100 : 0;
+          const bars = Math.round((pb.dtime - pa.dtime) / DT._tfSeconds());
+          const txt = `${dp > 0 ? '+' : ''}${U.fmtPrice(dp)}  (${pct > 0 ? '+' : ''}${U.num(pct, 2)}%)  ·  ${bars} velas  ·  ${U.fmtDuration(Math.min(pa.dtime, pb.dtime), Math.max(pa.dtime, pb.dtime))}`;
           DT._label(ctx, txt, Math.min(a.x, b.x), Math.min(a.y, b.y) - 10, col);
         }
         break;
