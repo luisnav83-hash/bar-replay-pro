@@ -36,7 +36,6 @@
     "test:pages-trailing": "node tests/pages-trailing.js",
     "test:pages-bitunix": "node tests/pages-bitunix.js",
     "test:pages-pnl": "node tests/pages-pnl.js",
-    "test:enlaces": "node tests/enlaces.test.js",
     "test:temporalidad": "node tests/temporalidad.test.js",
     "test:entradas": "node tests/entradas.test.js",
     "test:arrastrar": "node tests/limite-arrastrar.test.js",

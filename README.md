@@ -8,11 +8,6 @@ drawdown, curva de capital y más).
 
 ![tema](https://img.shields.io/badge/tema-terminal%20de%20trading-1a1a2e) ![sin dependencias](https://img.shields.io/badge/backend-sin%20dependencias-00c853) ![licencia](https://img.shields.io/badge/licencia-MIT-2979ff)
 
-> 🔗 **Proyecto hermano:** [**OpenMarket Chart — clon en React + Vite**](https://luisnav83-hash.github.io/openmarket-chart/) ·
-> reconstrucción propia del terminal de gráficos de `openmarket.xyz/chart/r8e6KKi7`
-> (mismo layout medido, gráfico real con indicadores, paneles y dibujos).
-> Código: [github.com/luisnav83-hash/openmarket-chart](https://github.com/luisnav83-hash/openmarket-chart)
-
 ---
 
 ## ✨ Funcionalidades
@@ -510,38 +505,6 @@ necesita ni build: `bar-replay-pro-unico.html` se sube tal cual y funciona).
 
 ---
 
-## 🔗 Proyectos relacionados
-
-### OpenMarket Chart — clon del terminal de `openmarket.xyz` (React + Vite)
-
-- Aplicación: **https://luisnav83-hash.github.io/openmarket-chart/**
-- Repositorio: **https://github.com/luisnav83-hash/openmarket-chart**
-- Referencia analizada: `https://openmarket.xyz/chart/r8e6KKi7`
-
-Reconstrucción **desde cero**, con código propio, del terminal de gráficos de
-OpenMarket: layout, medidas y colores tomados del original (cabecera 40 px, barra
-del gráfico 44 px, rail de 52 px, pie de 36 px, paleta `#c8ccd1`/`#d27a61`), gráfico
-real con Lightweight Charts, indicadores **calculados a mano** (EMA 20/50,
-Bollinger 20-2 con relleno, VWAP, RSI y MACD en panel sincronizado), píldoras
-High/Low, precio con cuenta atrás, paneles laterales (watchlist, libro de órdenes,
-cintas, chat, objetos), herramientas de dibujo y responsive verificado en 7 tamaños
-(1920×1080 → 375×812), sin API keys: los datos son ficticios y se generan en local.
-
-**Relación con este proyecto:** comparten enfoque —terminal de trading propio, sin
-dependencias pesadas— y la **comparación visual medida** contra la referencia;
-Bar Replay Pro aporta el replay vela a vela y la operativa simulada, el clon aporta
-la fidelidad de interfaz y los paneles de flujo de mercado.
-
-## 🔗 Enlace al proyecto hermano dentro de la app
-
-El botón **?** de la barra superior abre «Guía rápida y atajos», que termina con la
-sección **Proyectos relacionados** y un enlace directo a
-**[OpenMarket Chart](https://luisnav83-hash.github.io/openmarket-chart/)** (el clon
-del terminal de `openmarket.xyz` en React + Vite), con su código en GitHub. Los
-enlaces abren en pestaña nueva con `rel="noopener noreferrer"` y viajan también en el
-archivo único (`bar-replay-pro-unico.html`) y en la versión publicada; lo comprueba
-`tests/enlaces.test.js`.
-
 ## 🎬 Vídeo de demostración
 
 Grabado de la aplicación real (28 s, sin red, con las velas reales incluidas):
@@ -735,7 +698,6 @@ node tests/pages-promediar.js #  46 comprobaciones del promediado/TP EN LA APP P
                                 #   pausa: con el azar de la serie de práctica, medir sobre el tramo que tocaba era
                                 #   una carrera contra el reloj (un rojo que solo salía con la batería cargada)
 node tests/pages-trailing.js  #  57 comprobaciones del trailing stop EN LA APP PUBLICADA (solo interfaz)
-node tests/enlaces.test.js    #  16 comprobaciones del enlace al proyecto hermano (OpenMarket Chart)
 node tests/temporalidad.test.js # 29 comprobaciones del cambio de temporalidad y de la posición abierta
 node tests/entradas.test.js     #  28 comprobaciones de los caminos de entrada: botón, teclado, límite e inversión
 node tests/limite-arrastrar.test.js #  26 comprobaciones arrastrando límites y SL/TP con ratón, con dedo y soltando fuera de la ventana (cada bloque limpia antes: nada heredado)

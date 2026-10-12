@@ -834,7 +834,7 @@
   /* ================== PANELES DE INDICADORES (valores vivos) ================== */
 
   /**
-   * Lista de indicadores con su VALOR ACTUAL, al estilo de OpenMarket: cada fila
+   * Lista de indicadores con su VALOR ACTUAL, cada fila
    * muestra el nombre, un botón 👁 para mostrar/ocultar la serie y el último
    * valor calculado en la vela visible del replay.
    *
