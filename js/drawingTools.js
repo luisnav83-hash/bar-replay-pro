@@ -1363,9 +1363,12 @@
         if (a && b) {
           const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
           const up = b.price > a.price;
+          /* El precio de cada nivel sale de los PUNTOS (a/b son píxeles y no llevan precio). */
+          const pa = d.points[0], pb = d.points[1];
           FIB_LEVELS.forEach((l) => {
             const y = a.y + (b.y - a.y) * l.r;
-            const price = a.price !== undefined ? b.price + (a.price - b.price) * l.r : null;
+            const price = (pa && pb && Number.isFinite(pa.price) && Number.isFinite(pb.price))
+              ? pb.price + (pa.price - pb.price) * l.r : null;
             ctx.save();
             ctx.strokeStyle = l.color; ctx.globalAlpha = 0.85; ctx.lineWidth = 1;
             ctx.setLineDash(l.r === 0 || l.r === 1 ? [] : [5, 4]);
@@ -1609,8 +1612,9 @@
     const oCerr = oInv + ANCHO_ICONO;
     const total = oCerr + ANCHO_ICONO;
     const margenDcha = DT._anchoEje() + 24 + 2 + 6;
-    const xe = (c.t === null || c.t === undefined) ? null : DT._xOf(c.t);
-    const gx0 = Math.max(10, Math.min(xe === null ? 10 : Math.round(xe), Math.max(10, w - total - margenDcha)));
+    /* La barra TP | SL | tamaño | PnL | ⇅ | × va pegada a la DERECHA del gráfico, junto al eje de precios
+       (antes nacía en la vela de entrada y se comía las velas de su izquierda). */
+    const gx0 = Math.max(10, w - total - margenDcha);
     const { gx, cy } = DT._colocaGrupo(gx0, Math.round(y - ALTO / 2), ALTO, total, w, margenDcha);
     const yTxt = cy + ALTO / 2 + 0.5;
     /* Botón TP o SL: contorno del color del nivel. Arrastrarlo CREA el nivel. */

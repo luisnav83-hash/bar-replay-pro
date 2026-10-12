@@ -28,6 +28,20 @@ function ok(cond, msg) { if (cond) { pass++; console.log('  ✓ ' + msg); } else
   ok(medir !== '', 'la medición dibuja su etiqueta con «velas»');
   ok(!/NaN|undefined/.test(medir), `la etiqueta no contiene NaN ni undefined («${medir}»)`);
   ok(/10 velas/.test(medir), 'el número de velas sale de los puntos (10 velas)');
+  console.log('Fibonacci: cada nivel muestra su precio');
+  const niveles = await p.evaluate(() => {
+    BR.goToEnd(); const cs = App.candles, n = BR.state.index;
+    CM.main.timeScale().setVisibleLogicalRange({ from: n - 110, to: n + 6 });
+    DT.drawings = [];
+    DT._addDrawing({ type: 'fib', style: { color: '#00e5ff', width: 2, style: 'solid' }, points: [
+      { dtime: cs[n - 80].time, price: cs[n - 80].low }, { dtime: cs[n - 70].time, price: cs[n - 70].high }] });
+    const out = []; const orig = DT._label;
+    DT._label = function (ctx, t) { out.push(t); return orig.apply(this, arguments); };
+    DT.render(); DT._label = orig;
+    return out;
+  });
+  ok(niveles.length >= 7, `se dibujan los 7 niveles (${niveles.length})`);
+  ok(niveles.every((t) => /%\s+[\d.,]+/.test(t) && !/undefined|NaN/.test(t)), `cada nivel lleva su precio («${niveles[0]}»)`);
   console.log(`\nHerramienta medir: ${pass} superadas, ${fail} fallidas`);
   await b.close();
   process.exit(fail ? 1 : 0);
