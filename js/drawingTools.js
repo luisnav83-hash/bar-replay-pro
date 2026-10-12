@@ -442,14 +442,19 @@
       return;
     }
 
+    /* El borrador lleva un punto ELÁSTICO al final (sigue al cursor, ver DT._onMove). Al hacer clic se
+       FIJA el punto que ocupa su sitio y el elástico se descarta; si no, cada trazo nacía con un punto
+       de más (una tendencia de 3 puntos, dos iguales). Puntos fijados = `fixed`. */
     if (!DT.draft) {
-      DT.draft = { type: DT.tool, points: [pt], style: Object.assign({}, DT.defaultStyle) };
+      DT.draft = { type: DT.tool, points: [pt], fixed: 1, style: Object.assign({}, DT.defaultStyle) };
     } else {
-      DT.draft.points.push(pt);
-      // nº de puntos necesarios según la herramienta
-      const need = DT.tool === 'channel' ? 3 : 2;
-      if (DT.draft.points.length >= need) {
-        DT._addDrawing(DT.draft);
+      const need = DT.tool === 'channel' ? 3 : 2;      // canal: línea (2) + ancho (3er clic)
+      const k = DT.draft.fixed || 1;
+      DT.draft.points[k] = pt;
+      DT.draft.points.length = k + 1;                    // quita el elástico
+      DT.draft.fixed = k + 1;
+      if (DT.draft.fixed >= need) {
+        DT._addDrawing({ type: DT.draft.type, points: DT.draft.points.slice(0, need), style: DT.draft.style });
         DT.draft = null;
         DT.setTool('cursor');
       }
