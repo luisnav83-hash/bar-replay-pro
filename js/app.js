@@ -350,6 +350,7 @@
       document.getElementById('startDate').value = U.tsToInput(startTs);
     } else {
       App.focusTs = null;      // carga pedida a mano: manda la fecha del formulario
+      App.momentTs = null;
     }
 
     startTs = Math.min(startTs, now - 3 * tfSec);   // debe quedar histórico por delante
@@ -539,7 +540,8 @@
     // 4) Replay y cuenta
     BR.setData(candles, startIndex, App.interval);
     App.resetCheckpoints(startIndex);
-    TE.state.lastPrice = candles[startIndex].close;
+    TE.state.lastPrice = App.currentPrice() ?? candles[startIndex].open;
+    TE.state.markPrice = candles[startIndex].close;
     TE.state.lastTime = candles[startIndex].time;
     TE.state.equitySeries = [{ t: candles[startIndex].time, value: TE.state.equity, time: candles[startIndex].time }];
 
@@ -658,6 +660,7 @@
    */
   App.onAdvance = function (from, to, isSeek) {
     App.focusTs = null;        // el usuario movió el replay: el ancla es la vela actual
+    App.momentTs = null;       // y el precio vuelve a ser la apertura de la vela
     const candles = App.candles;
     TE.beginBatch();
     for (let i = from + 1; i <= to; i++) {
@@ -677,6 +680,7 @@
   App.onSeek = function (index) { App.restoreTo(index); };
 
   App.restoreTo = function (index) {
+    App.momentTs = null;
     const cp = App.checkpoints[index];
     BR.pause();
     BR.state.index = index;
@@ -687,7 +691,8 @@
       // Sin checkpoint (índice anterior al inicio del replay): estado inicial
       App.resetCheckpoints(index);
       const c = App.candles[index];
-      TE.state.lastPrice = c ? c.close : null;
+      TE.state.lastPrice = c ? c.open : null;
+      TE.state.markPrice = c ? c.close : null;
       TE.state.lastTime = c ? c.time : null;
     }
 
@@ -743,9 +748,59 @@
 
   /* ============================== TRADING ============================== */
 
+  /* Precio de referencia del replay. Normalmente es el CIERRE de la vela del cursor.
+     Solo tras cambiar de temporalidad con el cursor a mitad de vela se conserva el instante
+     exacto (App.momentTs) y el precio es la APERTURA de la vela de 1m que empieza en ese
+     instante: así es igual en 5m, 1h o 1m. Avanzar o retroceder borra el instante. */
   App.currentPrice = function () {
     const c = BR.currentCandle();
-    return c ? c.close : null;
+    if (!c) return null;
+    if (App.momentTs !== null && App.momentTs !== undefined) {
+      const m = App.minuteAt(App.momentTs);
+      if (m !== null) return m;
+    }
+    return c.open;
+  };
+
+  App.momentTs = null;          // instante exacto del replay (solo tras cambiar de temporalidad)
+  // Etiqueta del eje (ver CM._pintaEtiquetaEje): el mismo precio que el chip, sea cual sea la temporalidad
+  CM.precioEtiqueta = function () {
+    const c = BR.currentCandle();
+    const px = App.currentPrice();
+    return c && Number.isFinite(px) ? { precio: px, subida: c.close >= c.open } : null;
+  };
+  App.minuteCandles = [];       // velas de 1m del tramo del instante
+  App.minutePair = null; App.minuteFrom = 0; App.minuteTo = -1;
+
+  /** Apertura de la vela de 1m que empieza EXACTAMENTE en t (o null si no está cargada). */
+  App.minuteAt = function (t) {
+    const arr = App.minuteCandles;
+    if (!arr || !arr.length) return null;
+    let lo = 0, hi = arr.length - 1, best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (arr[mid].time <= t) { best = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best >= 0 && arr[best].time === t ? arr[best].open : null;
+  };
+
+  /** Carga las velas de 1m que cubren el instante t y el tramo de una vela de `spanSec`. */
+  App.loadMinuteFor = async function (t, spanSec) {
+    if (t === null || t === undefined) return false;
+    const pair = App.pair;
+    if (App.minutePair === pair && App.minuteFrom <= t && App.minuteTo >= t + spanSec) return true;
+    try {
+      const hasta = Math.min(Math.floor(Date.now() / 1000), t + spanSec + 60);   // como la carga principal: nunca pedir el futuro
+      // Solo Binance: CoinGecko no tiene velas de 1m y el fallback daría error.
+      const velas = await DS.fetchBinanceKlines(pair, '1m', t - 60, hasta, null, { deadlineMs: performance.now() + 12000 });
+      App.minuteCandles = (velas || []).slice().sort((a, b) => a.time - b.time);
+      App.minutePair = pair; App.minuteFrom = t - 60; App.minuteTo = hasta;
+      return true;
+    } catch (err) {
+      App.minuteCandles = []; App.minutePair = null;
+      U.toast('No se pudieron cargar las velas de 1m: el precio sale de la vela', 'warn', 4000);
+      return false;
+    }
   };
 
   App.currentTime = function () {

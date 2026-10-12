@@ -101,7 +101,7 @@
       upColor: COLORS.up, downColor: COLORS.down,
       borderUpColor: COLORS.up, borderDownColor: COLORS.down,
       wickUpColor: COLORS.up, wickDownColor: COLORS.down,
-      priceLineVisible: false, lastValueVisible: true,
+      priceLineVisible: false, lastValueVisible: false,   // la etiqueta del eje la pone CM._pintaEtiquetaEje (precio del instante)
     });
 
     CM.series.volume = CM.main.addHistogramSeries({
@@ -303,6 +303,22 @@
    * Dibuja el estado del replay hasta el índice `index` (inclusive).
    * Optimización: si index === _lastIndex + 1 se usa update() incremental.
    */
+  /* Etiqueta del eje: el precio del instante del replay (App.currentPrice), igual en todas las
+     temporalidades, en vez del cierre de la vela actual (que cambia con la temporalidad). */
+  CM._etiquetaEje = null;
+  CM._pintaEtiquetaEje = function () {
+    const v = CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    if (!v || !Number.isFinite(v.precio)) return;
+    const opts = { price: v.precio, color: v.subida ? COLORS.up : COLORS.down };
+    if (!CM._etiquetaEje) {
+      CM._etiquetaEje = CM.series.candles.createPriceLine(Object.assign({
+        lineWidth: 1, lineVisible: false, axisLabelVisible: true, title: '',
+      }, opts));
+    } else {
+      CM._etiquetaEje.applyOptions(opts);
+    }
+  };
+
   CM.render = function (index) {
     if (!CM.candles.length) return;
     index = U.clamp(index, 0, CM.candles.length - 1);
@@ -315,7 +331,8 @@
     }
     CM._lastIndex = index;
     CM._index = index;
-    CM.updateLegend(candle);
+    CM._pintaEtiquetaEje();   // también en la ruta incremental (al avanzar)
+    CM.updateLegend(candle, { precioInstante: true });
     CM.updatePaneValues(index);
   };
 
@@ -362,6 +379,7 @@
     }
     CM.series.candles.setData(cd);
     CM.series.volume.setData(vd);
+    CM._pintaEtiquetaEje();
 
     // --- Indicadores del panel principal ---
     const setLine = (key, values) => {
@@ -416,16 +434,23 @@
 
   /* ============================== LEYENDA ============================== */
 
-  CM.updateLegend = function (candle) {
+  CM.updateLegend = function (candle, opts) {
     if (!candle) return;
     const prev = CM.candles[CM.candles.indexOf(candle) - 1];
     const chg = prev ? ((candle.close - prev.close) / prev.close) * 100 : 0;
-    const cls = candle.close >= candle.open ? 'up' : 'down';
+    // En el cursor, la C es el precio del instante del replay (el mismo en todas las temporalidades);
+    // al señalar otras velas, es su cierre real.
+    // Tanto al repintar como al señalar la vela del cursor, la C es el precio del instante.
+    const cur = (typeof BR !== 'undefined' && BR.currentCandle) ? BR.currentCandle() : null;
+    const esCursor = !!cur && candle.time === cur.time;
+    const inst = (esCursor || (opts && opts.precioInstante)) && CM.precioEtiqueta ? CM.precioEtiqueta() : null;
+    const cierre = inst && Number.isFinite(inst.precio) ? inst.precio : candle.close;
+    const cls = cierre >= candle.open ? 'up' : 'down';
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set('lgO', U.fmtPrice(candle.open));
     set('lgH', U.fmtPrice(candle.high));
     set('lgL', U.fmtPrice(candle.low));
-    set('lgC', U.fmtPrice(candle.close));
+    set('lgC', U.fmtPrice(cierre));
     set('lgV', U.fmtVol(candle.volume));
     const c = document.getElementById('lgC'); if (c) c.className = cls;
     const chgEl = document.getElementById('lgChg');
