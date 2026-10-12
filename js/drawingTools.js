@@ -1326,7 +1326,7 @@
         const y = DT._yOf(d.points[0].price);
         if (y !== null) {
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-          DT._label(ctx, `${U.fmtPrice(d.points[0].price)}`, 8, y - 5, d.color);
+          DT._etiquetaEje(ctx, `${U.fmtPrice(d.points[0].price)}`, w, y, d.color, 'right');
         }
         break;
       }
@@ -1334,7 +1334,7 @@
         const x = DT._xOf(d.points[0].dtime);
         if (x !== null) {
           ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, DT.height); ctx.stroke();
-          DT._label(ctx, U.fmtDate(d.points[0].dtime), x + 5, 16, d.color);
+          DT._etiquetaEje(ctx, U.fmtDate(d.points[0].dtime), x, DT.height - 12, d.color, 'center');
         }
         break;
       }
@@ -1363,7 +1363,7 @@
         if (a && b) {
           const x1 = Math.min(a.x, b.x), y1 = Math.min(a.y, b.y);
           const rw = Math.abs(b.x - a.x), rh = Math.abs(b.y - a.y);
-          ctx.globalAlpha = 0.13; ctx.fillStyle = d.color;
+          ctx.globalAlpha = 0.2; ctx.fillStyle = d.color;
           ctx.fillRect(x1, y1, rw, rh);
           ctx.globalAlpha = 1;
           ctx.strokeRect(x1, y1, rw, rh);
@@ -1383,14 +1383,6 @@
           ctx.globalAlpha = 1;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(a.x, a.y + dy); ctx.lineTo(b.x, b.y + dy); ctx.stroke();
-          // Proyección
-          const k = b.x - a.x > 1 ? Math.min(1, 60 / (b.x - a.x)) : 0;
-          if (k > 0) {
-            ctx.globalAlpha = 0.3;
-            ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + (b.x - a.x) * k, b.y + (b.y - a.y) * k); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(b.x, b.y + dy); ctx.lineTo(b.x + (b.x - a.x) * k, b.y + dy + (b.y - a.y) * k); ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
           DT._label(ctx, 'Canal', Math.min(a.x, b.x), Math.min(a.y, b.y + dy) - 7, d.color);
         }
         break;
@@ -1402,8 +1394,25 @@
           const up = b.price > a.price;
           /* El precio de cada nivel sale de los PUNTOS (a/b son píxeles y no llevan precio). */
           const pa = d.points[0], pb = d.points[1];
-          FIB_LEVELS.forEach((l) => {
-            const y = a.y + (b.y - a.y) * l.r;
+          const ys = FIB_LEVELS.map((l) => a.y + (b.y - a.y) * l.r);
+          // Bandas de color entre niveles consecutivos (como TradingView)
+          FIB_LEVELS.forEach((l, i) => {
+            if (i === 0) return;
+            ctx.save();
+            ctx.globalAlpha = 0.06; ctx.fillStyle = FIB_LEVELS[i - 1].color;
+            ctx.fillRect(x1, Math.min(ys[i - 1], ys[i]), x2 - x1, Math.abs(ys[i] - ys[i - 1]));
+            ctx.restore();
+          });
+          /* Etiquetas a la izquierda: en orden de altura, cada una baja lo justo para no pisar a la anterior
+             (12 px). Ninguna se pierde y todas quedan cerca de su línea. */
+          const etiquetaY = [];
+          let previa = -Infinity;
+          ys.map((y, i) => i).sort((i, j) => ys[i] - ys[j]).forEach((i) => {
+            const ly = Math.max(ys[i] - 2, previa + 12);
+            etiquetaY[i] = ly; previa = ly;
+          });
+          FIB_LEVELS.forEach((l, i) => {
+            const y = ys[i];
             const price = (pa && pb && Number.isFinite(pa.price) && Number.isFinite(pb.price))
               ? pb.price + (pa.price - pb.price) * l.r : null;
             ctx.save();
@@ -1412,23 +1421,22 @@
             ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
             ctx.restore();
             DT._label(ctx, `${(l.r * 100).toFixed(1)}%  ${price ? U.fmtPrice(price) : ''}`,
-                      x2 + 6, y + 4, l.color);
+                      x1 + 10, etiquetaY[i], l.color);
           });
-          ctx.save();
-          ctx.globalAlpha = 0.14; ctx.fillStyle = '#ffffff';
-          ctx.fillRect(x1, Math.min(a.y, b.y), x2 - x1, Math.abs(b.y - a.y));
-          ctx.restore();
         }
         break;
       }
       case 'measure': {
         const [a, b] = pts;
         if (a && b) {
+          const up = b.price > a.price;
+          const col = up ? '#00c853' : '#ff1744';
+          ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = col;
+          ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+          ctx.restore();
           ctx.setLineDash([4, 4]);
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
           ctx.setLineDash([]);
-          const up = b.price > a.price;
-          const col = up ? '#00c853' : '#ff1744';
           ctx.strokeStyle = col; ctx.beginPath();
           ctx.moveTo(b.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(a.x, b.y); ctx.stroke();
           /* Los valores salen de los PUNTOS del dibujo (precio y tiempo); `a`/`b` son solo píxeles. */
@@ -1461,12 +1469,13 @@
           const L = 13;                       // longitud de las dos «barbas» de la punta
           const abanico = 0.42;               // apertura en radianes (±24°)
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          // punta maciza, como TradingView
           ctx.beginPath();
           ctx.moveTo(b.x, b.y);
           ctx.lineTo(b.x - L * Math.cos(ang - abanico), b.y - L * Math.sin(ang - abanico));
-          ctx.moveTo(b.x, b.y);
           ctx.lineTo(b.x - L * Math.cos(ang + abanico), b.y - L * Math.sin(ang + abanico));
-          ctx.stroke();
+          ctx.closePath();
+          ctx.fillStyle = d.color; ctx.fill();
           DT._label(ctx, DT._deltaLabel(d), Math.min(a.x, b.x), Math.min(a.y, b.y) - 6, d.color);
         }
         break;
@@ -1479,8 +1488,10 @@
           ctx.moveTo(vivos[0].x, vivos[0].y);
           for (let i = 1; i < vivos.length; i++) ctx.lineTo(vivos[i].x, vivos[i].y);
           ctx.stroke();
-          ctx.fillStyle = d.color;
-          vivos.forEach((v) => { ctx.beginPath(); ctx.arc(v.x, v.y, 2.4, 0, Math.PI * 2); ctx.fill(); });
+          if (isDraft) {                  // los vértices solo se ven mientras se construye
+            ctx.fillStyle = d.color;
+            vivos.forEach((v) => { ctx.beginPath(); ctx.arc(v.x, v.y, 2.4, 0, Math.PI * 2); ctx.fill(); });
+          }
           const p0 = d.points[0], pn = d.points[d.points.length - 1];
           if (p0 && pn) {
             const dp = pn.price - p0.price;
@@ -1529,6 +1540,20 @@
   };
 
   /** Etiqueta con fondo para que sea legible sobre el gráfico. */
+  /* Etiqueta de color con texto blanco en un borde (eje de precio o de tiempo), como TradingView. */
+  DT._etiquetaEje = function (ctx, text, x, y, color, alin) {
+    if (!text) return;
+    ctx.save();
+    ctx.font = '11px ui-monospace, monospace';
+    const tw = ctx.measureText(text).width + 10;
+    const x0 = alin === 'center' ? x - tw / 2 : x - tw;   // 'right' por defecto: pegada al borde derecho
+    ctx.fillStyle = color;
+    ctx.fillRect(x0, y - 9, tw, 18);
+    ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x0 + 5, y);
+    ctx.restore();
+  };
+
   DT._label = function (ctx, text, x, y, color) {
     if (!text) return;
     ctx.save();
